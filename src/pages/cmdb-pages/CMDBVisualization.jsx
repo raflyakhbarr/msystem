@@ -704,71 +704,134 @@ export default function CMDBVisualization() {
     }
 
     let restoreViewport = null;
-    let exportElement = reactFlowContainer.querySelector('.react-flow__viewport');
+    let restoreHiddenNodes = null;
+    
+    // Loading toast
+    const loadingToast = toast.loading('Mempersiapkan export...');
 
     if (scope === 'all') {
-      // Simpan viewport saat ini
+      // Simpan viewport dan hidden nodes saat ini
       const currentViewport = rfInstance.getViewport();
+      const currentHiddenNodes = new Set(hiddenNodes);
+      restoreHiddenNodes = currentHiddenNodes;
+      
+      // Tampilkan semua nodes
+      setHiddenNodes(new Set());
+      
+      // Tunggu React render
+      await new Promise(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
+      
+      // Fit view tanpa animasi
+      rfInstance.fitView({ 
+        padding: 0.15,
+        includeHiddenNodes: false,
+        duration: 0,
+        minZoom: 0.1,
+        maxZoom: 1.5
+      });
 
-      // Fit view ke semua node (termasuk yang tersembunyi? pastikan node tidak di-filter)
-      rfInstance.fitView({ padding: 0.1 });
-
-      // Tunggu 1 frame agar DOM diperbarui
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Tunggu rendering selesai
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Simpan fungsi restore
       restoreViewport = () => {
         rfInstance.setViewport(currentViewport);
+        if (restoreHiddenNodes) {
+          setHiddenNodes(restoreHiddenNodes);
+        }
       };
     }
 
     try {
+      toast.loading('Mengekspor visualisasi...', { id: loadingToast });
+      
       let dataUrl;
+      const exportElement = reactFlowContainer;
+      
+      // Opsi export yang lebih robust
+      const baseExportOptions = {
+        pixelRatio: 2,
+        cacheBust: true,
+        quality: 1,
+        canvasWidth: exportElement.offsetWidth * 2,
+        canvasHeight: exportElement.offsetHeight * 2,
+        filter: (node) => {
+          // Hanya export viewport, exclude controls
+          if (node.classList) {
+            return !node.classList.contains('react-flow__controls') &&
+                  !node.classList.contains('react-flow__minimap') &&
+                  !node.classList.contains('react-flow__attribution');
+          }
+          return true;
+        }
+      };
 
       if (format === 'pdf') {
-        dataUrl = await toPng(exportElement, {
-          backgroundColor: '#ffffff',
-          pixelRatio: 2,
-        });
+        // PDF selalu pakai background putih
+        const pdfOptions = {
+          ...baseExportOptions,
+          backgroundColor: '#ffffff'
+        };
+        dataUrl = await toPng(exportElement, pdfOptions);
         const img = new Image();
         img.src = dataUrl;
-        await new Promise(resolve => (img.onload = resolve));
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        
+        // Kalkulasi ukuran PDF
+        const pdfWidth = img.width * 0.75; // Convert px to pt
+        const pdfHeight = img.height * 0.75;
+        
         const pdf = new jsPDF({
           orientation: img.width > img.height ? 'landscape' : 'portrait',
-          unit: 'px',
-          format: [img.width, img.height],
+          unit: 'pt',
+          format: [pdfWidth, pdfHeight],
         });
-        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        
+        pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
         pdf.save('cmdb-visualization.pdf');
       } else if (format === 'png') {
-        dataUrl = await toPng(exportElement, {
-          backgroundColor: background, // null = transparan
-          pixelRatio: 2,
-        });
-      } else if (format === 'jpeg') {
-        dataUrl = await toJpeg(exportElement, {
-          backgroundColor: '#ffffff',
-          quality: 0.95,
-          pixelRatio: 2,
-        });
-      }
-
-      if (format !== 'pdf') {
+        // PNG: jika background null/undefined = transparan, jika ada warna = solid
+        const pngOptions = {
+          ...baseExportOptions,
+          ...(background && background !== 'transparent' ? { backgroundColor: background } : {})
+        };
+        dataUrl = await toPng(exportElement, pngOptions);
         const link = document.createElement('a');
         link.href = dataUrl;
-        link.download = `cmdb-visualization.${format}`;
+        link.download = `cmdb-visualization-${Date.now()}.png`;
+        link.click();
+      } else if (format === 'jpeg') {
+        // JPEG tidak support transparan, default ke putih jika tidak ada background
+        const jpegOptions = {
+          ...baseExportOptions,
+          backgroundColor: background && background !== 'transparent' ? background : '#ffffff',
+          quality: 0.95,
+        };
+        dataUrl = await toJpeg(exportElement, jpegOptions);
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `cmdb-visualization-${Date.now()}.jpeg`;
         link.click();
       }
 
-      toast.success('Ekspor berhasil!');
+      toast.success('Ekspor berhasil!', { id: loadingToast });
     } catch (err) {
       console.error('Ekspor gagal:', err);
       toast.error('Gagal mengekspor visualisasi', {
+        id: loadingToast,
         description: err.message || 'Kesalahan tidak dikenal',
       });
     } finally {
-      // Pulihkan viewport jika sebelumnya diubah
+      // Pulihkan viewport dan hidden nodes
       if (restoreViewport) {
+        await new Promise(resolve => setTimeout(resolve, 150));
         restoreViewport();
       }
     }
