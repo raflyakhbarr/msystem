@@ -25,7 +25,10 @@ import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
+import ExportModal from '@/components/cmdb-components/ExportModal';
 import { toast } from 'sonner';
+import { toPng, toJpeg } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -37,6 +40,8 @@ export default function CMDBVisualization() {
   const reactFlowInstance = useRef(null);
   const reactFlowWrapper = useRef(null);
   const nodesRef = useRef([]);
+  const isReorderingRef = useRef(false);
+  const socketRef = useRef(null);
   
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -75,6 +80,7 @@ export default function CMDBVisualization() {
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB();
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
+  const [showExportModal, setShowExportModal] = useState(false);
   
   const {
     selectedFiles,
@@ -107,17 +113,42 @@ export default function CMDBVisualization() {
     setEdges(flowEdges);
   }, [transformToFlowData, setNodes, setEdges]);
 
-  useEffect(() => {
-    loadData();
+  const loadDataRef = useRef(null);
 
-    const socket = io('http://localhost:5000');
-    socket.on('cmdb_update', loadData);
+  loadDataRef.current = () => {
+    const { flowNodes, flowEdges } = transformToFlowData();
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  };
+
+  useEffect(() => {
+    if (loadDataRef.current) {
+      loadDataRef.current();
+    }
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes]);
+
+  useEffect(() => {
+    const socket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+    
+    socketRef.current = socket;
+
+    socket.on('cmdb_update', (data) => {
+      fetchAll();
+    });
 
     return () => {
-      socket.off('cmdb_update', loadData);
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
+      socket.off('cmdb_update');
       socket.disconnect();
     };
-  }, [loadData]);
+  }, []); 
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -551,6 +582,7 @@ export default function CMDBVisualization() {
     if (!draggedNode || !hoverPosition || !node.parentNode) {
       setDraggedNode(null);
       setHoverPosition(null);
+      isReorderingRef.current = false;
       return;
     }
 
@@ -559,27 +591,44 @@ export default function CMDBVisualization() {
         new_order: hoverPosition.index
       });
 
+      // Update lokal tanpa fetchAll
       setNodes(prevNodes => {
-        return prevNodes.map(n => {
+        const updatedNodes = prevNodes.map(n => {
           if (n.id === draggedNode) {
             return {
               ...n,
-              data: { ...n.data, orderInGroup: hoverPosition.index },
-              style: { ...n.style, opacity: 1, zIndex: 1 }
+              position: {
+                x: hoverPosition.relativeX,
+                y: hoverPosition.relativeY
+              },
+              data: { 
+                ...n.data, 
+                orderInGroup: hoverPosition.index 
+              }
             };
           }
           return n;
         });
+        
+        nodesRef.current = updatedNodes;
+        return updatedNodes;
       });
+
+      // Delay sebelum mengizinkan reload
+      setTimeout(() => {
+        isReorderingRef.current = false;
+        fetchAll(); // Refresh untuk sinkronisasi
+      }, 500);
 
     } catch (err) {
       console.error('Failed to reorder:', err);
-      alert(`Gagal mengubah urutan: ${err.response?.data?.error || err.message}`);
+      alert(`Gagal: ${err.response?.data?.error || err.message}`);
+      isReorderingRef.current = false;
     } finally {
       setDraggedNode(null);
       setHoverPosition(null);
     }
-  }, [draggedNode, hoverPosition, setNodes]);
+  }, [draggedNode, hoverPosition, setNodes, fetchAll]);
 
   const onReconnect = useCallback((oldEdge, newConnection) => {
     const newEdgeHandles = {
@@ -641,6 +690,90 @@ export default function CMDBVisualization() {
     height: Math.abs(selectionEnd.y - selectionStart.y),
   } : null;
 
+  const exportVisualization = async ({ format, scope, background }) => {
+    const reactFlowContainer = document.querySelector('.react-flow');
+    if (!reactFlowContainer) {
+      toast.error('Tidak dapat menemukan visualisasi untuk diekspor.');
+      return;
+    }
+
+    const rfInstance = reactFlowInstance.current;
+    if (!rfInstance) {
+      toast.error('ReactFlow instance tidak tersedia.');
+      return;
+    }
+
+    let restoreViewport = null;
+    let exportElement = reactFlowContainer.querySelector('.react-flow__viewport');
+
+    if (scope === 'all') {
+      // Simpan viewport saat ini
+      const currentViewport = rfInstance.getViewport();
+
+      // Fit view ke semua node (termasuk yang tersembunyi? pastikan node tidak di-filter)
+      rfInstance.fitView({ padding: 0.1 });
+
+      // Tunggu 1 frame agar DOM diperbarui
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Simpan fungsi restore
+      restoreViewport = () => {
+        rfInstance.setViewport(currentViewport);
+      };
+    }
+
+    try {
+      let dataUrl;
+
+      if (format === 'pdf') {
+        dataUrl = await toPng(exportElement, {
+          backgroundColor: '#ffffff',
+          pixelRatio: 2,
+        });
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise(resolve => (img.onload = resolve));
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [img.width, img.height],
+        });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        pdf.save('cmdb-visualization.pdf');
+      } else if (format === 'png') {
+        dataUrl = await toPng(exportElement, {
+          backgroundColor: background, // null = transparan
+          pixelRatio: 2,
+        });
+      } else if (format === 'jpeg') {
+        dataUrl = await toJpeg(exportElement, {
+          backgroundColor: '#ffffff',
+          quality: 0.95,
+          pixelRatio: 2,
+        });
+      }
+
+      if (format !== 'pdf') {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `cmdb-visualization.${format}`;
+        link.click();
+      }
+
+      toast.success('Ekspor berhasil!');
+    } catch (err) {
+      console.error('Ekspor gagal:', err);
+      toast.error('Gagal mengekspor visualisasi', {
+        description: err.message || 'Kesalahan tidak dikenal',
+      });
+    } finally {
+      // Pulihkan viewport jika sebelumnya diubah
+      if (restoreViewport) {
+        restoreViewport();
+      }
+    }
+  };
+
   return (
     <div className="w-full h-screen flex flex-col">
       <VisualizationNavbar
@@ -658,6 +791,7 @@ export default function CMDBVisualization() {
         onSavePositions={handleSavePositions}
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
+        onOpenExportModal={() => setShowExportModal(true)}
       />
 
       <div className="flex-1 relative flex">
@@ -802,14 +936,12 @@ export default function CMDBVisualization() {
             elementsSelectable={true}
             connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
             connectionLineType="smoothstep"
-            onInit={(instance) => {
-              reactFlowInstance.current = instance;
-            }}
+            onInit={(instance) => { reactFlowInstance.current = instance;}}
             fitView
             panOnDrag={selectionMode !== 'rectangle'}
           >
             <Background />
-            <Controls />
+            <Controls/>
           </ReactFlow>
 
           <NodeContextMenu
@@ -948,6 +1080,12 @@ export default function CMDBVisualization() {
         onClose={() => setShowGroupConnectionModal(false)}
         onSave={handleSaveGroupConnections}
         onToggleConnection={handleToggleGroupToGroupConnection}
+      />
+
+      <ExportModal
+        show={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={exportVisualization}
       />
     </div>
   );

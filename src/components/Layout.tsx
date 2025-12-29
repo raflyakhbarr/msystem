@@ -98,49 +98,55 @@ function Layout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="h-screen">
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b">
-          <SidebarTrigger className="" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              {location.pathname === '/dashboard' ? (
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Dashboard</BreadcrumbPage>
-                </BreadcrumbItem>
-              ) : (
-                <>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-                  </BreadcrumbItem>
-                  {getBreadcrumbs().map((crumb, index) => (
-                    <div key={crumb.href} className="flex items-center">
-                      <BreadcrumbSeparator />
+      <SidebarInset className="h-screen flex flex-col">
+        {location.pathname === '/visualization' ? (
+          <>{children}</>
+        ) : (
+          <>
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b">
+              <SidebarTrigger className="" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  {location.pathname === '/dashboard' ? (
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>Dashboard</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  ) : (
+                    <>
                       <BreadcrumbItem>
-                        {crumb.isLast ? (
-                          <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
-                        ) : (
-                          <BreadcrumbLink href={crumb.href}>{crumb.name}</BreadcrumbLink>
-                        )}
+                        <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
                       </BreadcrumbItem>
-                    </div>
-                  ))}
-                </>
-              )}
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex-1" />
-          <div className='mr-3'>
-          <ModeToggle />
-          </div>
-        </header>
-        <main className="flex-1 overflow-hidden bg-linear-to-br from-background to-background/95 p-6 min-h-0">
-          <div className="w-full h-full overflow-hidden">
-            {children}
-          </div>
-        </main>
+                      {getBreadcrumbs().map((crumb) => (
+                        <div key={crumb.href} className="flex items-center">
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            {crumb.isLast ? (
+                              <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                            ) : (
+                              <BreadcrumbLink href={crumb.href}>
+                                {crumb.name}
+                              </BreadcrumbLink>
+                            )}
+                          </BreadcrumbItem>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </BreadcrumbList>
+              </Breadcrumb>
+              <div className="flex-1" />
+              <div className="mr-3">
+                <ModeToggle />
+              </div>
+            </header>
+            <main className="flex-1 overflow-hidden bg-linear-to-br from-background to-background/95 p-6 min-h-0">
+              <div className="w-full h-full overflow-hidden">{children}</div>
+            </main>
+          </>
+        )}
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }
 
 export default Layout

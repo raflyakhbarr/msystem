@@ -1,7 +1,8 @@
 import {
-  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram
+  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '../ui/sidebar';
 
 export default function VisualizationNavbar({
   draggedNode,
@@ -17,6 +18,7 @@ export default function VisualizationNavbar({
   onSavePositions,
   onOpenAddItem,
   onOpenManageGroups,
+  onOpenExportModal,
 }) {
   return (
     <div className="bg-muted/10 relative z-1000 shadow-md">
@@ -24,6 +26,8 @@ export default function VisualizationNavbar({
       <div className="px-1 py-0.5 items-center justify-between">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
+          <SidebarTrigger className="ml-0 transition-all shadow-sm border border-gray-200 bg-white" />
+        <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
             {/* Add Item */}
             <Button
               onClick={onOpenAddItem}
@@ -44,6 +48,17 @@ export default function VisualizationNavbar({
             >
               <FaLayerGroup />
               <span className="hidden md:inline">Groups</span>
+            </Button>
+
+            {/* Export Button */}
+            <Button
+              onClick={onOpenExportModal}
+              title="Ekspor sebagai Gambar atau PDF"
+              variant="secondary"
+              size="sm"
+            >
+              <FaDownload />
+              <span className="hidden md:inline">Ekspor</span>
             </Button>
 
             <div className="h-8 w-px bg-border"></div>
