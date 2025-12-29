@@ -369,6 +369,7 @@ export default function CMDBItem() {
       {
         key: 'connections',
         label: 'Koneksi',
+        searchable: false,
         sortable: false,
         render: (item) => {
           const info = getConnectionInfo(item.id);
@@ -384,6 +385,7 @@ export default function CMDBItem() {
         key: 'actions',
         label: 'Aksi',
         sortable: false,
+        searchable: false,
         render: (item) => (
           <div className="flex gap-2">
             <button
