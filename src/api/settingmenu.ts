@@ -1,6 +1,7 @@
 import apiClient from './axiosConfig';
 
 const SETTING_MENU = import.meta.env.VITE_API_SETTING_MENU;
+const UPDATE_SETTING_MENU = import.meta.env.VITE_API_SETTING_MENU_UPDATE;
 
 export const fetchAccGroup = async (idGroup: string = '') => {
   try {
@@ -26,7 +27,7 @@ export const fetchAccGroup = async (idGroup: string = '') => {
 
 export const saveAccGroupMenus = async (idGroup: string, checkedMenus: any) => {
   try {
-    const response = await apiClient.post(SETTING_MENU, {
+    const response = await apiClient.post(UPDATE_SETTING_MENU, {
       idGroup,
       checked: checkedMenus
     });

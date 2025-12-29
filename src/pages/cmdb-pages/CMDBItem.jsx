@@ -1,15 +1,5 @@
 import { useState, useMemo } from 'react';
-import { 
-  useReactTable, 
-  getCoreRowModel, 
-  getFilteredRowModel, 
-  getSortedRowModel,
-  getPaginationRowModel,
-  flexRender 
-} from '@tanstack/react-table';
-import { 
-  FaSortUp, FaSortDown, FaSort, FaEdit, FaTrash, FaLink, FaPlus
-} from 'react-icons/fa';
+import { FaEdit, FaTrash, FaLink, FaPlus } from 'react-icons/fa';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
@@ -18,6 +8,7 @@ import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
+import DataTable from '../../components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -58,9 +49,7 @@ export default function CMDBItem() {
   const [formData, setFormData] = useState(INITIAL_ITEM_FORM);
   const [editMode, setEditMode] = useState(false);
   const [currentId, setCurrentId] = useState(null);
-  const [globalFilter, setGlobalFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [columnFilters, setColumnFilters] = useState([]);
   
   // Connection modal state
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -334,79 +323,39 @@ export default function CMDBItem() {
   const columns = useMemo(
     () => [
       {
-        accessorKey: 'name',
-        header: ({ column }) => (
-          <div>
-            <div className="font-medium mb-1">Nama</div>
-            <input
-              type="text"
-              placeholder="Cari Nama..."
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              value={(column.getFilterValue() ?? '')}
-              onChange={(e) => column.setFilterValue(e.target.value)}
-              className="border p-1 text-xs rounded w-full"
-            />
-          </div>
-        ),
-        cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
+        key: 'name',
+        label: 'Nama',
+        searchable: true,
+        sortable: true,
       },
       {
-        accessorKey: 'status',
-        header: ({ column }) => (
-          <div>
-            <div className="font-medium mb-1">Status</div>
-            <select
-              value={column.getFilterValue() ?? ''}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => column.setFilterValue(e.target.value || undefined)}
-              className="border p-1 text-xs rounded w-full"
-            >
-              <option value="">Semua</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="decommissioned">Decommissioned</option>
-            </select>
-          </div>
-        ),
-        cell: ({ getValue }) => {
-          const status = getValue();
-          return (
-            <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[status] || 'bg-gray-100 text-gray-800'}`}>
-              {status}
-            </span>
-          );
-        },
+        key: 'status',
+        label: 'Status',
+        isEnum: true,
+        enumOptions: [
+          { value: 'active', label: 'Active', color: STATUS_COLORS.active },
+          { value: 'inactive', label: 'Inactive', color: STATUS_COLORS.inactive },
+          { value: 'maintenance', label: 'Maintenance', color: STATUS_COLORS.maintenance },
+          { value: 'decommissioned', label: 'Decommissioned', color: STATUS_COLORS.decommissioned },
+        ],
+        searchable: true,
+        sortable: true,
       },
       {
-        accessorKey: 'location',
-        filterFn: 'includesString',
-        header: ({ column }) => (
-          <div>
-            <div className="font-medium mb-1">Lokasi</div>
-            <input
-              type="text"
-              placeholder="Cari Lokasi..."
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              value={(column.getFilterValue() ?? '')}
-              onChange={(e) => column.setFilterValue(e.target.value)}
-              className="border p-1 text-xs rounded w-full"
-            />
-          </div>
-        ),
-        cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
+        key: 'location',
+        label: 'Lokasi',
+        searchable: true,
+        sortable: true,
       },
       {
-        accessorKey: 'group_id',
-        header: 'Group',
-        cell: ({ getValue }) => {
-          const groupId = getValue();
+        key: 'group_id',
+        label: 'Group',
+        sortable: true,
+        render: (item) => {
+          const groupId = item.group_id;
           const group = groups.find(g => g.id === groupId);
           return group ? (
-            <span className="px-2 py-1 rounded text-xs" style={{ 
+            <span className="px-2 py-1 rounded text-xs" style={{
               backgroundColor: group.color,
               border: '1px solid #6366f1'
             }}>
@@ -418,11 +367,11 @@ export default function CMDBItem() {
         },
       },
       {
-        id: 'connections',
-        header: 'Koneksi',
-        enableSorting: false, 
-        cell: ({ row }) => {
-          const info = getConnectionInfo(row.original.id);
+        key: 'connections',
+        label: 'Koneksi',
+        sortable: false,
+        render: (item) => {
+          const info = getConnectionInfo(item.id);
           return (
             <div className="text-xs">
               <div className="text-blue-600">↑ {info.dependencies} dependencies</div>
@@ -432,20 +381,20 @@ export default function CMDBItem() {
         },
       },
       {
-        id: 'actions',
-        header: 'Aksi',
-        enableSorting: false,
-        cell: ({ row }) => (
+        key: 'actions',
+        label: 'Aksi',
+        sortable: false,
+        render: (item) => (
           <div className="flex gap-2">
             <button
-              onClick={() => handleOpenConnectionModal(row.original)}
+              onClick={() => handleOpenConnectionModal(item)}
               className="p-2 text-blue-600 hover:bg-blue-50 rounded"
               title="Kelola Koneksi"
             >
               <FaLink size={16} />
             </button>
             <button
-              onClick={() => handleEdit(row.original)}
+              onClick={() => handleEdit(item)}
               className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
               title="Edit"
             >
@@ -476,7 +425,7 @@ export default function CMDBItem() {
                     Batal
                   </AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => handleDelete(row.original.id)}
+                    onClick={() => handleDelete(item.id)}
                     className="bg-red-600 hover:bg-red-700"
                   >
                     Ya, Hapus
@@ -491,51 +440,45 @@ export default function CMDBItem() {
     [connections, groups]
   );
 
-  const table = useReactTable({
-    data: items,
-    columns,
-    state: {
-      globalFilter,
-      columnFilters,
-    },
-    onGlobalFilterChange: setGlobalFilter,
-    onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
   return (
-      <div className="py-6 px-6 mx-0">
-        <h1 className="text-2xl font-bold mb-4">Items</h1>
-
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2"
-          >
-            <FaPlus /> Tambah Item
-          </button>
-          <button
-            onClick={() => {
-              setGroupFormData(INITIAL_GROUP_FORM);
-              setEditGroupMode(false);
-              setShowGroupModal(true);
-            }}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-2"
-          >
-            <FaPlus /> Kelola Groups
-          </button>
-        </div>
+      <div>
+        
+        <DataTable
+          data={items}
+          columns={columns}
+          title="Items"
+          actionButtons={[
+            {
+              label: 'Tambah Item',
+              icon: <FaPlus />,
+              className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
+              onClick: () => {
+                resetForm();
+                setShowModal(true);
+              }
+            },
+            {
+              label: 'Kelola Groups',
+              icon: <FaPlus />,
+              className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
+              onClick: () => {
+                setGroupFormData(INITIAL_GROUP_FORM);
+                setEditGroupMode(false);
+                setShowGroupModal(true);
+              }
+            }
+          ]}
+          onRefresh={() => {
+            fetchItems();
+            fetchConnections();
+            fetchGroups();
+          }}
+          itemsPerPage={10}
+          showAddButton={false}
+          showExportButton={false}
+          showRefreshButton={true}
+          maxHeight="max-h-[500px]"
+        />
 
         <ItemFormModal
           show={showModal}
@@ -595,115 +538,6 @@ export default function CMDBItem() {
           onSave={handleSaveGroupConnections}
           onToggleConnection={handleToggleGroupToGroupConnection}
         />
-
-        <div className="mb-4">
-          <input
-            type="text"
-            value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Cari data..."
-            className="border p-2 rounded w-full md:w-96"
-          />
-        </div>
-
-        <div className="overflow-x-auto shadow-md rounded-lg">
-          <table className="w-full table-fixed bg-white border">
-            <thead className="bg-gray-100">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className={`border px-4 py-3 text-left ${
-                      header.column.getCanSort() ? 'cursor-pointer hover:bg-gray-200' : ''
-                    }`}
-                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
-                  >
-                    <div className="flex items-center gap-2">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                      {header.column.getCanSort() && (
-                        header.column.getIsSorted() ? (
-                          header.column.getIsSorted() === 'desc' ? (
-                            <FaSortDown />
-                          ) : (
-                            <FaSortUp />
-                          )
-                        ) : (
-                          <FaSort className="text-gray-400" />
-                        )
-                      )}
-                    </div>
-                  </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="text-center py-8 text-gray-500">
-                    Tidak ada data
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="border px-4 py-2">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center gap-1">
-            {Array.from({ length: table.getPageCount() }, (_, i) => i).map((pageIndex) => (
-              <button
-                key={pageIndex}
-                onClick={() => table.setPageIndex(pageIndex)}
-                className={`px-3 py-1 border rounded ${
-                  table.getState().pagination.pageIndex === pageIndex
-                    ? 'bg-blue-600 text-white'
-                    : 'hover:bg-gray-100'
-                }`}
-              >
-                {pageIndex + 1}
-              </button>
-            ))}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">
-              Halaman{' '}
-              <strong>
-                {table.getState().pagination.pageIndex + 1} dari{' '}
-                {table.getPageCount()}
-              </strong>
-            </span>
-            <select
-              value={table.getState().pagination.pageSize}
-              onChange={(e) => table.setPageSize(Number(e.target.value))}
-              className="border p-1 rounded"
-            >
-              {[10, 20, 30, 50].map((pageSize) => (
-                <option key={pageSize} value={pageSize}>
-                  Tampilkan {pageSize}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
   );
 }

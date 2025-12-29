@@ -4,6 +4,16 @@ import type { WorkBook } from 'xlsx';
 import { ArrowDownTrayIcon, ArrowPathIcon, PlusIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { Disc } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "@/components/ui/table";
 
 // Define TypeScript interfaces for the DataTable props
 interface Column {
@@ -14,6 +24,8 @@ interface Column {
   exportable?: boolean;
   isBoolean?: boolean;
   isDate?: boolean;
+  isEnum?: boolean;
+  enumOptions?: Array<{ value: string; label: string; color?: string }>;
   nested?: boolean;
   trueLabel?: string;
   falseLabel?: string;
@@ -26,6 +38,13 @@ interface Column {
 interface DataItem {
   [key: string]: any;
   id?: string | number;
+}
+
+interface ActionButton {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  className?: string;
 }
 
 interface DataTableProps {
@@ -43,6 +62,8 @@ interface DataTableProps {
   showExportButton?: boolean;
   showRefreshButton?: boolean;
   refreshing?: boolean;
+  actionButtons?: ActionButton[];
+  maxHeight?: string;
 }
 
 const DataTable = ({
@@ -59,11 +80,13 @@ const DataTable = ({
   showAddButton = true,
   showExportButton = true,
   showRefreshButton = true,
-  refreshing = false
+  refreshing = false,
+  actionButtons = [],
+  maxHeight
 }: DataTableProps) => {
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
-  const [sortOrder, setSortOrder] = useState<string>(columns[0]?.key || '');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortOrder, setSortOrder] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Initialize search terms for all searchable columns
@@ -78,9 +101,22 @@ const DataTable = ({
   }, [columns]);
 
   const handleSortClick = (field: string) => {
+    // If clicking the same column that's already sorted, cycle through states
     if (sortOrder === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      if (sortDirection === 'asc') {
+        // Ascending → Descending
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        // Descending → All (no sort)
+        setSortOrder(null);
+        setSortDirection(null);
+      } else {
+        // All → Ascending
+        setSortOrder(field);
+        setSortDirection('asc');
+      }
     } else {
+      // New column → Ascending
       setSortOrder(field);
       setSortDirection('asc');
     }
@@ -119,37 +155,49 @@ const DataTable = ({
         return boolValue.toString() === searchTerm;
       }
       
+      // Handle enum values
+      if (column.isEnum) {
+        return searchTerm === '' || itemValue === searchTerm;
+      }
+      
       return (itemValue || '').toString().toLowerCase().includes(searchTerm.toLowerCase());
     });
   });
 
-  const sortedData = [...filteredData].sort((a, b) => {
-    let comparison = 0;
-    let aValue = a[sortOrder];
-    let bValue = b[sortOrder];
-    
-    // Handle nested properties
-    const column = columns.find(col => col.key === sortOrder);
-    if (column?.nested) {
-      const keys = sortOrder.split('.');
-      aValue = keys.reduce((obj, key) => obj?.[key], a);
-      bValue = keys.reduce((obj, key) => obj?.[key], b);
+  const sortedData = React.useMemo(() => {
+    // If no sort order or direction, return filtered data as-is
+    if (!sortOrder || !sortDirection) {
+      return [...filteredData];
     }
     
-    // Handle date sorting
-    if (column?.isDate) {
-      aValue = new Date(aValue || 0);
-      bValue = new Date(bValue || 0);
-      comparison = aValue - bValue;
-    } else {
-      // Handle string comparison
-      aValue = (aValue || '').toString();
-      bValue = (bValue || '').toString();
-      comparison = aValue.localeCompare(bValue);
-    }
-    
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
+    return [...filteredData].sort((a, b) => {
+      let comparison = 0;
+      let aValue = a[sortOrder];
+      let bValue = b[sortOrder];
+      
+      // Handle nested properties
+      const column = columns.find(col => col.key === sortOrder);
+      if (column?.nested) {
+        const keys = sortOrder.split('.');
+        aValue = keys.reduce((obj, key) => obj?.[key], a);
+        bValue = keys.reduce((obj, key) => obj?.[key], b);
+      }
+      
+      // Handle date sorting
+      if (column?.isDate) {
+        aValue = new Date(aValue || 0);
+        bValue = new Date(bValue || 0);
+        comparison = aValue.getTime() - bValue.getTime();
+      } else {
+        // Handle string comparison
+        aValue = (aValue || '').toString();
+        bValue = (bValue || '').toString();
+        comparison = aValue.localeCompare(bValue);
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredData, sortOrder, sortDirection, columns]);
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -246,31 +294,31 @@ const DataTable = ({
         {/* Table Skeleton */}
         <div className="flex-1 min-h-0 bg-card rounded-xl shadow-lg flex flex-col overflow-hidden border border-border/50">
           <div className="overflow-y-auto">
-            <table className="w-full">
+            <Table>
               {/* Header Skeleton */}
-              <thead className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
-                <tr>
+              <TableHeader className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
+                <TableRow>
                   {columns.map((column, index) => (
-                    <th key={index} className="px-6 py-3 text-left">
+                    <TableHead key={index} className="px-6 py-3 text-left">
                       <Skeleton className="h-4 w-24 mb-2" />
                       <Skeleton className="h-8 w-full" />
-                    </th>
+                    </TableHead>
                   ))}
-                </tr>
-              </thead>
+                </TableRow>
+              </TableHeader>
               {/* Body Skeleton */}
-              <tbody className="divide-y divide-border">
+              <TableBody className="divide-y divide-border">
                 {Array.from({ length: itemsPerPage }).map((_, rowIndex) => (
-                  <tr key={rowIndex}>
+                  <TableRow key={rowIndex}>
                     {columns.map((column, colIndex) => (
-                      <td key={colIndex} className="px-6 py-4">
+                      <TableCell key={colIndex} className="px-6 py-4">
                         <Skeleton className="h-4 w-full max-w-[200px]" />
-                      </td>
+                      </TableCell>
                     ))}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {/* Pagination Skeleton */}
@@ -306,48 +354,65 @@ const DataTable = ({
       <div className="shrink-0">
         <h2 className="text-xl font-bold text-foreground mb-4">{title || 'Data'} ({data.length} Total)</h2>
         <div className="flex items-center space-x-4">
-          {showAddButton && onAdd && (
-            <button
-              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors"
-              onClick={onAdd}
-            >
-              <PlusIcon className='h-5 w-5 text-blue-600'/>
-            </button>
-          )}
-          {showExportButton && (
-            <button
-              type="button"
-              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                exportToExcel();
-              }}
-            >
-              <ArrowDownTrayIcon className='h-5 w-5 text-foreground'/>
-            </button>
-          )}
-          {showRefreshButton && (
-            <button
-              className={`bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              <ArrowPathIcon className={`h-5 w-5 text-foreground ${refreshing ? 'animate-spin' : ''}`}/>
-            </button>
+          {actionButtons && actionButtons.length > 0 ? (
+            actionButtons.map((btn, index) => (
+              <button
+                key={index}
+                className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                  btn.className || 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
+                }`}
+                onClick={btn.onClick}
+              >
+                {btn.icon}
+                {btn.label}
+              </button>
+            ))
+          ) : (
+            <>
+              {showAddButton && onAdd && (
+                <button
+                  className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors"
+                  onClick={onAdd}
+                >
+                  <PlusIcon className='h-5 w-5 text-blue-600'/>
+                </button>
+              )}
+              {showExportButton && (
+                <button
+                  type="button"
+                  className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    exportToExcel();
+                  }}
+                >
+                  <ArrowDownTrayIcon className='h-5 w-5 text-foreground'/>
+                </button>
+              )}
+              {showRefreshButton && (
+                <button
+                  className={`bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                >
+                  <ArrowPathIcon className={`h-5 w-5 text-foreground ${refreshing ? 'animate-spin' : ''}`}/>
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
       <div className="flex-1 min-h-0 bg-card rounded-xl shadow-lg flex flex-col overflow-hidden border border-border/50">
         
         {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto relative">
-          <table className="w-full">
+        <div className={`flex-1 overflow-y-auto relative ${maxHeight || ''}`}>
+          <Table>
             {/* Sticky Header */}
-            <thead className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
-              <tr>
+            <TableHeader className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
+              <TableRow>
                 {columns.map(column => (
-                  <th key={column.key} className="px-6 py-3 text-left text-xs font-medium text-card-foreground uppercase tracking-wider bg-card-dark">
+                  <TableHead key={column.key} className="px-6 py-3 text-left text-xs font-medium text-card-foreground uppercase tracking-wider bg-card-dark">
                     {column.searchable !== false ? (
                       <div className="flex flex-col space-y-2">
                         <div
@@ -361,7 +426,19 @@ const DataTable = ({
                             </span>
                           )}
                         </div>
-                        {column.isBoolean ? (
+                        {column.isEnum ? (
+                          <select
+                            value={searchTerms[column.key] || ''}
+                            onChange={(e) => handleSearchChange(column.key, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-2 py-1 text-xs border border-input rounded focus:outline-none focus:ring-2 focus:ring-ring font-normal bg-background"
+                          >
+                            <option value="">All</option>
+                            {column.enumOptions?.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        ) : column.isBoolean ? (
                           <select
                             value={searchTerms[column.key] || ''}
                             onChange={(e) => handleSearchChange(column.key, e.target.value)}
@@ -388,18 +465,27 @@ const DataTable = ({
                         {column.label}
                       </div>
                     )}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
               {currentItems.map((item, index) => (
-                <tr key={item.id || index} className="hover:bg-muted/50 transition-colors">
+                <TableRow key={item.id || index} className="hover:bg-muted/50 transition-colors">
                   {columns.map(column => (
-                    <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                    <TableCell key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                       {column.render ? column.render(item) : (
                         <>
-                          {column.isBoolean ? (
+                          {column.isEnum ? (
+                            (() => {
+                              const option = column.enumOptions?.find(opt => opt.value === item[column.key]);
+                              return (
+                                <span className={`px-2 py-1 rounded text-xs ${option?.color || 'bg-gray-100 text-gray-800'}`}>
+                                  {option?.label || item[column.key]}
+                                </span>
+                              );
+                            })()
+                          ) : column.isBoolean ? (
                             <div className="flex items-center">
                               {item[column.key] === true ? (
                                 <div title={column.trueLabel || 'Active'}>
@@ -424,19 +510,19 @@ const DataTable = ({
                           )}
                         </>
                       )}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
               {currentItems.length === 0 && (
-                <tr>
-                  <td colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
                     No data found
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* Pagination Section - Fixed at bottom */}
