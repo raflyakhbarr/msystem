@@ -794,7 +794,7 @@ export default function CMDBVisualization() {
         onOpenExportModal={() => setShowExportModal(true)}
       />
 
-      <div className="flex-1 relative flex">
+      <div className="flex-1 relative flex overflow-y-auto">
         {showVisibilityPanel && (
           <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto shadow-lg">
             <div className="p-4 border-b border-gray-200 bg-gray-50">
