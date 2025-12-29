@@ -26,7 +26,7 @@ export default function VisualizationNavbar({
       <div className="px-1 py-0.5 items-center justify-between">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
-          <SidebarTrigger className="ml-0 transition-all shadow-sm border border-gray-200 bg-white" />
+          <SidebarTrigger className="ml-0 transition-all ml-2" />
         <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
             {/* Add Item */}
             <Button
