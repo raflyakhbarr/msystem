@@ -220,12 +220,17 @@ export default function CMDBVisualization() {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       }
-      await fetchAll();
+      
       setShowItemModal(false);
-      setItemFormData(INITIAL_ITEM_FORM);
-      setEditItemMode(false);
-      setCurrentItemId(null);
-      resetImages();
+      
+      setTimeout(() => {
+        setItemFormData(INITIAL_ITEM_FORM);
+        setEditItemMode(false);
+        setCurrentItemId(null);
+        resetImages();
+      }, 100);
+      
+      await fetchAll();
     } catch (err) {
       console.error(err);
       alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
