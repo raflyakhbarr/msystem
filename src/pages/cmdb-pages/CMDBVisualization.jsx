@@ -7,6 +7,16 @@ import ReactFlow, {
   useEdgesState,
   reconnectEdge,
 } from 'reactflow';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import 'reactflow/dist/style.css';
 import { io } from 'socket.io-client';
 import { FaSquare } from 'react-icons/fa';
@@ -100,6 +110,8 @@ export default function CMDBVisualization() {
     handleEditFromVisualization,
     handleDeleteFromVisualization,
     handleManageConnectionsFromVisualization,
+    alertDialog,
+    closeAlert,
   } = useVisualizationActions(items, groups, fetchAll);
 
   useEffect(() => {
@@ -256,7 +268,6 @@ export default function CMDBVisualization() {
   };
 
   const handleDeleteGroup = async (id) => {
-    if (!window.confirm('Hapus group ini? Items di dalamnya tidak akan dihapus.')) return;
     try {
       await api.delete(`/groups/${id}`);
       await fetchAll();
@@ -1150,6 +1161,31 @@ export default function CMDBVisualization() {
         onClose={() => setShowExportModal(false)}
         onExport={exportVisualization}
       />
+
+      <AlertDialog open={alertDialog.show} onOpenChange={closeAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{alertDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {alertDialog.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (alertDialog.onConfirm) {
+                  alertDialog.onConfirm();
+                }
+                closeAlert();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -21,7 +21,7 @@ export default function VisualizationNavbar({
   onOpenExportModal,
 }) {
   return (
-    <div className="bg-muted/10 relative z-1000 shadow-md">
+    <div className="bg-muted/10 relative z-5 shadow-md">
       {/* Top Row - Main Actions */}
       <div className="px-1 py-0.5 items-center justify-between">
         <div className="flex items-center justify-between w-full">

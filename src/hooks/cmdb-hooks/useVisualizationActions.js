@@ -2,6 +2,32 @@ import { useState, useCallback } from 'react';
 import api from '../../services/api';
 
 export const useVisualizationActions = (items, groups, fetchAll) => {
+  const [alertDialog, setAlertDialog] = useState({
+    show: false,
+    title: '',
+    description: '',
+    onConfirm: null,
+  });
+
+  // Tambahkan fungsi helper
+  const showAlert = useCallback((title, description, onConfirm) => {
+    setAlertDialog({
+      show: true,
+      title,
+      description,
+      onConfirm,
+    });
+  }, []);
+
+  const closeAlert = useCallback(() => {
+    setAlertDialog({
+      show: false,
+      title: '',
+      description: '',
+      onConfirm: null,
+    });
+  }, []);
+
   const [contextMenu, setContextMenu] = useState({
     show: false,
     position: { x: 0, y: 0 },
@@ -35,33 +61,43 @@ export const useVisualizationActions = (items, groups, fetchAll) => {
     }
   }, [items, groups]);
 
-  const handleDeleteFromVisualization = useCallback(async (node) => {
+  const handleDeleteFromVisualization = useCallback((node) => {
     if (node.type === 'group') {
       const groupId = parseInt(node.id.replace('group-', ''));
-      if (!window.confirm('Hapus group ini? Items di dalamnya tidak akan dihapus.')) return false;
       
-      try {
-        await api.delete(`/groups/${groupId}`);
-        await fetchAll();
-        return true;
-      } catch (err) {
-        alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
-        return false;
-      }
+      showAlert(
+        'Hapus Group',
+        'Hapus group ini? Items di dalamnya tidak akan dihapus.',
+        async () => {
+          try {
+            await api.delete(`/groups/${groupId}`);
+            await fetchAll();
+            return true;
+          } catch (err) {
+            alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
+            return false;
+          }
+        }
+      );
     } else {
       const itemId = parseInt(node.id);
-      if (!window.confirm('Apakah Anda yakin ingin menghapus item ini?')) return false;
       
-      try {
-        await api.delete(`/cmdb/${itemId}`);
-        await fetchAll();
-        return true;
-      } catch (err) {
-        alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
-        return false;
-      }
+      showAlert(
+        'Hapus Item',
+        'Apakah Anda yakin ingin menghapus item ini?',
+        async () => {
+          try {
+            await api.delete(`/cmdb/${itemId}`);
+            await fetchAll();
+            return true;
+          } catch (err) {
+            alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
+            return false;
+          }
+        }
+      );
     }
-  }, [fetchAll]);
+  }, [fetchAll, showAlert]);
 
   const handleManageConnectionsFromVisualization = useCallback((node) => {
     const itemId = parseInt(node.id);
@@ -76,5 +112,7 @@ export const useVisualizationActions = (items, groups, fetchAll) => {
     handleEditFromVisualization,
     handleDeleteFromVisualization,
     handleManageConnectionsFromVisualization,
+    alertDialog,
+    closeAlert,
   };
 };
