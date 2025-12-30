@@ -312,7 +312,7 @@ const DataTable = ({
                   <TableRow key={rowIndex}>
                     {columns.map((column, colIndex) => (
                       <TableCell key={colIndex} className="px-6 py-4">
-                        <Skeleton className="h-4 w-full max-w-[200px]" />
+                        <Skeleton className="h-4 w-full max-w-50" />
                       </TableCell>
                     ))}
                   </TableRow>
@@ -354,52 +354,47 @@ const DataTable = ({
       <div className="shrink-0">
         <h2 className="text-xl font-bold text-foreground mb-4">{title || 'Data'} ({data.length} Total)</h2>
         <div className="flex items-center space-x-4">
-          {actionButtons && actionButtons.length > 0 ? (
-            actionButtons.map((btn, index) => (
-              <button
-                key={index}
-                className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
-                  btn.className || 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
-                }`}
-                onClick={btn.onClick}
-              >
-                {btn.icon}
-                {btn.label}
-              </button>
-            ))
-          ) : (
-            <>
-              {showAddButton && onAdd && (
-                <button
-                  className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors"
-                  onClick={onAdd}
-                >
-                  <PlusIcon className='h-5 w-5 text-blue-600'/>
-                </button>
-              )}
-              {showExportButton && (
-                <button
-                  type="button"
-                  className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    exportToExcel();
-                  }}
-                >
-                  <ArrowDownTrayIcon className='h-5 w-5 text-foreground'/>
-                </button>
-              )}
-              {showRefreshButton && (
-                <button
-                  className={`bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  onClick={onRefresh}
-                  disabled={refreshing}
-                >
-                  <ArrowPathIcon className={`h-5 w-5 text-foreground ${refreshing ? 'animate-spin' : ''}`}/>
-                </button>
-              )}
-            </>
+          {actionButtons && actionButtons.length > 0 && actionButtons.map((btn, index) => (
+            <button
+              key={index}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                btn.className || 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
+              }`}
+              onClick={btn.onClick}
+            >
+              {btn.icon}
+              {btn.label}
+            </button>
+          ))}
+          {showAddButton && onAdd && (
+            <button
+              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors"
+              onClick={onAdd}
+            >
+              <PlusIcon className='h-5 w-5 text-blue-600'/>
+            </button>
+          )}
+          {showExportButton && (
+            <button
+              type="button"
+              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                exportToExcel();
+              }}
+            >
+              <ArrowDownTrayIcon className='h-5 w-5 text-foreground'/>
+            </button>
+          )}
+          {showRefreshButton && onRefresh && (
+            <button
+              className={`bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              <ArrowPathIcon className={`h-5 w-5 text-foreground ${refreshing ? 'animate-spin' : ''}`}/>
+            </button>
           )}
         </div>
       </div>

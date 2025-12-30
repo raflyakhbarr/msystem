@@ -477,8 +477,8 @@ export default function CMDBItem() {
           }}
           itemsPerPage={10}
           showAddButton={false}
-          showExportButton={false}
-          showRefreshButton={true}
+          showExportButton={true}
+          showRefreshButton={false}
           maxHeight="max-h-[500px]"
         />
 
