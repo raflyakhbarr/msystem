@@ -1,5 +1,5 @@
 import {
-  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload
+  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload, FaHandPaper // tambahkan FaHandPaper
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '../ui/sidebar';
@@ -100,6 +100,15 @@ export default function VisualizationNavbar({
             {/* Selection Mode */}
             <div className="flex items-center gap-1 bg-card rounded-lg p-1 shadow-sm border border-border">
               <Button
+                onClick={() => onSetSelectionMode('freeroam')}
+                variant={selectionMode === 'freeroam' ? "default" : "ghost"}
+                size="sm"
+                title="Mode Free Roam - Geser canvas bebas"
+              >
+                <FaHandPaper size={14} />
+                <span className="hidden sm:inline">Free</span>
+              </Button>
+              <Button
                 onClick={() => onSetSelectionMode('single')}
                 variant={selectionMode === 'single' ? "default" : "ghost"}
                 size="sm"
@@ -123,7 +132,7 @@ export default function VisualizationNavbar({
       </div>
 
       {(selectedForHiding.size > 0 || hiddenNodes.size > 0) && (
-        <div className="px-1 pb-1.5">
+        <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-muted/95 backdrop-blur-sm border-b border-border shadow-lg z-50"> {/* tambahkan absolute positioning */}
           <div className="flex items-center gap-2">
             {/* Selection Info */}
             {selectedForHiding.size > 0 && (
