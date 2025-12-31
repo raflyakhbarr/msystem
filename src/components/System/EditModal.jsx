@@ -33,7 +33,22 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
-    handleSubmit();
+    // Prepare data to submit with Accept header based on headersType
+    const dataToSubmit = { ...formData };
+    
+    // Add Accept header if headersType is selected and not 'none'
+    if (formData.headersType && formData.headersType !== 'none') {
+      const acceptValue = formData.headersType === 'custom'
+        ? formData.customHeadersType
+        : formData.headersType;
+      dataToSubmit.headers = `{"Accept": "${acceptValue}"}`;
+    }
+    
+    // Remove headersType and customHeadersType from submission
+    delete dataToSubmit.headersType;
+    delete dataToSubmit.customHeadersType;
+    
+    handleSubmit(dataToSubmit);
   };
 
   return (
@@ -118,26 +133,49 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
             {formData.typeApi !== 'not_token' && (
               <>
                 <Field>
-                  <FieldLabel>Headers (JSON)</FieldLabel>
+                  <FieldLabel>Header</FieldLabel>
                   <FieldContent>
-                    <Textarea
-                      value={formData.headers}
-                      onChange={(e) => handleChange('headers', e.target.value)}
-                      rows="3"
-                      placeholder='{"Accept": "application/json"}'
-                    />
+                    <Select
+                      value={formData.headersType || 'none'}
+                      onValueChange={(value) => handleChange('headersType', value === 'none' ? '' : value)}
+                    >
+                      <SelectTrigger>
+                        "Accept": "<SelectValue placeholder="Select content type" />"
+                      </SelectTrigger>
+                      <SelectContent> 
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="application/json">application/json</SelectItem>
+                        <SelectItem value="application/xml">application/xml</SelectItem>
+                        <SelectItem value="custom">Custom...</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </FieldContent>
                 </Field>
+
+                {formData.headersType === 'custom' && (
+                  <Field>
+                    <FieldLabel>Custom Content Type</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        type="text"
+                        value={formData.customHeadersType || ''}
+                        onChange={(e) => handleChange('customHeadersType', e.target.value)}
+                        placeholder="Enter custom content type (e.g., application/soap+xml)"
+                      />
+                    </FieldContent>
+                  </Field>
+                )}
+
 
                 <Field>
                   <FieldLabel>Token</FieldLabel>
                   <FieldContent>
                     <Input
-                      type="text"
-                      value={formData.token}
-                      onChange={(e) => handleChange('token', e.target.value)}
-                      placeholder="Leave empty if not required"
-                    />
+                        type="text"
+                        value={formData.token}
+                        onChange={(e) => handleChange('token', e.target.value)}
+                        placeholder="Leave empty if not required"
+                      />
                   </FieldContent>
                 </Field>
               </>
