@@ -58,7 +58,7 @@ export default function VisualizationNavbar({
               size="sm"
             >
               <FaDownload />
-              <span className="hidden md:inline">Ekspor</span>
+              <span className="hidden md:inline">Export</span>
             </Button>
 
             <div className="h-8 w-px bg-border"></div>
@@ -73,7 +73,7 @@ export default function VisualizationNavbar({
               title="Simpan Posisi"
             >
               <FaSave />
-              <span className="hidden md:inline">{isSaving ? 'Menyimpan...' : 'Simpan'}</span>
+              <span className="hidden md:inline">{isSaving ? 'Menyimpan...' : 'Save'}</span>
             </Button>
 
             {/* Drag Status */}

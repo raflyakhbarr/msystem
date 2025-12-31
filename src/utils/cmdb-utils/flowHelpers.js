@@ -104,15 +104,13 @@ export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targe
     edgeConfig.labelStyle = { 
       fill: strokeColor, 
       fontWeight: 'bold', 
-      fontSize: 20,
+      fontSize: 25,
       background: 'white',
-      padding: '2px 6px',
       borderRadius: '50%',
-      border: `2px solid ${strokeColor}`,
     };
     edgeConfig.labelBgStyle = { 
       fill: 'white', 
-      fillOpacity: 0.9,
+      fillOpacity: 0.5,
     };
     edgeConfig.labelBgPadding = [8, 8];
     edgeConfig.labelBgBorderRadius = 50;
