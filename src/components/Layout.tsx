@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { ModeToggle } from './mode-toggle'
 import { AppSidebar } from './app-sidebar'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
@@ -114,7 +114,9 @@ function Layout({ children }: { children: ReactNode }) {
                   ) : (
                     <>
                       <BreadcrumbItem>
-                        <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
+                        <BreadcrumbLink asChild>
+                          <Link to="/dashboard">Dashboard</Link>
+                        </BreadcrumbLink>
                       </BreadcrumbItem>
                       {getBreadcrumbs().map((crumb) => (
                         <div key={crumb.href} className="flex items-center">
@@ -123,8 +125,10 @@ function Layout({ children }: { children: ReactNode }) {
                             {crumb.isLast ? (
                               <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
                             ) : (
-                              <BreadcrumbLink href={crumb.href}>
-                                {crumb.name}
+                              <BreadcrumbLink asChild>
+                                <Link to={crumb.href}>
+                                  {crumb.name}
+                                </Link>
                               </BreadcrumbLink>
                             )}
                           </BreadcrumbItem>

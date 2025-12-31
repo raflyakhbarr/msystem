@@ -19,6 +19,8 @@ export type MenuGroupItem = {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  value?: string;
+  label?: string;
 };
 
 interface ApiResponse<T> {

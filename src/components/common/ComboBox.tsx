@@ -59,7 +59,7 @@ export function ComboBox({
 
   const selectedOption = React.useMemo(() =>
     // Only find an option if value is not empty/null/undefined
-    value && options.find((option) => option.value === value),
+    value && options.find((option) => String(option.value) === String(value)),
     [options, value]
   )
 

@@ -57,7 +57,7 @@ const AccGroup = () => {
     setFormData({
       namaGroup: '',
       codeGroup: '',
-      idSistem: systems.length > 0 && systems[0].id !== undefined ? systems[0].id : '',
+      idSistem: undefined,
       isAdministrator: false,
       status: true
     });

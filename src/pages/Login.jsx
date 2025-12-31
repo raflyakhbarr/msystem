@@ -5,6 +5,9 @@ import { EyeSlashIcon } from '@heroicons/react/24/outline'
 import { EyeIcon } from '@heroicons/react/24/outline'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Spinner } from '@/components/ui/spinner'
+import { Button } from "@/components/ui/button"
+
 
 function Login({ setIsAuthenticated }) {
   const [formData, setFormData] = useState({
@@ -15,6 +18,7 @@ function Login({ setIsAuthenticated }) {
 
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
 
@@ -37,6 +41,7 @@ function Login({ setIsAuthenticated }) {
     }
     
     if (formData.username && formData.password) {
+      setLoading(true)
       try {
         const response = await loginApi(formData.username, formData.password);
         
@@ -53,6 +58,8 @@ function Login({ setIsAuthenticated }) {
         }
       } catch (error) {
         setError('Login failed: ' + error.message);
+      } finally {
+        setLoading(false)
       }
     } else {
       setError('Please enter both username and password');
@@ -119,12 +126,21 @@ function Login({ setIsAuthenticated }) {
             </div>
           </div>
           
-          <button
+          <Button
             type="submit"
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 rounded-lg transition-colors"
+            disabled={loading}
+            size="lg"
+            className="w-full"
           >
-            Sign In
-          </button>
+            {loading ? (
+              <>
+                <Spinner className="mr-2" />
+                Loading...
+              </>
+            ) : (
+              'Sign In'
+            )}
+          </Button>
         </form>
         </CardContent>
       </Card>

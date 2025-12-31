@@ -105,7 +105,7 @@ const data = {
       title: "CMDB",
       url: "", 
       icon: GitFork,
-      isActive: false,
+      isActive: true,
       items: [
         {
           title: "Items",

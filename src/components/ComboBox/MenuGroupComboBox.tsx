@@ -22,11 +22,12 @@ export function MenuGroupComboBox({
 
   // Transform menu groups to ComboBox options
   const options: ComboBoxOption[] = React.useMemo(() => {
-    const opts = menuGroups.map(menuGroup => ({
-      value: menuGroup.value,
-      label: menuGroup.label,
-    }));
-    return opts.filter(opt => opt.value !== undefined && opt.value !== null);
+    return menuGroups
+      .filter(menuGroup => menuGroup.value !== undefined && menuGroup.value !== null && menuGroup.label !== undefined)
+      .map(menuGroup => ({
+        value: String(menuGroup.value!),
+        label: menuGroup.label!,
+      }));
   }, [menuGroups]);
 
   if (error) {
