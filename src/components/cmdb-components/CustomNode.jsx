@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import { Handle, Position } from 'reactflow';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { BiInfoCircle } from "react-icons/bi";
 import { 
   FaServer, 
@@ -15,7 +20,6 @@ import {
 const API_BASE_URL = 'http://localhost:5000';
 
 export default function CustomNode({ data, id }) {
-  const [showInfoModal, setShowInfoModal] = useState(false);
   const [imageError, setImageError] = useState({});
   
   const getIconComponent = (type) => {
@@ -86,12 +90,55 @@ export default function CustomNode({ data, id }) {
       {/* Node UI */}
       <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${getNodeBorderColor(data.status)}`}>
         <div className="absolute top-1 right-1 flex gap-1 z-10">
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200"
-          >
-            <BiInfoCircle className="w-3 h-3" />
-          </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200">
+                <BiInfoCircle className="w-3 h-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 max-h-[80vh] overflow-y-auto" align="start" side="right">
+              <div className="space-y-3">
+                <h3 className="text-lg font-bold border-b border-border pb-2">Detail Node</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1.5">
+                    <span className="font-semibold text-muted-foreground">Nama:</span>
+                    <span className="text-foreground">{data.name || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">IP Address:</span>
+                    <span className="text-foreground font-mono text-xs">{data.ip || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">Tipe:</span>
+                    <span className="text-foreground capitalize">{data.type || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">Kategori:</span>
+                    <span className="text-foreground capitalize">{data.category || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">Lokasi:</span>
+                    <span className="text-foreground">{data.location || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">Tipe Env:</span>
+                    <span className="text-foreground capitalize">{data.env_type || '—'}</span>
+                    
+                    <span className="font-semibold text-muted-foreground">Status:</span>
+                    <span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${getStatusColor(data.status)}`}>
+                        {data.status || '—'}
+                      </span>
+                    </span>
+                  </div>
+
+                  {data.description && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="font-semibold text-muted-foreground mb-1">Deskripsi:</p>
+                      <p className="text-foreground bg-muted p-2 rounded text-xs leading-relaxed">
+                        {data.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Node Content */}
@@ -100,11 +147,6 @@ export default function CustomNode({ data, id }) {
             <div className="text-xs text-center mb-2">
               <span className={`px-1.5 py-0.5 rounded ${getStatusColor(data.status)}`}>
                 {data.status}
-                {/* {isStatusCascaded && (
-                  <span className="ml-1" title="Status dari dependency">
-                    <FaExclamationTriangle className='inline-block mb-1' />
-                  </span>
-                )} */}
               </span>
             </div>
           )}
@@ -250,52 +292,6 @@ export default function CustomNode({ data, id }) {
           }}
         />
       </div>
-
-      {showInfoModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10">
-          <div className="bg-card rounded-lg shadow-lg min-w-[180px] max-w-md p-4 relative max-h-[90vh] overflow-y-auto border border-border">
-            <h3 className="text-lg font-bold mb-4">Detail Node</h3>
-            <div className="space-y-2 text-sm">
-              <p><strong>Nama:</strong> {data.name || '—'}</p>
-              <p><strong>IP Address:</strong> {data.ip || '—'}</p>
-              <p><strong>Tipe:</strong> {data.type || '—'}</p>
-              <p><strong>Kategori:</strong> {data.category || '—'}</p>
-              <p><strong>Lokasi:</strong> {data.location || '—'}</p>
-              <p><strong>Tipe Env:</strong> {data.env_type || '—'}</p>
-              <p><strong>Status:</strong>
-                <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${getStatusColor(data.status)}`}>
-                  {data.status || '—'}
-                </span>
-              </p>
-
-              {/* {isStatusCascaded && (
-                <div className="bg-accent/10 border border-accent/30 rounded p-2 text-xs">
-                  <p className="font-semibold text-accent">
-                    <FaExclamationTriangle className="inline-block"/> Status Terpengaruh
-                  </p>
-                  <p className="text-accent/80 mt-1">
-                    Status asli: <strong>{data.originalStatus}</strong>
-                    <br />
-                    Status saat ini mengikuti dependency yang bermasalah.
-                  </p>
-                </div>
-              )} */}
-
-              <p><strong>Deskripsi:</strong></p>
-              <p className="text-foreground bg-muted p-2 rounded text-xs">
-                {data.description || '—'}
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowInfoModal(false)}
-              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 w-full"
-            >
-              Tutup
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
