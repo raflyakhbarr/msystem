@@ -7,58 +7,78 @@ import EditModal from '../components/System/EditModal'
 import DetailsModal from '../components/System/DetailsModal'
 import ActionsCell from '../components/System/ActionsCell'
 
-const exportToExcel = (data) => {
-  return data.map(item => ({
-    Name: item.nama,
-    URL: item.url,
-    Destination: item.destination,
-    'API Type': item.typeApi,
-    Status: item.status ? 'Active' : 'Inactive',
-    'Created At': item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '',
-    'Updated At': item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''
-  }));
-};
-
 function SystemManagement() {
   const { systems, loading, error, loadSystems } = useSystems()
-  const [showEditModal, setShowEditModal] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [editingSystem, setEditingSystem] = useState(null)
-  const [detailsUser, setDetailsUser] = useState(null)
+  const [formData, setFormData] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadSystems()
+    } catch (error) {
+      console.error('Error refreshing systems:', error)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const handleAddNew = () => {
+    setFormData({
+      nama: '',
+      url: '',
+      destination: '',
+      typeApi: 'not_token',
+      status: true,
+      headers: '{"Accept":"application/json"}',
+      token: null
+    })
+    setShowModal(true)
+  }
 
   const handleEditSystem = (system) => {
-    setEditingSystem(system)
-    setShowEditModal(true)
+    setFormData(system)
+    setShowModal(true)
   }
 
   const handleShowDetails = (system) => {
-    setDetailsUser(system)
+    setSelectedItem(system)
     setShowDetailsModal(true)
   }
 
-  const handleCancelEdit = () => {
-    setEditingSystem(null)
-    setShowEditModal(false)
-  }
-
   const handleCloseDetails = () => {
-    setDetailsUser(null)
+    setSelectedItem(null)
     setShowDetailsModal(false)
   }
 
-  const handleUpdateSystem = async (systemData) => {
-    if (editingSystem) {
-      try {
-        await saveSystemData(systemData);
-        // Refresh the data to show updated changes
-        loadSystems();
-        setEditingSystem(null);
-        setShowEditModal(false);
-      } catch (error) {
-        console.error("Error saving system:", error);
-        alert('Error saving system: ' + error.message);
-      }
+  const handleSubmit = async () => {
+    if (!formData) return
+
+    try {
+      const isEdit = !!formData.id
+      await saveSystemData(formData)
+      setShowModal(false)
+      setFormData(null)
+      handleRefresh()
+    } catch (error) {
+      console.error('Error saving system:', error)
+      alert('Error saving system: ' + error.message)
     }
+  }
+
+  const handleExport = (data) => {
+    return data.map(item => ({
+      Name: item.nama,
+      URL: item.url,
+      Destination: item.destination,
+      'API Type': item.typeApi,
+      Status: item.status ? 'Active' : 'Inactive',
+      'Created At': item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '',
+      'Updated At': item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''
+    }))
   }
 
   // Define columns for the DataTable inside the component to access the functions
@@ -114,32 +134,24 @@ function SystemManagement() {
         title="System Management"
         loading={loading}
         error={error}
-        onRefresh={loadSystems}
-        onAdd={() => {
-          const newSystemConfig = {
-              nama: '',
-              url: '',
-              destination: '',
-              typeApi: 'not_token',
-              status: true,
-              headers: '{"Accept":"application/json"}',
-              token: null
-          }
-          setEditingSystem(newSystemConfig)
-          setShowEditModal(true)
-        }}
-        onExport={exportToExcel}
+        onRefresh={handleRefresh}
+        onAdd={handleAddNew}
+        onExport={handleExport}
+        refreshing={refreshing}
       />
 
       <EditModal
-        editingSystem={editingSystem}
-        onSave={handleUpdateSystem}
-        onCancel={handleCancelEdit}
+        showModal={showModal}
+        formData={formData}
+        setFormData={setFormData}
+        setShowModal={setShowModal}
+        handleSubmit={handleSubmit}
       />
-      
+
       <DetailsModal
-        detailsUser={detailsUser}
-        onClose={handleCloseDetails}
+        showModal={showDetailsModal}
+        item={selectedItem}
+        setShowModal={setShowDetailsModal}
       />
     </div>
   )

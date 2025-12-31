@@ -129,6 +129,19 @@ const Fitur = () => {
   };
 
   const columns = [
+    {
+      key: 'idSistem',
+      label: 'System',
+      searchable: true,
+      sortable: true,
+      render: (item) => {
+        if (item.idSistem && typeof item.idSistem === 'object') {
+            return item.idSistem.nama; 
+        }
+        const system = systems.find(s => s.id === item.idSistem);
+        return system ? system.nama : item.idSistem; 
+      }
+    },
     { key: 'menu', label: 'Modul', searchable: true, sortable: true },
     { key: 'route', label: 'Deskripsi', searchable: true, sortable: true },
     {
@@ -154,20 +167,7 @@ const Fitur = () => {
       trueColor: 'bg-green-500/10 text-green-700 dark:text-green-400',
       falseColor: 'bg-red-500/10 text-red-700 dark:text-red-400'
     },
-    {
-      key: 'idSistem',
-      label: 'System',
-      searchable: true,
-      sortable: true,
-      render: (item) => {
-        if (item.idSistem && typeof item.idSistem === 'object') {
-            return item.idSistem.nama; // Ambil namanya saja
-        }
-        // If it's just an ID, find the system name
-        const system = systems.find(s => s.id === item.idSistem);
-        return system ? system.nama : item.idSistem; // Jika ternyata string/number, tampilkan apa adanya
-      }
-    },
+    
     {
       key: 'actions',
       label: 'Actions',

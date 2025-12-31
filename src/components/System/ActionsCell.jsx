@@ -1,7 +1,8 @@
 import React from 'react';
-import { PencilIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, InformationCircleIcon, } from '@heroicons/react/24/outline';
+import {Settings} from 'lucide-react';
 
-const ActionsCell = ({ item, onEdit, onShowDetails }) => {
+const ActionsCell = ({ item, onEdit, onShowDetails, onSettingToken }) => {
   return (
     <div className="flex space-x-2">
       <button
@@ -15,6 +16,10 @@ const ActionsCell = ({ item, onEdit, onShowDetails }) => {
         onClick={() => onShowDetails(item)}
       >
         <InformationCircleIcon className="h-4 w-4" />
+      </button>
+      <button className='text-orange-600 hover:text-orange-900'
+        onClick={()=> onSettingToken(item)}>
+          <Settings className="h-4 w-4"/>
       </button>
     </div>
   );
