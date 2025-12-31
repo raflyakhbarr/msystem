@@ -39,6 +39,7 @@ import ExportModal from '@/components/cmdb-components/ExportModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { FaMousePointer } from 'react-icons/fa';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -63,7 +64,7 @@ export default function CMDBVisualization() {
 
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
   const [showVisibilityPanel, setShowVisibilityPanel] = useState(false);
-  const [selectionMode, setSelectionMode] = useState('single');
+  const [selectionMode, setSelectionMode] = useState('freeroam');
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState(null);
   const [selectionEnd, setSelectionEnd] = useState(null);
@@ -540,19 +541,19 @@ export default function CMDBVisualization() {
     setSelectionEnd(null);
   }, [isSelecting, selectionStart, selectionEnd, nodes]);
 
-  const onNodeClick = useCallback((event, node) => {
-    if (selectionMode === 'single') {
-      setSelectedForHiding(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(node.id)) {
-          newSet.delete(node.id);
-        } else {
-          newSet.add(node.id);
-        }
-        return newSet;
-      });
-    }
-  }, [selectionMode]);
+const onNodeClick = useCallback((event, node) => {
+  if (selectionMode === 'single') {
+    setSelectedForHiding(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(node.id)) {
+        newSet.delete(node.id);
+      } else {
+        newSet.add(node.id);
+      }
+      return newSet;
+    });
+  }
+}, [selectionMode]);
 
   const onNodeDragStart = useCallback((event, node) => {
     if (node.parentNode) {
@@ -1010,14 +1011,14 @@ export default function CMDBVisualization() {
             onNodeDragStop={onNodeDragStop}
             onReconnect={onReconnect}
             nodeTypes={nodeTypes}
-            nodesDraggable={selectionMode !== 'rectangle'}
+            nodesDraggable={true}
             nodesConnectable={false}
             elementsSelectable={true}
             connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
             connectionLineType="smoothstep"
             onInit={(instance) => { reactFlowInstance.current = instance;}}
             fitView
-            panOnDrag={selectionMode !== 'rectangle'}
+            panOnDrag={selectionMode === 'freeroam' || selectionMode !== 'rectangle'}
           >
             <Background />
             <Controls/>
@@ -1089,6 +1090,14 @@ export default function CMDBVisualization() {
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
               <FaSquare />
               <span>Click and drag to select multiple nodes</span>
+            </div>
+          )}
+
+          {/* Tambahkan indikator untuk mode single */}
+          {selectionMode === 'single' && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
+              <FaMousePointer />
+              <span>Click nodes to select/deselect</span>
             </div>
           )}
         </div>

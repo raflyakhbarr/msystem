@@ -88,7 +88,7 @@ export default function CustomNode({ data, id }) {
         <div className="absolute top-1 right-1 flex gap-1 z-10">
           <button
             onClick={() => setShowInfoModal(true)}
-            className="bg-muted hover:bg-muted/80 text-muted-foreground p-1 rounded-full shadow-lg"
+            className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200"
           >
             <BiInfoCircle className="w-3 h-3" />
           </button>
@@ -251,12 +251,10 @@ export default function CustomNode({ data, id }) {
         />
       </div>
 
-      {/* Modal Info */}
       {showInfoModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10">
           <div className="bg-card rounded-lg shadow-lg min-w-[180px] max-w-md p-4 relative max-h-[90vh] overflow-y-auto border border-border">
             <h3 className="text-lg font-bold mb-4">Detail Node</h3>
-
             <div className="space-y-2 text-sm">
               <p><strong>Nama:</strong> {data.name || '—'}</p>
               <p><strong>IP Address:</strong> {data.ip || '—'}</p>
