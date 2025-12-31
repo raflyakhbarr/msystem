@@ -101,7 +101,7 @@ const SettingMenu = () => {
     let keys: any[] = [];
     if (node.children) {
       node.children.forEach((child: any) => {
-        if (child.isLeaf) keys.push(child.key);
+        keys.push(child.key);
         keys = keys.concat(getDescendantKeys(child));
       });
     }
@@ -318,7 +318,7 @@ const SettingMenu = () => {
                         <CardContent className="pt-4 px-2 pb-4 flex-1">
                              <Tree
                                 checkable
-                                checkStrictly={true}
+                                checkStrictly={false}
                                 showLine={true}
                                 showIcon={false}
                                 // We pass the CHILDREN of the system node, because the Card Header acts as the System Node
