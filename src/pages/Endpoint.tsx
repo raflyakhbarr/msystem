@@ -112,7 +112,7 @@ const Endpoint = () => {
     } catch (error) {
       console.error(`Error ${formData.id ? 'updating' : 'saving'} menu:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Error ${formData.id ? 'updating' : 'saving'} menu: ` + errorMessage);
+      throw new Error(errorMessage);
     }
   };
 

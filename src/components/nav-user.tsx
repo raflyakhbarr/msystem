@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   Settings,
   ChevronsUpDown,
@@ -24,6 +25,16 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export function NavUser({
   user,
@@ -37,10 +48,12 @@ export function NavUser({
   onLogout?: () => void
 }) {
   const { isMobile } = useSidebar()
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
+    <>
+      <SidebarMenu>
+        <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
@@ -88,13 +101,29 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onLogout}>
+            <DropdownMenuItem onClick={() => setShowLogoutDialog(true)}>
               <LogOut />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+        </SidebarMenuItem>
+      </SidebarMenu>
+
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will end your current session and you will need to log in again to access your account.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onLogout}>Log out</AlertDialogAction>
+        </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
