@@ -5,6 +5,7 @@ import type { AccountFormData } from '../components/Account/EditModal';
 import DataTable from '../components/common/DataTable';
 import EditModal from '../components/Account/EditModal';
 import ActionsCell from '../components/Account/ActionsCell';
+import { toast } from "sonner";
 
 const Account = () => {
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
@@ -73,7 +74,7 @@ const Account = () => {
       handleRefresh();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert('Error saving account: ' + errorMessage);
+      toast.error(errorMessage);
     }
   };
 

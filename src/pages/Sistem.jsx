@@ -7,6 +7,7 @@ import DataTable from '../components/common/DataTable'
 import EditModal from '../components/System/EditModal'
 import DetailsModal from '../components/System/DetailsModal'
 import ActionsCell from '../components/System/ActionsCell'
+import { toast } from "sonner";
 
 function SystemManagement() {
   const navigate = useNavigate()
@@ -63,7 +64,7 @@ function SystemManagement() {
 
   const handleSubmit = async () => {
     if (!formData) return
-
+ 
     try {
       const isEdit = !!formData.id
       await saveSystemData(formData)
@@ -72,7 +73,7 @@ function SystemManagement() {
       handleRefresh()
     } catch (error) {
       console.error('Error saving system:', error)
-      alert('Error saving system: ' + error.message)
+      toast.error(error.message || 'Failed to save system')
     }
   }
 

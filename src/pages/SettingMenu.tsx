@@ -5,9 +5,9 @@ import { fetchAccGroup as fetchAllAccGroups } from '../api/accgroupApi';
 import { Layers, ArrowLeft, Save, Loader2, AlertCircle, Search, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import Tree from 'rc-tree';
 import 'rc-tree/assets/index.css';
 
@@ -15,12 +15,12 @@ const SettingMenu = () => {
   const { accGroupId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accGroupData, setAccGroupData] = useState<{ codeGroup: string; nama: string } | null>(null);
-  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [accGroupName, setAccGroupName] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-
+  
   // Tree State
   const [treeData, setTreeData] = useState<any[]>([]);
   const [checkedKeys, setCheckedKeys] = useState<any[]>([]);
@@ -148,10 +148,21 @@ const SettingMenu = () => {
     setExpandedKeys(expandedKeysValue);
     setAutoExpandParent(false);
   };
+  
+  const handleTreeCheck = (checkedKeysFromTree: any, systemNode: any) => {
+    const currentSystemKeys = getDescendantKeys(systemNode);
+
+    const otherSystemKeys = checkedKeys.filter(key => !currentSystemKeys.includes(key));
+
+    const finalKeys = [...otherSystemKeys, ...checkedKeysFromTree];
+    setCheckedKeys(finalKeys);
+  };
 
   const handleSave = async () => {
     try {
       if (!accGroupData) return;
+      
+      setSaving(true);
       
       const keysArray = Array.isArray(checkedKeys) ? checkedKeys : [];
       // Filter out structural keys (sys-, grp-) to send only Menu IDs to backend
@@ -159,12 +170,11 @@ const SettingMenu = () => {
       
       await saveAccGroupMenus(accGroupData.codeGroup, finalMenuIds);
       
-      setSaveMessage({ type: 'success', text: 'Menu settings saved successfully!' });
-      setTimeout(() => setSaveMessage(null), 3000);
+      toast.success('Menu settings saved successfully!');
     } catch (err: any) {
-      setError(err.message || 'Failed to save menu settings');
-      setSaveMessage({ type: 'error', text: err.message || 'Failed to save menu settings' });
-      setTimeout(() => setSaveMessage(null), 3000);
+      toast.error(err.message || 'Failed to save menu settings');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -244,16 +254,6 @@ const SettingMenu = () => {
                 />
             </div>
         </div>
-        
-        {saveMessage && (
-            <div className="px-6 pb-4">
-                <Alert className={`max-w-md ${saveMessage.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : ''}`} variant={saveMessage.type === 'error' ? 'destructive' : 'default'}>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>{saveMessage.type === 'success' ? 'Success' : 'Error'}</AlertTitle>
-                    <AlertDescription>{saveMessage.text}</AlertDescription>
-                </Alert>
-            </div>
-        )}
       </div>
       
       {/* CONTENT: GRID LAYOUT */}
@@ -264,11 +264,9 @@ const SettingMenu = () => {
             <p className="text-sm text-muted-foreground">Loading structure...</p>
           </div>
         ) : error ? (
-          <Alert variant="destructive" className="max-w-xl mx-auto mt-8">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <div className="max-w-xl mx-auto mt-8">
+            <p className="text-destructive text-center">{error}</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-10">
             {filteredTreeData.length === 0 && (
@@ -323,7 +321,7 @@ const SettingMenu = () => {
                                 showIcon={false}
                                 // We pass the CHILDREN of the system node, because the Card Header acts as the System Node
                                 treeData={systemNode.children}
-                                onCheck={onCheck}
+                                onCheck={(keys) => handleTreeCheck(keys, systemNode)}
                                 checkedKeys={checkedKeys}
                                 onExpand={onExpand}
                                 expandedKeys={expandedKeys}
@@ -347,10 +345,19 @@ const SettingMenu = () => {
            <span className="text-foreground">{selectedCount}</span> menus authorized
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-          <Button onClick={handleSave} className="gap-2 min-w-[140px]">
-            <Save className="h-4 w-4" />
-            Save Changes
+          <Button variant="outline" onClick={() => navigate(-1)} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-[140px]">
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Save Changes
+              </>
+            )}
           </Button>
         </div>
       </div>

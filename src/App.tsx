@@ -239,6 +239,7 @@ function App() {
       </div>
       <Toaster
         richColors
+        position="top-center"
       />
     </Router>
     </ThemeProvider>

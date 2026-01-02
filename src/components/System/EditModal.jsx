@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,8 +18,12 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmit }) => {
+  const [saving, setSaving] = useState(false);
+
   if (!showModal || !formData) {
     return null;
   }
@@ -31,7 +35,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
     }));
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     // Prepare data to submit with Accept header based on headersType
     const dataToSubmit = { ...formData };
@@ -48,7 +52,15 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
     delete dataToSubmit.headersType;
     delete dataToSubmit.customHeadersType;
     
-    handleSubmit(dataToSubmit);
+    try {
+      setSaving(true);
+      await handleSubmit(dataToSubmit);
+      toast.success(formData?.id ? 'System updated successfully!' : 'System created successfully!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save system');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -187,11 +199,19 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
               type="button"
               variant="outline"
               onClick={() => setShowModal(false)}
+              disabled={saving}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {formData?.id ? 'Update Configuration' : 'Save Configuration'}
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                formData?.id ? 'Update Configuration' : 'Save Configuration'
+              )}
             </Button>
           </div>
         </form>
