@@ -49,6 +49,24 @@ const nodeTypes = {
 export default function CMDBVisualization() {
   const navigate = useNavigate();
   const reactFlowInstance = useRef(null);
+  const getViewportCenter = useCallback(() => {
+  if (!reactFlowInstance.current) {
+    return { x: 400, y: 300 }; // Default fallback
+  }
+  
+  const viewport = reactFlowInstance.current.getViewport();
+  const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+  
+  if (!bounds) {
+    return { x: 400, y: 300 };
+  }
+  
+  const centerX = (bounds.width / 2 - viewport.x) / viewport.zoom;
+  const centerY = (bounds.height / 2 - viewport.y) / viewport.zoom;
+  
+  return { x: centerX, y: centerY };
+}, []);
+
   const reactFlowWrapper = useRef(null);
   const nodesRef = useRef([]);
   const isReorderingRef = useRef(false);
@@ -196,12 +214,21 @@ export default function CMDBVisualization() {
   const handleItemSubmit = async (e) => {
     e.preventDefault();
 
+      let initialPosition = null;
+      if (!itemFormData.group_id) {
+        initialPosition = getViewportCenter();
+      }
+
     const formDataToSend = new FormData();
     Object.keys(itemFormData).forEach(key => {
       if (itemFormData[key] !== null) {
         formDataToSend.append(key, itemFormData[key]);
       }
     });
+
+      if (initialPosition && !editItemMode) {
+        formDataToSend.append('position', JSON.stringify(initialPosition));
+      }
 
     if (editItemMode) {
       formDataToSend.append('existingImages', JSON.stringify(existingImages));
@@ -262,7 +289,12 @@ export default function CMDBVisualization() {
       if (editGroupMode) {
         await api.put(`/groups/${currentGroupId}`, groupFormData);
       } else {
-        await api.post('/groups', groupFormData);
+        const initialPosition = getViewportCenter();
+        
+        await api.post('/groups', {
+          ...groupFormData,
+          position: initialPosition // Kirim sebagai object
+        });
       }
       await fetchAll();
       setShowGroupModal(false);
@@ -463,6 +495,70 @@ export default function CMDBVisualization() {
     setHiddenNodes(new Set());
     setSelectedForHiding(new Set());
   }, []);
+
+  const handleNodeSearch = useCallback((node) => {
+    if (!reactFlowInstance.current) return;
+
+    if (hiddenNodes.has(node.id)) {
+      setHiddenNodes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(node.id);
+        return newSet;
+      });
+    }
+
+    let targetX = node.position.x;
+    let targetY = node.position.y;
+
+    if (node.parentNode) {
+      const parentNode = nodes.find(n => n.id === node.parentNode);
+      if (parentNode) {
+        targetX += parentNode.position.x;
+        targetY += parentNode.position.y;
+      }
+    }
+
+    if (node.type === 'group') {
+      targetX += (node.data.width || 0) / 2;
+      targetY += (node.data.height || 0) / 2;
+    } else {
+      targetX += 90; 
+      targetY += 60;
+    }
+
+    reactFlowInstance.current.setCenter(targetX, targetY, {
+      zoom: 1.5, 
+      duration: 800, 
+    });
+
+    setNodes(prevNodes => 
+      prevNodes.map(n => ({
+        ...n,
+        style: {
+          ...n.style,
+          outline: n.id === node.id ? '3px solid #3b82f6' : 'none',
+          outlineOffset: '2px',
+          transition: 'outline 0.3s ease',
+        }
+      }))
+    );
+
+    setTimeout(() => {
+      setNodes(prevNodes =>
+        prevNodes.map(n => ({
+          ...n,
+          style: {
+            ...n.style,
+            outline: selectedForHiding.has(n.id) ? '3px solid #3b82f6' : 'none',
+          }
+        }))
+      );
+    }, 3000);
+
+    // toast.success(`Menuju ke ${node.data?.name || 'node'}`, {
+    //   description: node.type === 'group' ? 'Group' : node.data?.type || 'Item',
+    // });
+  }, [hiddenNodes, nodes, selectedForHiding, setNodes]);
 
   const onMouseDown = useCallback((event) => {
     if (selectionMode !== 'rectangle') return;
@@ -788,7 +884,6 @@ const onNodeClick = useCallback((event, node) => {
       };
 
       if (format === 'pdf') {
-        // PDF selalu pakai background putih
         const pdfOptions = {
           ...baseExportOptions,
           backgroundColor: '#ffffff'
@@ -800,9 +895,8 @@ const onNodeClick = useCallback((event, node) => {
           img.onload = resolve;
           img.onerror = reject;
         });
-        
-        // Kalkulasi ukuran PDF
-        const pdfWidth = img.width * 0.75; // Convert px to pt
+
+        const pdfWidth = img.width * 0.75; 
         const pdfHeight = img.height * 0.75;
         
         const pdf = new jsPDF({
@@ -814,7 +908,6 @@ const onNodeClick = useCallback((event, node) => {
         pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
         pdf.save('cmdb-visualization.pdf');
       } else if (format === 'png') {
-        // PNG: jika background null/undefined = transparan, jika ada warna = solid
         const pngOptions = {
           ...baseExportOptions,
           ...(background && background !== 'transparent' ? { backgroundColor: background } : {})
@@ -825,7 +918,6 @@ const onNodeClick = useCallback((event, node) => {
         link.download = `cmdb-visualization-${Date.now()}.png`;
         link.click();
       } else if (format === 'jpeg') {
-        // JPEG tidak support transparan, default ke putih jika tidak ada background
         const jpegOptions = {
           ...baseExportOptions,
           backgroundColor: background && background !== 'transparent' ? background : '#ffffff',
@@ -846,7 +938,6 @@ const onNodeClick = useCallback((event, node) => {
         description: err.message || 'Kesalahan tidak dikenal',
       });
     } finally {
-      // Pulihkan viewport dan hidden nodes
       if (restoreViewport) {
         await new Promise(resolve => setTimeout(resolve, 150));
         restoreViewport();
@@ -863,6 +954,9 @@ const onNodeClick = useCallback((event, node) => {
         hiddenNodes={hiddenNodes}
         isSaving={isSaving}
         showVisibilityPanel={showVisibilityPanel}
+        nodes={nodes}
+        onNodeSearch={handleNodeSearch}
+        reactFlowInstance={reactFlowInstance}
         onNavigateBack={() => navigate("/items")}
         onSetSelectionMode={setSelectionMode}
         onShowOnlySelected={showOnlySelected}

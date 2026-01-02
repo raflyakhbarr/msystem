@@ -1,8 +1,9 @@
 import {
-  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload, FaHandPaper // tambahkan FaHandPaper
+  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload, FaHandPaper
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '../ui/sidebar';
+import SearchBar from './SearchBar'; // Tambahkan import
 
 export default function VisualizationNavbar({
   draggedNode,
@@ -11,6 +12,9 @@ export default function VisualizationNavbar({
   hiddenNodes,
   isSaving,
   showVisibilityPanel,
+  nodes, // Tambahkan prop
+  onNodeSearch, // Tambahkan prop
+  reactFlowInstance, // Tambahkan prop
   onSetSelectionMode,
   onShowOnlySelected,
   onToggleVisibilityPanel,
@@ -26,8 +30,9 @@ export default function VisualizationNavbar({
       <div className="px-1 py-0.5 items-center justify-between">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
-          <SidebarTrigger className="ml-0 transition-all ml-2" />
-        <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
+            <SidebarTrigger className="ml-0 transition-all ml-2" />
+            <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
+            
             {/* Add Item */}
             <Button
               onClick={onOpenAddItem}
@@ -86,6 +91,15 @@ export default function VisualizationNavbar({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Search Bar - TAMBAHKAN INI */}
+            <SearchBar 
+              nodes={nodes}
+              onNodeSelect={onNodeSearch}
+              reactFlowInstance={reactFlowInstance}
+            />
+
+            <div className="h-8 w-px bg-border"></div>
+
             {/* Visibility Panel Toggle */}
             <Button
               onClick={onToggleVisibilityPanel}
@@ -132,7 +146,7 @@ export default function VisualizationNavbar({
       </div>
 
       {(selectedForHiding.size > 0 || hiddenNodes.size > 0) && (
-        <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-muted/95 backdrop-blur-sm border-b border-border shadow-lg z-50"> {/* tambahkan absolute positioning */}
+        <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-muted/95 backdrop-blur-sm border-b border-border shadow-lg z-50">
           <div className="flex items-center gap-2">
             {/* Selection Info */}
             {selectedForHiding.size > 0 && (
