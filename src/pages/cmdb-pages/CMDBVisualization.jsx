@@ -1092,8 +1092,7 @@ const onNodeClick = useCallback((event, node) => {
               <span>Click and drag to select multiple nodes</span>
             </div>
           )}
-
-          {/* Tambahkan indikator untuk mode single */}
+ 
           {selectionMode === 'single' && (
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
             <FaMousePointer />
