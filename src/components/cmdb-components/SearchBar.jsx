@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FaSearch, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaTimes, FaLayerGroup, FaSitemap } from 'react-icons/fa'; // Tambahkan FaLayerGroup dan FaSitemap
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
@@ -56,9 +56,12 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
     setIsOpen(false);
   };
 
+  // UBAH INI - Return komponen React Icon
   const getNodeIcon = (node) => {
-    if (node.type === 'group') return '📁';
-    return '🔷';
+    if (node.type === 'group') {
+      return <FaLayerGroup className="text-purple-500" size={18} />;
+    }
+    return <FaSitemap className="text-blue-500" size={18} />;
   };
 
   const getNodeTypeLabel = (node) => {
@@ -68,25 +71,25 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
 
   return (
     <div ref={searchRef} className="relative w-full max-w-md">
-      <div className="relative">
-        <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-        <input
-          type="text"
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          onFocus={() => searchValue && setIsOpen(true)}
-          placeholder="Cari node atau group..."
-          className="w-full pl-9 pr-9 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-        />
-        {searchValue && (
-          <button
-            onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <FaTimes size={14} />
-          </button>
-        )}
-      </div>
+    <div className="relative">
+      <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={12} />
+      <input
+        type="text"
+        value={searchValue}
+        onChange={(e) => setSearchValue(e.target.value)}
+        onFocus={() => searchValue && setIsOpen(true)}
+        placeholder="Cari..."
+        className="w-full pl-8 pr-8 h-8 py-1.5 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:border-transparent"
+      />
+      {searchValue && (
+        <button
+          onClick={handleClear}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <FaTimes size={12} />
+        </button>
+      )}
+    </div>
 
       {/* Dropdown Results */}
       {isOpen && filteredNodes.length > 0 && (
@@ -98,7 +101,10 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
                 onClick={() => handleSelectNode(node)}
                 className="w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors flex items-start gap-3"
               >
-                <span className="text-xl mt-0.5">{getNodeIcon(node)}</span>
+                {/* UBAH INI - Render komponen icon langsung */}
+                <span className="mt-0.5">
+                  {getNodeIcon(node)}
+                </span>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">
                     {node.data?.name || 'Unnamed'}
