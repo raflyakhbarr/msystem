@@ -110,7 +110,7 @@ export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targe
     };
     edgeConfig.labelBgStyle = { 
       fill: 'white', 
-      fillOpacity: 0.5,
+      fillOpacity: 0,
     };
     edgeConfig.labelBgPadding = [8, 8];
     edgeConfig.labelBgBorderRadius = 50;
