@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,11 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
 import SystemComboBox from '../ComboBox/SystemComboBox';
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = React.useState({
     nama: editingMenuGroup?.nama || '',
     idSistem: editingMenuGroup?.idSistem || '',
@@ -37,15 +40,23 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     const dataToSave = {
       ...(editingMenuGroup?.id && { id: editingMenuGroup.id }),
       ...formData
     };
-
-    onSave(dataToSave);
+ 
+    try {
+      setSaving(true);
+      await onSave(dataToSave);
+      toast.success(editingMenuGroup?.id ? 'Menu group updated successfully!' : 'Menu group created successfully!');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to save menu group');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCloseForm = () => {
@@ -131,11 +142,19 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
               type="button"
               variant="outline"
               onClick={handleCloseForm}
+              disabled={saving}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {editingMenuGroup?.id ? 'Update Menu Group' : 'Save Menu Group'}
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                editingMenuGroup?.id ? 'Update Menu Group' : 'Save Menu Group'
+              )}
             </Button>
           </div>
         </form>

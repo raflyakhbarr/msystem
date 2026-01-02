@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import MenuGroupComboBox from '../ComboBox/MenuGroupComboBox';
 import type { MenuItem } from '../../api/menuApi';
 import {
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface EditModalProps {
   showModal: boolean;
@@ -28,6 +30,7 @@ const EditModal = ({
   setShowModal,
   handleSubmit
 }: EditModalProps) => {
+  const [saving, setSaving] = useState(false);
   // Determine if this is an edit operation based on whether formData has an id
   const isEdit = formData && formData.id;
 
@@ -46,9 +49,17 @@ const EditModal = ({
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    handleSubmit();
+    try {
+      setSaving(true);
+      await handleSubmit();
+      toast.success(isEdit ? 'Endpoint updated successfully!' : 'Endpoint created successfully!');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save endpoint');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -139,11 +150,19 @@ const EditModal = ({
               type="button"
               variant="outline"
               onClick={handleCloseForm}
+              disabled={saving}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {isEdit ? 'Update Endpoint' : 'Save Data'}
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                isEdit ? 'Update Endpoint' : 'Save Data'
+              )}
             </Button>
           </div>
         </form>

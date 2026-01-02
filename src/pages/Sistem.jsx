@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useSystems } from '../hooks/useSystems'
 import { saveSystemData } from '../api/SystemApi'
 import DataTable from '../components/common/DataTable'
 import EditModal from '../components/System/EditModal'
 import DetailsModal from '../components/System/DetailsModal'
 import ActionsCell from '../components/System/ActionsCell'
+import { toast } from "sonner";
 
 function SystemManagement() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const { systems, loading, error, loadSystems } = useSystems()
   const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -49,6 +53,10 @@ function SystemManagement() {
     setShowDetailsModal(true)
   }
 
+  const handleSettingToken = (system) => {
+    navigate(`/sistem/setting-token`, { state: { systemName: system.nama } })
+  }
+
   const handleCloseDetails = () => {
     setSelectedItem(null)
     setShowDetailsModal(false)
@@ -56,7 +64,7 @@ function SystemManagement() {
 
   const handleSubmit = async () => {
     if (!formData) return
-
+ 
     try {
       const isEdit = !!formData.id
       await saveSystemData(formData)
@@ -65,7 +73,7 @@ function SystemManagement() {
       handleRefresh()
     } catch (error) {
       console.error('Error saving system:', error)
-      alert('Error saving system: ' + error.message)
+      toast.error(error.message || 'Failed to save system')
     }
   }
 
@@ -122,7 +130,7 @@ function SystemManagement() {
       searchable: false,
       sortable: false,
       exportable: false,
-      render: (item) => <ActionsCell item={item} onEdit={handleEditSystem} onShowDetails={handleShowDetails} />
+      render: (item) => <ActionsCell item={item} onEdit={handleEditSystem} onShowDetails={handleShowDetails} onSettingToken={handleSettingToken} />
     }
   ];
 

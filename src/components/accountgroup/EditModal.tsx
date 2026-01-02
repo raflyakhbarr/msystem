@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import SystemComboBox from '../ComboBox/SystemComboBox';
 import MenuGroupComboBox from '../ComboBox/MenuGroupComboBox';
 import type { SystemItem } from '@/api/SystemApi';
@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export type AccGroupFormData = {
   id?: number;
@@ -40,12 +42,21 @@ const EditModal = ({
   setShowModal,
   handleSubmit
 }: EditModalProps) => {
+  const [saving, setSaving] = useState(false);
   const isEdit = formData && formData.id;
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData) {
-      handleSubmit(formData);
+      try {
+        setSaving(true);
+        await handleSubmit(formData);
+        toast.success(isEdit ? 'Account group updated successfully!' : 'Account group created successfully!');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save account group');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -161,11 +172,19 @@ const EditModal = ({
               type="button"
               variant="outline"
               onClick={handleCloseModal}
+              disabled={saving}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {isEdit ? 'Update Account Group' : 'Save Account Group'}
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                isEdit ? 'Update Account Group' : 'Save Account Group'
+              )}
             </Button>
           </div>
         </form>

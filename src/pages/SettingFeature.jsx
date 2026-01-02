@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchSettingFeature, saveAccGroupFeatures } from '../api/settingfeature';
+import { fetchAccGroup } from '../api/accgroupApi';
 import { Link, Layers, Loader2, AlertCircle, ArrowLeft, Save } from 'lucide-react';
 
 // Shadcn UI Components
@@ -17,12 +18,27 @@ const SettingFeature = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedFeatures, setSelectedFeatures] = useState({});
+  const [accGroupName, setAccGroupName] = useState('');
 
   useEffect(() => {
     if (accGroupId) {
+      loadAccGroupData();
       loadFeatureData();
     }
   }, [accGroupId]);
+
+  const loadAccGroupData = async () => {
+    try {
+      if (accGroupId) {
+        const allGroups = await fetchAccGroup();
+        const targetGroup = allGroups.find((g) => g.id === parseInt(accGroupId) || g.codeGroup === accGroupId);
+        const groupName = targetGroup?.namaGroup || targetGroup?.nama || accGroupId;
+        setAccGroupName(groupName);
+      }
+    } catch (err) {
+      console.error('Error loading account group data:', err);
+    }
+  };
 
   const loadFeatureData = async () => {
     setLoading(true);
@@ -94,7 +110,7 @@ const SettingFeature = () => {
           <div>
             <h1 className="text-xl font-semibold text-foreground flex items-center gap-2">
               <Layers className="h-5 w-5 text-primary" />
-              Configure Features
+              {accGroupName || 'Loading'}
             </h1>
           </div>
         </div>

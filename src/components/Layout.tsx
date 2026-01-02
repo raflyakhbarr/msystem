@@ -66,7 +66,8 @@ function Layout({ children }: { children: ReactNode }) {
       'fitur': 'Fitur',
       'settings': 'Settings',
       'setting-menu': 'Setting Menu',
-      'setting-feature': 'Setting Feature'
+      'setting-feature': 'Setting Feature',
+      'setting-token': 'Setting Token'
     }
     
     // Filter out the accGroupId from the pathnames for breadcrumb display

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { AccountItem } from '@/api/accountApi';
 import {
   Dialog,
@@ -9,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export type AccountFormData = {
   id?: number;
@@ -31,12 +33,20 @@ const EditModal = ({
   setShowModal,
   handleSubmit
 }: EditModalProps) => {
+  const [saving, setSaving] = useState(false);
   const isEdit = formData && formData.id;
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData) {
-      handleSubmit(formData);
+      setSaving(true);
+      try {
+        await handleSubmit(formData);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save account');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -79,10 +89,9 @@ const EditModal = ({
                     value={formData?.email || ''}
                     onChange={(e) => setFormData({ ...formData!, email: e.target.value })}
                     placeholder="Enter email"
-                    required
                   />
               </FieldContent>
-            </Field>
+            </Field> 
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t border-border mt-4">
@@ -90,11 +99,19 @@ const EditModal = ({
               type="button"
               variant="outline"
               onClick={handleCloseModal}
+              disabled={saving}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {isEdit ? 'Update Account' : 'Save Account'}
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                isEdit ? 'Update Account' : 'Save Account'
+              )}
             </Button>
           </div>
         </form>

@@ -13,6 +13,7 @@ import Endpoint from './pages/Endpoint'
 import Fitur from './pages/Fitur'
 import SettingMenu from './pages/SettingMenu'
 import SettingFeature from './pages/SettingFeature'
+import SettingToken from './pages/SettingToken'
 import CMDBItem from './pages/cmdb-pages/CMDBItem'
 import CMDBVisualization from './pages/cmdb-pages/CMDBVisualization'
 import { Toaster } from 'sonner'
@@ -195,6 +196,18 @@ function App() {
             }
           />
           <Route
+            path="/sistem/setting-token"
+            element={
+              isAuthenticated ? (
+                <Layout>
+                  <SettingToken />
+                </Layout>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
             path="/items"
             element={
               isAuthenticated ? (
@@ -226,6 +239,7 @@ function App() {
       </div>
       <Toaster
         richColors
+        position="top-center"
       />
     </Router>
     </ThemeProvider>
