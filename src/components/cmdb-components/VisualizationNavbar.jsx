@@ -1,7 +1,7 @@
 import {
   FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, 
   FaProjectDiagram, FaDownload, FaHandPaper, FaUndo, FaRedo,
-  FaToggleOn, FaToggleOff
+  FaToggleOn, FaToggleOff, FaHighlighter
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '../ui/sidebar';
@@ -10,6 +10,8 @@ import SearchBar from './SearchBar';
 export default function VisualizationNavbar({
   draggedNode,
   selectionMode,
+  highlightMode, 
+  highlightedNodeId,
   selectedForHiding,
   hiddenNodes,
   isSaving,
@@ -19,7 +21,9 @@ export default function VisualizationNavbar({
   canRedo,
   onUndo,
   onRedo,
-  onToggleAutoSave, 
+  onToggleAutoSave,
+  onSetHighlightMode,
+  onClearHighlight,
   showVisibilityPanel,
   nodes,
   onNodeSearch,
@@ -87,6 +91,7 @@ export default function VisualizationNavbar({
               className="disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FaUndo size={14} />
+              <span className="hidden md:inline">Undo</span>
             </Button>
 
             {/* Redo Button */}
@@ -99,6 +104,7 @@ export default function VisualizationNavbar({
               className="disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FaRedo size={14} />
+              <span className="hidden md:inline">Redo</span>
             </Button>
 
             <div className="h-8 w-px bg-border"></div>
@@ -166,6 +172,23 @@ export default function VisualizationNavbar({
             >
               <FaEye size={14} />
               <span className="hidden md:inline">Visibility</span>
+            </Button>
+
+            {/*Highlight Mode Toggle */}
+            <Button
+              onClick={() => {
+                onSetHighlightMode(!highlightMode);
+                if (highlightMode && highlightedNodeId) {
+                  onClearHighlight();
+                }
+              }}
+              variant={highlightMode ? "default" : "outline"}
+              size="sm"
+              title="Mode Highlight Dependencies"
+              className={highlightMode ? "bg-orange-600 hover:bg-orange-700 text-white" : ""}
+            >
+              <FaHighlighter size={14} />
+              <span className="hidden md:inline">Highlight</span>
             </Button>
 
             {/* Selection Mode */}

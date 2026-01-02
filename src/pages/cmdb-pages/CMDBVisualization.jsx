@@ -25,7 +25,7 @@ import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
-import { loadEdgeHandles, saveEdgeHandles } from '../../utils/cmdb-utils/flowHelpers';
+import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
@@ -39,9 +39,10 @@ import ExportModal from '@/components/cmdb-components/ExportModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { FaMousePointer } from 'react-icons/fa';
+import { FaMousePointer, FaProjectDiagram } from 'react-icons/fa';
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
+import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
 
 const nodeTypes = {
   custom: CustomNode,
@@ -128,6 +129,7 @@ export default function CMDBVisualization() {
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB();
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [highlightMode, setHighlightMode] = useState(false);
   
   const {
     selectedFiles,
@@ -151,9 +153,27 @@ export default function CMDBVisualization() {
     closeAlert,
   } = useVisualizationActions(items, groups, fetchAll);
 
+  const {
+    highlightedNodeId,
+    relatedNodes,
+    relatedEdges,
+    highlightNode,
+    clearHighlight,
+    getDependencies,
+    getDependents,
+  } = useNodeRelationships(nodes, edges);
+
   useEffect(() => {
     localStorage.setItem('cmdb-autosave-enabled', JSON.stringify(isAutoSaveEnabled));
   }, [isAutoSaveEnabled]);
+
+  useEffect(() => {
+    const loadHandles = async () => {
+      const handles = await loadEdgeHandles();
+      setEdgeHandles(handles);
+    };
+    loadHandles();
+  }, []);
 
   useEffect(() => {
     const handles = loadEdgeHandles();
@@ -700,19 +720,33 @@ export default function CMDBVisualization() {
     setSelectionEnd(null);
   }, [isSelecting, selectionStart, selectionEnd, nodes]);
 
-const onNodeClick = useCallback((event, node) => {
-  if (selectionMode === 'single') {
-    setSelectedForHiding(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(node.id)) {
-        newSet.delete(node.id);
+  const onNodeClick = useCallback((event, node) => {
+    if (selectionMode === 'single') {
+      setSelectedForHiding(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(node.id)) {
+          newSet.delete(node.id);
+        } else {
+          newSet.add(node.id);
+        }
+        return newSet;
+      });
+    } else if (highlightMode) {
+      if (highlightedNodeId === node.id) {
+        clearHighlight();
       } else {
-        newSet.add(node.id);
+        highlightNode(node.id);
+
+        const deps = getDependencies(node.id);
+        const dependents = getDependents(node.id);
+        
+        toast.info(`${node.data?.name || 'Node'} dipilih`, {
+          description: `Dependencies: ${deps.size} | Dependents: ${dependents.size}`,
+          duration: 3000,
+        });
       }
-      return newSet;
-    });
-  }
-}, [selectionMode]);
+    }
+  }, [selectionMode, highlightMode, highlightedNodeId, clearHighlight, highlightNode, getDependencies, getDependents]);
 
   const onNodeDragStart = useCallback((event, node) => {
     if (node.parentNode) {
@@ -767,7 +801,6 @@ const onNodeClick = useCallback((event, node) => {
         new_order: hoverPosition.index
       });
 
-      // Update lokal tanpa fetchAll
       setNodes(prevNodes => {
         const updatedNodes = prevNodes.map(n => {
           if (n.id === draggedNode) {
@@ -790,10 +823,9 @@ const onNodeClick = useCallback((event, node) => {
         return updatedNodes;
       });
 
-      // Delay sebelum mengizinkan reload
       setTimeout(() => {
         isReorderingRef.current = false;
-        fetchAll(); // Refresh untuk sinkronisasi
+        fetchAll(); 
       }, 500);
 
     } catch (err) {
@@ -806,7 +838,7 @@ const onNodeClick = useCallback((event, node) => {
     }
   }, [draggedNode, hoverPosition, setNodes, fetchAll]);
 
-  const onReconnect = useCallback((oldEdge, newConnection) => {
+  const onReconnect = useCallback(async (oldEdge, newConnection) => {
     const newEdgeHandles = {
       ...edgeHandles,
       [oldEdge.id]: {
@@ -815,9 +847,13 @@ const onNodeClick = useCallback((event, node) => {
       }
     };
     
-    saveEdgeHandles(newEdgeHandles);
-    setEdgeHandles(newEdgeHandles);
+    await saveEdgeHandle(
+      oldEdge.id,
+      newConnection.sourceHandle,
+      newConnection.targetHandle
+    );
     
+    setEdgeHandles(newEdgeHandles);
     setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
   }, [edgeHandles, setEdges]);
 
@@ -901,9 +937,17 @@ const onNodeClick = useCallback((event, node) => {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      const target = event.target;
+    // Ignore jika sedang mengetik di input/textarea
+    const target = event.target;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
         return;
+      }
+
+      // Escape untuk clear highlight
+      if (event.key === 'Escape') {
+        if (highlightMode && highlightedNodeId) {
+          clearHighlight();
+        }
       }
 
       if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
@@ -934,7 +978,7 @@ const onNodeClick = useCallback((event, node) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [canUndo, canRedo, handleUndo, handleRedo, handleSavePositions]);
+  }, [canUndo, canRedo, handleUndo, handleRedo, handleSavePositions, highlightMode, highlightedNodeId, clearHighlight]);
 
   const selectionRect = isSelecting && selectionStart && selectionEnd ? {
     left: Math.min(selectionStart.x, selectionEnd.x),
@@ -1081,21 +1125,24 @@ const onNodeClick = useCallback((event, node) => {
       <VisualizationNavbar
         draggedNode={draggedNode}
         selectionMode={selectionMode}
+        highlightMode={highlightMode} 
+        highlightedNodeId={highlightedNodeId} 
         selectedForHiding={selectedForHiding}
         hiddenNodes={hiddenNodes}
         isSaving={isSaving}
         isAutoSaving={isAutoSaving}
         isAutoSaveEnabled={isAutoSaveEnabled}
-        canUndo={canUndo} 
-        canRedo={canRedo} 
-        onUndo={handleUndo} 
-        onRedo={handleRedo} 
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         onToggleAutoSave={handleToggleAutoSave}
+        onSetHighlightMode={setHighlightMode} 
+        onClearHighlight={clearHighlight} 
         showVisibilityPanel={showVisibilityPanel}
         nodes={nodes}
         onNodeSearch={handleNodeSearch}
         reactFlowInstance={reactFlowInstance}
-        onNavigateBack={() => navigate("/items")}
         onSetSelectionMode={setSelectionMode}
         onShowOnlySelected={showOnlySelected}
         onToggleVisibilityPanel={() => setShowVisibilityPanel(!showVisibilityPanel)}
@@ -1225,15 +1272,68 @@ const onNodeClick = useCallback((event, node) => {
           onMouseUp={onMouseUp}
         >
           <ReactFlow
-            nodes={nodes.map(node => ({
-              ...node,
-              style: {
-                ...node.style,
-                outline: selectedForHiding.has(node.id) ? '3px solid #3b82f6' : 'none',
-                outlineOffset: '2px',
+            nodes={nodes.map(node => {
+              let opacity = 1;
+              let outline = 'none';
+              let zIndex = node.style?.zIndex || 1;
+
+              if (selectedForHiding.has(node.id)) {
+                outline = '3px solid #3b82f6';
               }
-            }))}
-            edges={edges}
+
+              if (highlightMode && highlightedNodeId) {
+                if (node.id === highlightedNodeId) {
+                  opacity = 1;
+                  outline = '4px solid #f59e0b';
+                  zIndex = 100;
+                } else if (relatedNodes && relatedNodes.has(node.id)) {
+                  opacity = 1;
+                  zIndex = 50;
+                } else {
+                  opacity = 0.08;
+                  zIndex = 1;
+                }
+              }
+
+              return {
+                ...node,
+                style: {
+                  ...node.style,
+                  opacity,
+                  outline,
+                  outlineOffset: '2px',
+                  zIndex,
+                  transition: 'opacity 0.3s ease, outline 0.3s ease',
+                }
+              };
+            })}
+            edges={edges.map(edge => {
+              let opacity = edge.style?.opacity || 1;
+              let strokeWidth = edge.style?.strokeWidth || 2;
+              let zIndex = edge.zIndex || 10;
+
+              if (highlightMode && highlightedNodeId) {
+                if (relatedEdges && relatedEdges.has(edge.id)) {
+                  opacity = 1;
+                  strokeWidth = 3;
+                  zIndex = 60;
+                } else {
+                  opacity = 0.1;
+                  zIndex = 1;
+                }
+              }
+
+              return {
+                ...edge,
+                style: {
+                  ...edge.style,
+                  opacity,
+                  strokeWidth,
+                  transition: 'opacity 0.3s ease, stroke-width 0.3s ease',
+                },
+                zIndex,
+              };
+            })}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
@@ -1251,6 +1351,11 @@ const onNodeClick = useCallback((event, node) => {
             onInit={(instance) => { reactFlowInstance.current = instance;}}
             fitView
             panOnDrag={selectionMode === 'freeroam' || selectionMode !== 'rectangle'}
+            onPaneClick={() => {
+              if (highlightMode) {
+                clearHighlight();
+              }
+            }}
           >
             <Background />
             <Controls/>
@@ -1431,6 +1536,26 @@ const onNodeClick = useCallback((event, node) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {highlightMode && !highlightedNodeId && (
+        <div className="absolute top-28 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
+          <FaProjectDiagram />
+          <span>Click node to highlight dependencies</span>
+        </div>
+      )}
+
+      {highlightMode && highlightedNodeId && (
+        <div className="absolute top-28 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] px-4 text-white py-2 rounded-lg shadow-lg z-50 flex items-center gap-3">
+          <FaProjectDiagram />
+          <span>Selected node and highlighted dependencies</span>
+          <button
+            onClick={clearHighlight}
+            className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-xs transition-colors"
+          >
+            Clear (ESC)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

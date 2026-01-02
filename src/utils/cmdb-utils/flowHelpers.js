@@ -1,4 +1,5 @@
 import { MarkerType } from 'reactflow';
+import api from '../../services/api';
 
 export const calculateGroupDimensions = (groupId, groupItems) => {
   const itemsPerRow = 3;
@@ -119,20 +120,53 @@ export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targe
   return edgeConfig;
 };
 
-export const loadEdgeHandles = () => {
+export const loadEdgeHandles = async () => {
   try {
-    const saved = localStorage.getItem('cmdb_edge_handles');
-    return saved ? JSON.parse(saved) : {};
+    const response = await api.get('/edge-handles');
+    return response.data;
   } catch (err) {
-    console.error('Gagal memuat konfigurasi edge:', err);
+    console.error('Gagal memuat konfigurasi edge dari database:', err);
+    
+    try {
+      const saved = localStorage.getItem('cmdb_edge_handles');
+      if (saved) {
+        const handles = JSON.parse(saved);
+        await saveEdgeHandles(handles);
+        localStorage.removeItem('cmdb_edge_handles');
+        return handles;
+      }
+    } catch (localErr) {
+      console.error('Gagal memuat dari localStorage:', localErr);
+    }
+    
     return {};
   }
 };
 
-export const saveEdgeHandles = (handles) => {
+export const saveEdgeHandles = async (handles) => {
   try {
-    localStorage.setItem('cmdb_edge_handles', JSON.stringify(handles));
+    await api.post('/edge-handles/bulk', { edgeHandles: handles });
   } catch (err) {
-    console.error('Gagal menyimpan konfigurasi edge:', err);
+    console.error('Gagal menyimpan konfigurasi edge ke database:', err);
+  }
+};
+
+export const saveEdgeHandle = async (edgeId, sourceHandle, targetHandle) => {
+  try {
+    await api.post('/edge-handles', { 
+      edgeId, 
+      sourceHandle, 
+      targetHandle 
+    });
+  } catch (err) {
+    console.error('Gagal menyimpan edge handle ke database:', err);
+  }
+};
+
+export const deleteEdgeHandle = async (edgeId) => {
+  try {
+    await api.delete(`/edge-handles/${edgeId}`);
+  } catch (err) {
+    console.error('Gagal menghapus edge handle dari database:', err);
   }
 };
