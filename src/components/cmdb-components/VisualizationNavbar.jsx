@@ -1,9 +1,11 @@
 import {
-  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, FaProjectDiagram, FaDownload, FaHandPaper
+  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, 
+  FaProjectDiagram, FaDownload, FaHandPaper, FaUndo, FaRedo,
+  FaToggleOn, FaToggleOff
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '../ui/sidebar';
-import SearchBar from './SearchBar'; // Tambahkan import
+import SearchBar from './SearchBar';
 
 export default function VisualizationNavbar({
   draggedNode,
@@ -11,10 +13,17 @@ export default function VisualizationNavbar({
   selectedForHiding,
   hiddenNodes,
   isSaving,
+  isAutoSaving,
+  isAutoSaveEnabled,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  onToggleAutoSave, 
   showVisibilityPanel,
-  nodes, // Tambahkan prop
-  onNodeSearch, // Tambahkan prop
-  reactFlowInstance, // Tambahkan prop
+  nodes,
+  onNodeSearch,
+  reactFlowInstance,
   onSetSelectionMode,
   onShowOnlySelected,
   onToggleVisibilityPanel,
@@ -68,18 +77,66 @@ export default function VisualizationNavbar({
 
             <div className="h-8 w-px bg-border"></div>
 
+            {/* Undo Button */}
+            <Button
+              onClick={onUndo}
+              disabled={!canUndo}
+              variant="outline"
+              size="sm"
+              title="Undo (Ctrl+Z)"
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FaUndo size={14} />
+            </Button>
+
+            {/* Redo Button */}
+            <Button
+              onClick={onRedo}
+              disabled={!canRedo}
+              variant="outline"
+              size="sm"
+              title="Redo (Ctrl+Y)"
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FaRedo size={14} />
+            </Button>
+
+            <div className="h-8 w-px bg-border"></div>
+
+            {/* Auto-Save Toggle */}
+            <Button
+              onClick={onToggleAutoSave}
+              variant={isAutoSaveEnabled ? "default" : "outline"}
+              size="sm"
+              title={isAutoSaveEnabled ? "Auto-save Aktif (klik untuk nonaktifkan)" : "Auto-save Nonaktif (klik untuk aktifkan)"}
+              className={isAutoSaveEnabled ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+            >
+              {isAutoSaveEnabled ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
+              <span className="hidden lg:inline">Auto-save</span>
+            </Button>
+
             {/* Save Button */}
             <Button
               onClick={onSavePositions}
-              disabled={isSaving}
+              disabled={isSaving || isAutoSaving}
               variant="outline"
               size="sm"
-              className={!isSaving ? "bg-accent text-accent-foreground hover:bg-accent/90 border-accent" : ""}
-              title="Simpan Posisi"
+              className={!isSaving && !isAutoSaving ? "bg-accent text-accent-foreground hover:bg-accent/90 border-accent" : ""}
+              title="Simpan Posisi Manual (Ctrl+S)"
             >
               <FaSave />
-              <span className="hidden md:inline">{isSaving ? 'Menyimpan...' : 'Save'}</span>
+              <span className="hidden md:inline">
+                {isSaving ? 'Menyimpan...' : isAutoSaving ? 'Auto-saving...' : 'Save'}
+              </span>
             </Button>
+
+            {/* Auto-saving Indicator */}
+            {isAutoSaving && isAutoSaveEnabled && (
+              <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+                <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
+                <span className="font-medium">Auto-saving...</span>
+              </div>
+            )}
 
             {/* Drag Status */}
             {draggedNode && (
@@ -91,7 +148,7 @@ export default function VisualizationNavbar({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Search Bar - TAMBAHKAN INI */}
+            {/* Search Bar */}
             <SearchBar 
               nodes={nodes}
               onNodeSelect={onNodeSearch}

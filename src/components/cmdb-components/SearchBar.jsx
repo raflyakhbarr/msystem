@@ -90,8 +90,6 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
         </button>
       )}
     </div>
-
-      {/* Dropdown Results */}
       {isOpen && filteredNodes.length > 0 && (
         <div className="absolute top-full mt-2 w-full bg-popover border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
           <div className="p-2 space-y-1">
@@ -101,7 +99,6 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
                 onClick={() => handleSelectNode(node)}
                 className="w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors flex items-start gap-3"
               >
-                {/* UBAH INI - Render komponen icon langsung */}
                 <span className="mt-0.5">
                   {getNodeIcon(node)}
                 </span>
@@ -137,7 +134,6 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
         </div>
       )}
 
-      {/* No Results */}
       {isOpen && searchValue && filteredNodes.length === 0 && (
         <div className="absolute top-full mt-2 w-full bg-popover border border-border rounded-lg shadow-lg z-50 p-4 text-center text-sm text-muted-foreground">
           Tidak ada hasil untuk "{searchValue}"

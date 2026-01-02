@@ -40,6 +40,8 @@ import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { FaMousePointer } from 'react-icons/fa';
+import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
+import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -48,6 +50,22 @@ const nodeTypes = {
 
 export default function CMDBVisualization() {
   const navigate = useNavigate();
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(() => {
+    const saved = localStorage.getItem('cmdb-autosave-enabled');
+    return saved !== null ? JSON.parse(saved) : true; // Default true
+});
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const lastSavedNodesRef = useRef(null);
+  const isManualActionRef = useRef(false);
+
+  const {
+    pushState,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    clear: clearHistory,
+  } = useUndoRedo(50);
   const reactFlowInstance = useRef(null);
   const getViewportCenter = useCallback(() => {
   if (!reactFlowInstance.current) {
@@ -132,6 +150,10 @@ export default function CMDBVisualization() {
     alertDialog,
     closeAlert,
   } = useVisualizationActions(items, groups, fetchAll);
+
+  useEffect(() => {
+    localStorage.setItem('cmdb-autosave-enabled', JSON.stringify(isAutoSaveEnabled));
+  }, [isAutoSaveEnabled]);
 
   useEffect(() => {
     const handles = loadEdgeHandles();
@@ -560,6 +582,47 @@ export default function CMDBVisualization() {
     // });
   }, [hiddenNodes, nodes, selectedForHiding, setNodes]);
 
+  const handleNodesChange = useCallback((changes) => {
+    const hasPositionChange = changes.some(change => 
+      change.type === 'position' && change.dragging === false
+    );
+    
+    if (hasPositionChange) {
+      isManualActionRef.current = true;
+      
+      // Save ke history sebelum perubahan
+      setNodes(currentNodes => {
+        pushState([...currentNodes]);
+        return currentNodes;
+      });
+    }
+    
+    onNodesChange(changes);
+  }, [onNodesChange, pushState]);
+
+  const handleUndo = useCallback(() => {
+    const previousState = undo();
+    if (previousState) {
+      setNodes(previousState);
+      toast.info('Undo', { duration: 1000 });
+    }
+  }, [undo, setNodes]);
+
+  const handleRedo = useCallback(() => {
+    const nextState = redo();
+    if (nextState) {
+      setNodes(nextState);
+      toast.info('Redo', { duration: 1000 });
+    }
+  }, [redo, setNodes]);
+
+  const handleToggleAutoSave = useCallback(() => {
+    setIsAutoSaveEnabled(prev => {
+      const newValue = !prev;
+      return newValue;
+    });
+  }, []);
+
   const onMouseDown = useCallback((event) => {
     if (selectionMode !== 'rectangle') return;
     
@@ -758,6 +821,46 @@ const onNodeClick = useCallback((event, node) => {
     setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
   }, [edgeHandles, setEdges]);
 
+  const autoSavePositions = useCallback(async () => {
+    if (!isManualActionRef.current) return;
+    
+    setIsAutoSaving(true);
+    try {
+      const updatePromises = [];
+      
+      nodes.forEach((node) => {
+        if (node.type === 'custom' && !node.parentNode) {
+          updatePromises.push(
+            api.put(`/cmdb/${node.id}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
+        }
+      });
+
+      nodes.forEach((node) => {
+        if (node.type === 'group') {
+          const groupId = node.id.replace('group-', '');
+          updatePromises.push(
+            api.put(`/groups/${groupId}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
+        }
+      });
+
+      await Promise.all(updatePromises);
+      lastSavedNodesRef.current = JSON.stringify(nodes);
+      isManualActionRef.current = false;
+    } catch (err) {
+      console.error('Auto-save error:', err);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [nodes]);
+
+  useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
+
   const handleSavePositions = async () => {
     setIsSaving(true);
     try {
@@ -785,8 +888,8 @@ const onNodeClick = useCallback((event, node) => {
       });
 
       await Promise.all(updatePromises);
-      fetchAll();
-     toast.success('Posisi berhasil disimpan!');
+      lastSavedNodesRef.current = JSON.stringify(nodes);
+      toast.success('Posisi berhasil disimpan!');
     } catch (err) {
       toast.error('Gagal menyimpan posisi', {
         description: err.response?.data?.error || err.message,
@@ -795,6 +898,43 @@ const onNodeClick = useCallback((event, node) => {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        if (canUndo) {
+          handleUndo();
+        }
+      }
+      
+      if (
+        ((event.ctrlKey || event.metaKey) && event.key === 'y') ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')
+      ) {
+        event.preventDefault();
+        if (canRedo) {
+          handleRedo();
+        }
+      }
+      
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        handleSavePositions();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [canUndo, canRedo, handleUndo, handleRedo, handleSavePositions]);
 
   const selectionRect = isSelecting && selectionStart && selectionEnd ? {
     left: Math.min(selectionStart.x, selectionEnd.x),
@@ -818,27 +958,22 @@ const onNodeClick = useCallback((event, node) => {
 
     let restoreViewport = null;
     let restoreHiddenNodes = null;
-    
-    // Loading toast
+
     const loadingToast = toast.loading('Mempersiapkan export...');
 
     if (scope === 'all') {
-      // Simpan viewport dan hidden nodes saat ini
       const currentViewport = rfInstance.getViewport();
       const currentHiddenNodes = new Set(hiddenNodes);
       restoreHiddenNodes = currentHiddenNodes;
-      
-      // Tampilkan semua nodes
+
       setHiddenNodes(new Set());
       
-      // Tunggu React render
       await new Promise(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(resolve);
         });
       });
       
-      // Fit view tanpa animasi
       rfInstance.fitView({ 
         padding: 0.15,
         includeHiddenNodes: false,
@@ -847,10 +982,8 @@ const onNodeClick = useCallback((event, node) => {
         maxZoom: 1.5
       });
 
-      // Tunggu rendering selesai
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Simpan fungsi restore
       restoreViewport = () => {
         rfInstance.setViewport(currentViewport);
         if (restoreHiddenNodes) {
@@ -865,7 +998,6 @@ const onNodeClick = useCallback((event, node) => {
       let dataUrl;
       const exportElement = reactFlowContainer;
       
-      // Opsi export yang lebih robust
       const baseExportOptions = {
         pixelRatio: 2,
         cacheBust: true,
@@ -873,7 +1005,6 @@ const onNodeClick = useCallback((event, node) => {
         canvasWidth: exportElement.offsetWidth * 2,
         canvasHeight: exportElement.offsetHeight * 2,
         filter: (node) => {
-          // Hanya export viewport, exclude controls
           if (node.classList) {
             return !node.classList.contains('react-flow__controls') &&
                   !node.classList.contains('react-flow__minimap') &&
@@ -953,6 +1084,13 @@ const onNodeClick = useCallback((event, node) => {
         selectedForHiding={selectedForHiding}
         hiddenNodes={hiddenNodes}
         isSaving={isSaving}
+        isAutoSaving={isAutoSaving}
+        isAutoSaveEnabled={isAutoSaveEnabled}
+        canUndo={canUndo} 
+        canRedo={canRedo} 
+        onUndo={handleUndo} 
+        onRedo={handleRedo} 
+        onToggleAutoSave={handleToggleAutoSave}
         showVisibilityPanel={showVisibilityPanel}
         nodes={nodes}
         onNodeSearch={handleNodeSearch}
@@ -1096,7 +1234,7 @@ const onNodeClick = useCallback((event, node) => {
               }
             }))}
             edges={edges}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
             onNodeContextMenu={handleNodeContextMenu}
