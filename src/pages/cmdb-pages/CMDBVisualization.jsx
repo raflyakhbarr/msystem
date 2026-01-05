@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -49,15 +49,38 @@ const nodeTypes = {
   group: CustomGroupNode,
 };
 
+const DIMENSIONS = {
+  itemsPerRow: 3,
+  itemWidth: 180,
+  itemHeight: 120,
+  gap: 60,
+  padding: 40,
+};
+
+const debounce = (func, wait) => {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
+
 export default function CMDBVisualization() {
   const navigate = useNavigate();
+
   const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(() => {
     const saved = localStorage.getItem('cmdb-autosave-enabled');
-    return saved !== null ? JSON.parse(saved) : true; // Default true
-});
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const lastSavedNodesRef = useRef(null);
   const isManualActionRef = useRef(false);
+  const dragStateRef = useRef({ isDragging: false, startTime: 0 });
 
   const {
     pushState,
@@ -67,35 +90,18 @@ export default function CMDBVisualization() {
     canRedo,
     clear: clearHistory,
   } = useUndoRedo(50);
+  
   const reactFlowInstance = useRef(null);
-  const getViewportCenter = useCallback(() => {
-  if (!reactFlowInstance.current) {
-    return { x: 400, y: 300 }; // Default fallback
-  }
-  
-  const viewport = reactFlowInstance.current.getViewport();
-  const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-  
-  if (!bounds) {
-    return { x: 400, y: 300 };
-  }
-  
-  const centerX = (bounds.width / 2 - viewport.x) / viewport.zoom;
-  const centerY = (bounds.height / 2 - viewport.y) / viewport.zoom;
-  
-  return { x: centerX, y: centerY };
-}, []);
-
   const reactFlowWrapper = useRef(null);
   const nodesRef = useRef([]);
   const isReorderingRef = useRef(false);
   const socketRef = useRef(null);
-  
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [edgeHandles, setEdgeHandles] = useState({});
-  
+
   const [draggedNode, setDraggedNode] = useState(null);
   const [hoverPosition, setHoverPosition] = useState(null);
 
@@ -122,12 +128,12 @@ export default function CMDBVisualization() {
   const [selectedItemForConnection, setSelectedItemForConnection] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
   const [selectedGroupConnections, setSelectedGroupConnections] = useState([]);
-
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB();
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
+  
   const [showExportModal, setShowExportModal] = useState(false);
   const [highlightMode, setHighlightMode] = useState(false);
   
@@ -163,826 +169,21 @@ export default function CMDBVisualization() {
     getDependents,
   } = useNodeRelationships(nodes, edges);
 
-  useEffect(() => {
-    localStorage.setItem('cmdb-autosave-enabled', JSON.stringify(isAutoSaveEnabled));
-  }, [isAutoSaveEnabled]);
-
-  useEffect(() => {
-    const loadHandles = async () => {
-      const handles = await loadEdgeHandles();
-      setEdgeHandles(handles);
-    };
-    loadHandles();
-  }, []);
-
-  useEffect(() => {
-    const handles = loadEdgeHandles();
-    setEdgeHandles(handles);
-  }, []);
-
-  const loadData = useCallback(() => {
-    const { flowNodes, flowEdges } = transformToFlowData();
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  }, [transformToFlowData, setNodes, setEdges]);
-
-  const loadDataRef = useRef(null);
-
-  loadDataRef.current = () => {
-    const { flowNodes, flowEdges } = transformToFlowData();
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  };
-
-  useEffect(() => {
-    if (loadDataRef.current) {
-      loadDataRef.current();
-    }
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes]);
-
-  useEffect(() => {
-    const socket = io('http://localhost:5000', {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
-    
-    socketRef.current = socket;
-
-    socket.on('cmdb_update', (data) => {
-      fetchAll();
-    });
-
-    return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('cmdb_update');
-      socket.disconnect();
-    };
-  }, []); 
-
-  useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
-
-  const handleOpenAddItem = () => {
-    setItemFormData(INITIAL_ITEM_FORM);
-    setEditItemMode(false);
-    setCurrentItemId(null);
-    resetImages();
-    setShowItemModal(true);
-  };
-
-  const handleEditItem = (item) => {
-    setItemFormData({
-      name: item.name || '',
-      type: item.type || '',
-      description: item.description || '',
-      status: item.status || 'active',
-      ip: item.ip || '',
-      category: item.category || 'internal',
-      location: item.location || '',
-      group_id: item.group_id || null,
-      env_type: item.env_type || 'fisik',
-    });
-    setCurrentItemId(item.id);
-    setEditItemMode(true);
-    setImages(item.images);
-    setShowItemModal(true);
-  };
-
-  const handleItemSubmit = async (e) => {
-    e.preventDefault();
-
-      let initialPosition = null;
-      if (!itemFormData.group_id) {
-        initialPosition = getViewportCenter();
-      }
-
-    const formDataToSend = new FormData();
-    Object.keys(itemFormData).forEach(key => {
-      if (itemFormData[key] !== null) {
-        formDataToSend.append(key, itemFormData[key]);
-      }
-    });
-
-      if (initialPosition && !editItemMode) {
-        formDataToSend.append('position', JSON.stringify(initialPosition));
-      }
-
-    if (editItemMode) {
-      formDataToSend.append('existingImages', JSON.stringify(existingImages));
-    }
-
-    selectedFiles.forEach(file => {
-      formDataToSend.append('images', file);
-    });
-
-    try {
-      if (editItemMode) {
-        await api.put(`/cmdb/${currentItemId}`, formDataToSend, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      } else {
-        await api.post('/cmdb', formDataToSend, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      }
-      
-      setShowItemModal(false);
-      
-      setTimeout(() => {
-        setItemFormData(INITIAL_ITEM_FORM);
-        setEditItemMode(false);
-        setCurrentItemId(null);
-        resetImages();
-      }, 100);
-      
-      await fetchAll();
-    } catch (err) {
-      console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleOpenManageGroups = () => {
-    setGroupFormData(INITIAL_GROUP_FORM);
-    setEditGroupMode(false);
-    setCurrentGroupId(null);
-    setShowGroupModal(true);
-  };
-
-  const handleEditGroup = (group) => {
-    setGroupFormData({
-      name: group.name || '',
-      description: group.description || '',
-      color: group.color || '#e0e7ff'
-    });
-    setCurrentGroupId(group.id);
-    setEditGroupMode(true);
-    setShowGroupModal(true);
-  };
-
-  const handleGroupSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (editGroupMode) {
-        await api.put(`/groups/${currentGroupId}`, groupFormData);
-      } else {
-        const initialPosition = getViewportCenter();
-        
-        await api.post('/groups', {
-          ...groupFormData,
-          position: initialPosition // Kirim sebagai object
-        });
-      }
-      await fetchAll();
-      setShowGroupModal(false);
-      setGroupFormData(INITIAL_GROUP_FORM);
-      setEditGroupMode(false);
-    } catch (err) {
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleDeleteGroup = async (id) => {
-    try {
-      await api.delete(`/groups/${id}`);
-      await fetchAll();
-    } catch (err) {
-      alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleOpenConnectionModal = (item) => {
-    setSelectedItemForConnection(item);
-    
-    const existingItemConns = connections
-      .filter(conn => conn.source_id === item.id && conn.target_id)
-      .map(conn => conn.target_id);
-    
-    const existingGroupConns = connections
-      .filter(conn => conn.source_id === item.id && conn.target_group_id)
-      .map(conn => conn.target_group_id);
-    
-    setSelectedConnections(existingItemConns);
-    setSelectedGroupConnections(existingGroupConns);
-    setShowConnectionModal(true);
-  };
-
-  const handleToggleConnection = (targetId) => {
-    setSelectedConnections(prev => 
-      prev.includes(targetId) 
-        ? prev.filter(id => id !== targetId)
-        : [...prev, targetId]
-    );
-  };
-
-  const handleToggleGroupConnection = (groupId) => {
-    setSelectedGroupConnections(prev => 
-      prev.includes(groupId)
-        ? prev.filter(id => id !== groupId)
-        : [...prev, groupId]
-    );
-  };
-
-  const handleSaveConnections = async () => {
-    try {
-      const currentItemConns = connections
-        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
-        .map(conn => conn.target_id);
-
-      const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
-      const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
-
-      for (const targetId of itemsToAdd) {
-        await api.post('/cmdb/connections', {
-          source_id: selectedItemForConnection.id,
-          target_id: targetId
-        });
-      }
-
-      for (const targetId of itemsToRemove) {
-        await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${targetId}`);
-      }
-
-      const currentGroupConns = connections
-        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id)
-        .map(conn => conn.target_group_id);
-
-      const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
-      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
-
-      for (const groupId of groupsToAdd) {
-        await api.post('/cmdb/connections/to-group', {
-          source_id: selectedItemForConnection.id,
-          target_group_id: groupId
-        });
-      }
-
-      for (const groupId of groupsToRemove) {
-        await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
-      }
-
-      await fetchAll();
-      setShowConnectionModal(false);
-    } catch (err) {
-      console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleOpenGroupConnectionModal = (group) => {
-    setSelectedGroupForConnection(group);
-    
-    const existingConns = groupConnections
-      .filter(conn => conn.source_id === group.id)
-      .map(conn => conn.target_id);
-    
-    setSelectedGroupToGroupConnections(existingConns);
-    setShowGroupConnectionModal(true);
-  };
-
-  const handleToggleGroupToGroupConnection = (targetGroupId) => {
-    setSelectedGroupToGroupConnections(prev =>
-      prev.includes(targetGroupId)
-        ? prev.filter(id => id !== targetGroupId)
-        : [...prev, targetGroupId]
-    );
-  };
-
-  const handleSaveGroupConnections = async () => {
-    try {
-      const currentConns = groupConnections
-        .filter(conn => conn.source_id === selectedGroupForConnection.id)
-        .map(conn => conn.target_id);
-
-      const toAdd = selectedGroupToGroupConnections.filter(id => !currentConns.includes(id));
-      const toRemove = currentConns.filter(id => !selectedGroupToGroupConnections.includes(id));
-
-      for (const targetId of toAdd) {
-        await api.post('/groups/connections', {
-          source_id: selectedGroupForConnection.id,
-          target_id: targetId
-        });
-      }
-
-      for (const targetId of toRemove) {
-        await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
-      }
-
-      await fetchAll();
-      setShowGroupConnectionModal(false);
-    } catch (err) {
-      console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleContextEdit = () => {
-    const editData = handleEditFromVisualization(contextMenu.node);
-    if (editData.type === 'group') {
-      handleEditGroup(editData.data);
-    } else {
-      handleEditItem(editData.data);
-    }
-  };
-
-  const handleContextDelete = async () => {
-    await handleDeleteFromVisualization(contextMenu.node);
-  };
-
-  const handleContextManageConnections = () => {
-    const item = handleManageConnectionsFromVisualization(contextMenu.node);
-    if (item) {
-      handleOpenConnectionModal(item);
-    }
-  };
-
-  const handleContextToggleVisibility = () => {
-    toggleNodeVisibility(contextMenu.node.id);
-  };
-
-  const toggleNodeVisibility = useCallback((nodeId) => {
-    setHiddenNodes(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(nodeId)) {
-        newSet.delete(nodeId);
-      } else {
-        newSet.add(nodeId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const showOnlySelected = useCallback(() => {
-    if (selectedForHiding.size > 0) {
-      const allNodeIds = new Set([
-        ...nodes.map(n => n.id),
-        ...groups.map(g => `group-${g.id}`)
-      ]);
-      
-      const nodesToHide = new Set(
-        [...allNodeIds].filter(id => !selectedForHiding.has(id))
-      );
-      
-      setHiddenNodes(nodesToHide);
-      setSelectedForHiding(new Set());
-    }
-  }, [selectedForHiding, nodes, groups]);
-
-  const showAllNodes = useCallback(() => {
-    setHiddenNodes(new Set());
-    setSelectedForHiding(new Set());
-  }, []);
-
-  const handleNodeSearch = useCallback((node) => {
-    if (!reactFlowInstance.current) return;
-
-    if (hiddenNodes.has(node.id)) {
-      setHiddenNodes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(node.id);
-        return newSet;
-      });
-    }
-
-    let targetX = node.position.x;
-    let targetY = node.position.y;
-
-    if (node.parentNode) {
-      const parentNode = nodes.find(n => n.id === node.parentNode);
-      if (parentNode) {
-        targetX += parentNode.position.x;
-        targetY += parentNode.position.y;
-      }
-    }
-
-    if (node.type === 'group') {
-      targetX += (node.data.width || 0) / 2;
-      targetY += (node.data.height || 0) / 2;
-    } else {
-      targetX += 90; 
-      targetY += 60;
-    }
-
-    reactFlowInstance.current.setCenter(targetX, targetY, {
-      zoom: 1.5, 
-      duration: 800, 
-    });
-
-    setNodes(prevNodes => 
-      prevNodes.map(n => ({
-        ...n,
-        style: {
-          ...n.style,
-          outline: n.id === node.id ? '3px solid #3b82f6' : 'none',
-          outlineOffset: '2px',
-          transition: 'outline 0.3s ease',
-        }
-      }))
-    );
-
-    setTimeout(() => {
-      setNodes(prevNodes =>
-        prevNodes.map(n => ({
-          ...n,
-          style: {
-            ...n.style,
-            outline: selectedForHiding.has(n.id) ? '3px solid #3b82f6' : 'none',
-          }
-        }))
-      );
-    }, 3000);
-
-    // toast.success(`Menuju ke ${node.data?.name || 'node'}`, {
-    //   description: node.type === 'group' ? 'Group' : node.data?.type || 'Item',
-    // });
-  }, [hiddenNodes, nodes, selectedForHiding, setNodes]);
-
-  const handleNodesChange = useCallback((changes) => {
-    const hasPositionChange = changes.some(change => 
-      change.type === 'position' && change.dragging === false
-    );
-    
-    if (hasPositionChange) {
-      isManualActionRef.current = true;
-      
-      // Save ke history sebelum perubahan
-      setNodes(currentNodes => {
-        pushState([...currentNodes]);
-        return currentNodes;
-      });
+  const getViewportCenter = useCallback(() => {
+    if (!reactFlowInstance.current || !reactFlowWrapper.current) {
+      return { x: 400, y: 300 };
     }
     
-    onNodesChange(changes);
-  }, [onNodesChange, pushState]);
-
-  const handleUndo = useCallback(() => {
-    const previousState = undo();
-    if (previousState) {
-      setNodes(previousState);
-      toast.info('Undo', { duration: 1000 });
-    }
-  }, [undo, setNodes]);
-
-  const handleRedo = useCallback(() => {
-    const nextState = redo();
-    if (nextState) {
-      setNodes(nextState);
-      toast.info('Redo', { duration: 1000 });
-    }
-  }, [redo, setNodes]);
-
-  const handleToggleAutoSave = useCallback(() => {
-    setIsAutoSaveEnabled(prev => {
-      const newValue = !prev;
-      return newValue;
-    });
-  }, []);
-
-  const onMouseDown = useCallback((event) => {
-    if (selectionMode !== 'rectangle') return;
-    
-    const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-    if (!bounds) return;
-
-    setIsSelecting(true);
-    setSelectionStart({
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
-    });
-    setSelectionEnd({
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
-    });
-  }, [selectionMode]);
-
-  const onMouseMove = useCallback((event) => {
-    if (!isSelecting || selectionMode !== 'rectangle') return;
-
-    const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-    if (!bounds) return;
-
-    setSelectionEnd({
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
-    });
-  }, [isSelecting, selectionMode]);
-
-  const onMouseUp = useCallback(() => {
-    if (!isSelecting || !selectionStart || !selectionEnd || !reactFlowInstance.current) {
-      setIsSelecting(false);
-      return;
-    }
-
     const viewport = reactFlowInstance.current.getViewport();
+    const bounds = reactFlowWrapper.current.getBoundingClientRect();
     
-    const minX = Math.min(selectionStart.x, selectionEnd.x);
-    const maxX = Math.max(selectionStart.x, selectionEnd.x);
-    const minY = Math.min(selectionStart.y, selectionEnd.y);
-    const maxY = Math.max(selectionStart.y, selectionEnd.y);
-
-    const flowMinX = (minX - viewport.x) / viewport.zoom;
-    const flowMaxX = (maxX - viewport.x) / viewport.zoom;
-    const flowMinY = (minY - viewport.y) / viewport.zoom;
-    const flowMaxY = (maxY - viewport.y) / viewport.zoom;
-
-    const selectedNodes = nodes.filter(node => {
-      if (node.type === 'group') {
-        const centerX = node.position.x + (node.data.width || 0) / 2;
-        const centerY = node.position.y + (node.data.height || 0) / 2;
-        return centerX >= flowMinX && centerX <= flowMaxX &&
-               centerY >= flowMinY && centerY <= flowMaxY;
-      }
-      
-      const nodeX = node.parentNode 
-        ? nodes.find(n => n.id === node.parentNode)?.position.x + node.position.x
-        : node.position.x;
-      const nodeY = node.parentNode
-        ? nodes.find(n => n.id === node.parentNode)?.position.y + node.position.y
-        : node.position.y;
-      
-      return nodeX >= flowMinX && nodeX <= flowMaxX &&
-             nodeY >= flowMinY && nodeY <= flowMaxY;
-    });
-
-    setSelectedForHiding(prev => {
-      const newSet = new Set(prev);
-      selectedNodes.forEach(node => newSet.add(node.id));
-      return newSet;
-    });
-
-    setIsSelecting(false);
-    setSelectionStart(null);
-    setSelectionEnd(null);
-  }, [isSelecting, selectionStart, selectionEnd, nodes]);
-
-  const onNodeClick = useCallback((event, node) => {
-    if (selectionMode === 'single') {
-      setSelectedForHiding(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(node.id)) {
-          newSet.delete(node.id);
-        } else {
-          newSet.add(node.id);
-        }
-        return newSet;
-      });
-    } else if (highlightMode) {
-      if (highlightedNodeId === node.id) {
-        clearHighlight();
-      } else {
-        highlightNode(node.id);
-
-        const deps = getDependencies(node.id);
-        const dependents = getDependents(node.id);
-      }
-    }
-  }, [selectionMode, highlightMode, highlightedNodeId, clearHighlight, highlightNode, getDependencies, getDependents]);
-
-  const onNodeDragStart = useCallback((event, node) => {
-    if (node.parentNode) {
-      setDraggedNode(node.id);
-    }
+    const centerX = (bounds.width / 2 - viewport.x) / viewport.zoom;
+    const centerY = (bounds.height / 2 - viewport.y) / viewport.zoom;
+    
+    return { x: centerX, y: centerY };
   }, []);
 
-  const onNodeDrag = useCallback((event, node) => {
-    if (!node.parentNode || !draggedNode) return;
-
-    const groupNode = nodesRef.current.find(n => n.id === node.parentNode);
-    const groupItems = nodesRef.current.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
-    
-    const dimensions = {
-      itemsPerRow: 3,
-      itemWidth: 180,
-      itemHeight: 120,
-      gap: 60,
-      padding: 40,
-    };
-
-    const relX = node.position.x - dimensions.padding;
-    const relY = node.position.y - dimensions.padding - 40;
-
-    const col = Math.max(0, Math.min(dimensions.itemsPerRow - 1, Math.round(relX / (dimensions.itemWidth + dimensions.gap))));
-    const row = Math.max(0, Math.round(relY / (dimensions.itemHeight + dimensions.gap)));
-    
-    const newIndex = row * dimensions.itemsPerRow + col;
-    
-    if (newIndex >= 0 && newIndex <= groupItems.length) {
-      setHoverPosition({
-        groupId: node.parentNode,
-        index: newIndex,
-        relativeX: dimensions.padding + col * (dimensions.itemWidth + dimensions.gap),
-        relativeY: dimensions.padding + 40 + row * (dimensions.itemHeight + dimensions.gap),
-        absoluteX: groupNode.position.x + dimensions.padding + col * (dimensions.itemWidth + dimensions.gap),
-        absoluteY: groupNode.position.y + dimensions.padding + 40 + row * (dimensions.itemHeight + dimensions.gap),
-      });
-    }
-  }, [draggedNode]);
-
-  const onNodeDragStop = useCallback(async (event, node) => {
-    if (!draggedNode || !hoverPosition || !node.parentNode) {
-      setDraggedNode(null);
-      setHoverPosition(null);
-      isReorderingRef.current = false;
-      return;
-    }
-
-    try {
-      await api.patch(`/cmdb/${node.id}/reorder`, {
-        new_order: hoverPosition.index
-      });
-
-      setNodes(prevNodes => {
-        const updatedNodes = prevNodes.map(n => {
-          if (n.id === draggedNode) {
-            return {
-              ...n,
-              position: {
-                x: hoverPosition.relativeX,
-                y: hoverPosition.relativeY
-              },
-              data: { 
-                ...n.data, 
-                orderInGroup: hoverPosition.index 
-              }
-            };
-          }
-          return n;
-        });
-        
-        nodesRef.current = updatedNodes;
-        return updatedNodes;
-      });
-
-      setTimeout(() => {
-        isReorderingRef.current = false;
-        fetchAll(); 
-      }, 500);
-
-    } catch (err) {
-      console.error('Failed to reorder:', err);
-      alert(`Gagal: ${err.response?.data?.error || err.message}`);
-      isReorderingRef.current = false;
-    } finally {
-      setDraggedNode(null);
-      setHoverPosition(null);
-    }
-  }, [draggedNode, hoverPosition, setNodes, fetchAll]);
-
-  const onReconnect = useCallback(async (oldEdge, newConnection) => {
-    const newEdgeHandles = {
-      ...edgeHandles,
-      [oldEdge.id]: {
-        sourceHandle: newConnection.sourceHandle,
-        targetHandle: newConnection.targetHandle,
-      }
-    };
-    
-    await saveEdgeHandle(
-      oldEdge.id,
-      newConnection.sourceHandle,
-      newConnection.targetHandle
-    );
-    
-    setEdgeHandles(newEdgeHandles);
-    setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
-  }, [edgeHandles, setEdges]);
-
-  const autoSavePositions = useCallback(async () => {
-    if (!isManualActionRef.current) return;
-    
-    setIsAutoSaving(true);
-    try {
-      const updatePromises = [];
-      
-      nodes.forEach((node) => {
-        if (node.type === 'custom' && !node.parentNode) {
-          updatePromises.push(
-            api.put(`/cmdb/${node.id}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-            })
-          );
-        }
-      });
-
-      nodes.forEach((node) => {
-        if (node.type === 'group') {
-          const groupId = node.id.replace('group-', '');
-          updatePromises.push(
-            api.put(`/groups/${groupId}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-            })
-          );
-        }
-      });
-
-      await Promise.all(updatePromises);
-      lastSavedNodesRef.current = JSON.stringify(nodes);
-      isManualActionRef.current = false;
-    } catch (err) {
-      console.error('Auto-save error:', err);
-    } finally {
-      setIsAutoSaving(false);
-    }
-  }, [nodes]);
-
-  useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
-
-  const handleSavePositions = async () => {
-    setIsSaving(true);
-    try {
-      const updatePromises = [];
-      
-      nodes.forEach((node) => {
-        if (node.type === 'custom' && !node.parentNode) {
-          updatePromises.push(
-            api.put(`/cmdb/${node.id}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-            })
-          );
-        }
-      });
-
-      nodes.forEach((node) => {
-        if (node.type === 'group') {
-          const groupId = node.id.replace('group-', '');
-          updatePromises.push(
-            api.put(`/groups/${groupId}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-            })
-          );
-        }
-      });
-
-      await Promise.all(updatePromises);
-      lastSavedNodesRef.current = JSON.stringify(nodes);
-      toast.success('Posisi berhasil disimpan!');
-    } catch (err) {
-      toast.error('Gagal menyimpan posisi', {
-        description: err.response?.data?.error || err.message,
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-    // Ignore jika sedang mengetik di input/textarea
-    const target = event.target;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      // Escape untuk clear highlight
-      if (event.key === 'Escape') {
-        if (highlightMode && highlightedNodeId) {
-          clearHighlight();
-        }
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        if (canUndo) {
-          handleUndo();
-        }
-      }
-      
-      if (
-        ((event.ctrlKey || event.metaKey) && event.key === 'y') ||
-        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')
-      ) {
-        event.preventDefault();
-        if (canRedo) {
-          handleRedo();
-        }
-      }
-      
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault();
-        handleSavePositions();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [canUndo, canRedo, handleUndo, handleRedo, handleSavePositions, highlightMode, highlightedNodeId, clearHighlight]);
-
-  const selectionRect = isSelecting && selectionStart && selectionEnd ? {
-    left: Math.min(selectionStart.x, selectionEnd.x),
-    top: Math.min(selectionStart.y, selectionEnd.y),
-    width: Math.abs(selectionEnd.x - selectionStart.x),
-    height: Math.abs(selectionEnd.y - selectionStart.y),
-  } : null;
-
-  const exportVisualization = async ({ format, scope, background }) => {
+    const exportVisualization = async ({ format, scope, background }) => {
     const reactFlowContainer = document.querySelector('.react-flow');
     if (!reactFlowContainer) {
       toast.error('Tidak dapat menemukan visualisasi untuk diekspor.');
@@ -1115,13 +316,735 @@ export default function CMDBVisualization() {
     }
   };
 
+  const processedNodes = useMemo(() => {
+    return nodes.map(node => {
+      let opacity = 1;
+      let outline = 'none';
+      let zIndex = node.style?.zIndex || 1;
+
+      if (selectedForHiding.has(node.id)) {
+        outline = '3px solid #3b82f6';
+      }
+
+      if (highlightMode && highlightedNodeId) {
+        if (node.id === highlightedNodeId) {
+          opacity = 1;
+          zIndex = 100;
+        } else if (relatedNodes && relatedNodes.has(node.id)) {
+          opacity = 1;
+          zIndex = 50;
+        } else {
+          opacity = 0.08;
+          zIndex = 1;
+        }
+      }
+
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity,
+          outline,
+          outlineOffset: '2px',
+          zIndex,
+          transition: 'opacity 0.3s ease, outline 0.3s ease',
+        }
+      };
+    });
+  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes]);
+
+  const processedEdges = useMemo(() => {
+    return edges.map(edge => {
+      let opacity = edge.style?.opacity || 1;
+      let strokeWidth = edge.style?.strokeWidth || 2;
+      let zIndex = edge.zIndex || 10;
+
+      if (highlightMode && highlightedNodeId) {
+        if (relatedEdges && relatedEdges.has(edge.id)) {
+          opacity = 1;
+          strokeWidth = 3;
+          zIndex = 60;
+        } else {
+          opacity = 0.1;
+          zIndex = 1;
+        }
+      }
+
+      return {
+        ...edge,
+        style: {
+          ...edge.style,
+          opacity,
+          strokeWidth,
+          transition: 'opacity 0.3s ease, stroke-width 0.3s ease',
+        },
+        zIndex,
+      };
+    });
+  }, [edges, highlightMode, highlightedNodeId, relatedEdges]);
+
+  const selectionRect = useMemo(() => {
+    if (!isSelecting || !selectionStart || !selectionEnd) return null;
+    
+    return {
+      left: Math.min(selectionStart.x, selectionEnd.x),
+      top: Math.min(selectionStart.y, selectionEnd.y),
+      width: Math.abs(selectionEnd.x - selectionStart.x),
+      height: Math.abs(selectionEnd.y - selectionStart.y),
+    };
+  }, [isSelecting, selectionStart, selectionEnd]);
+
+  useEffect(() => {
+    localStorage.setItem('cmdb-autosave-enabled', JSON.stringify(isAutoSaveEnabled));
+  }, [isAutoSaveEnabled]);
+
+  useEffect(() => {
+    const loadHandles = async () => {
+      const handles = await loadEdgeHandles();
+      setEdgeHandles(handles);
+    };
+    loadHandles();
+  }, []);
+
+  useEffect(() => {
+    const { flowNodes, flowEdges } = transformToFlowData();
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  }, [transformToFlowData, setNodes, setEdges]);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  useEffect(() => {
+    const socket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+    
+    socketRef.current = socket;
+
+    socket.on('cmdb_update', fetchAll);
+
+    return () => {
+      socket.off('cmdb_update');
+      socket.disconnect();
+    };
+  }, [fetchAll]);
+
+  const handleOpenAddItem = useCallback(() => {
+    setItemFormData(INITIAL_ITEM_FORM);
+    setEditItemMode(false);
+    setCurrentItemId(null);
+    resetImages();
+    setShowItemModal(true);
+  }, [resetImages]);
+
+  const handleEditItem = useCallback((item) => {
+    setItemFormData({
+      name: item.name || '',
+      type: item.type || '',
+      description: item.description || '',
+      status: item.status || 'active',
+      ip: item.ip || '',
+      category: item.category || 'internal',
+      location: item.location || '',
+      group_id: item.group_id || null,
+      env_type: item.env_type || 'fisik',
+    });
+    setCurrentItemId(item.id);
+    setEditItemMode(true);
+    setImages(item.images);
+    setShowItemModal(true);
+  }, [setImages]);
+
+  const handleItemSubmit = useCallback(async (e) => {
+    e.preventDefault();
+
+    const initialPosition = !itemFormData.group_id ? getViewportCenter() : null;
+    const formDataToSend = new FormData();
+    
+    Object.keys(itemFormData).forEach(key => {
+      if (itemFormData[key] !== null) {
+        formDataToSend.append(key, itemFormData[key]);
+      }
+    });
+
+    if (initialPosition && !editItemMode) {
+      formDataToSend.append('position', JSON.stringify(initialPosition));
+    }
+
+    if (editItemMode) {
+      formDataToSend.append('existingImages', JSON.stringify(existingImages));
+    }
+
+    selectedFiles.forEach(file => {
+      formDataToSend.append('images', file);
+    });
+
+    try {
+      if (editItemMode) {
+        await api.put(`/cmdb/${currentItemId}`, formDataToSend, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        await api.post('/cmdb', formDataToSend, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+      
+      setShowItemModal(false);
+      
+      setTimeout(() => {
+        setItemFormData(INITIAL_ITEM_FORM);
+        setEditItemMode(false);
+        setCurrentItemId(null);
+        resetImages();
+      }, 100);
+      
+      await fetchAll();
+    } catch (err) {
+      console.error(err);
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  }, [itemFormData, getViewportCenter, editItemMode, existingImages, selectedFiles, currentItemId, resetImages, fetchAll]);
+
+  const handleOpenManageGroups = useCallback(() => {
+    setGroupFormData(INITIAL_GROUP_FORM);
+    setEditGroupMode(false);
+    setCurrentGroupId(null);
+    setShowGroupModal(true);
+  }, []);
+
+  const handleEditGroup = useCallback((group) => {
+    setGroupFormData({
+      name: group.name || '',
+      description: group.description || '',
+      color: group.color || '#e0e7ff'
+    });
+    setCurrentGroupId(group.id);
+    setEditGroupMode(true);
+    setShowGroupModal(true);
+  }, []);
+
+  const handleGroupSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    try {
+      if (editGroupMode) {
+        await api.put(`/groups/${currentGroupId}`, groupFormData);
+      } else {
+        const initialPosition = getViewportCenter();
+        await api.post('/groups', {
+          ...groupFormData,
+          position: initialPosition
+        });
+      }
+      await fetchAll();
+      setShowGroupModal(false);
+      setGroupFormData(INITIAL_GROUP_FORM);
+      setEditGroupMode(false);
+    } catch (err) {
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  }, [editGroupMode, currentGroupId, groupFormData, getViewportCenter, fetchAll]);
+
+  const handleDeleteGroup = async (id) => {
+    try {
+      await api.delete(`/groups/${id}`);
+      await fetchAll();
+    } catch (err) {
+      alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleOpenConnectionModal = useCallback((item) => {
+    setSelectedItemForConnection(item);
+    
+    const existingItemConns = connections
+      .filter(conn => conn.source_id === item.id && conn.target_id)
+      .map(conn => conn.target_id);
+    
+    const existingGroupConns = connections
+      .filter(conn => conn.source_id === item.id && conn.target_group_id)
+      .map(conn => conn.target_group_id);
+    
+    setSelectedConnections(existingItemConns);
+    setSelectedGroupConnections(existingGroupConns);
+    setShowConnectionModal(true);
+  }, [connections]);
+
+  const handleSaveConnections = useCallback(async () => {
+    if (!selectedItemForConnection) return;
+    
+    try {
+      const currentItemConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
+        .map(conn => conn.target_id);
+
+      const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
+      const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
+
+      for (const targetId of itemsToAdd) {
+        await api.post('/cmdb/connections', {
+          source_id: selectedItemForConnection.id,
+          target_id: targetId
+        });
+      }
+
+      for (const targetId of itemsToRemove) {
+        await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${targetId}`);
+      }
+
+      const currentGroupConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id)
+        .map(conn => conn.target_group_id);
+
+      const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
+      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
+
+      for (const groupId of groupsToAdd) {
+        await api.post('/cmdb/connections/to-group', {
+          source_id: selectedItemForConnection.id,
+          target_group_id: groupId
+        });
+      }
+
+      for (const groupId of groupsToRemove) {
+        await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
+      }
+
+      await fetchAll();
+      setShowConnectionModal(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  }, [connections, selectedItemForConnection, selectedConnections, selectedGroupConnections, fetchAll]);
+
+  const handleToggleConnection = (targetId) => {
+    setSelectedConnections(prev => 
+      prev.includes(targetId) 
+        ? prev.filter(id => id !== targetId)
+        : [...prev, targetId]
+    );
+  };
+
+  const handleToggleGroupConnection = (groupId) => {
+    setSelectedGroupConnections(prev => 
+      prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
+  const handleOpenGroupConnectionModal = (group) => {
+    setSelectedGroupForConnection(group);
+    
+    const existingConns = groupConnections
+      .filter(conn => conn.source_id === group.id)
+      .map(conn => conn.target_id);
+    
+    setSelectedGroupToGroupConnections(existingConns);
+    setShowGroupConnectionModal(true);
+  };
+
+  const handleToggleGroupToGroupConnection = (targetGroupId) => {
+    setSelectedGroupToGroupConnections(prev =>
+      prev.includes(targetGroupId)
+        ? prev.filter(id => id !== targetGroupId)
+        : [...prev, targetGroupId]
+    );
+  };
+
+  const handleSaveGroupConnections = async () => {
+    try {
+      const currentConns = groupConnections
+        .filter(conn => conn.source_id === selectedGroupForConnection.id)
+        .map(conn => conn.target_id);
+
+      const toAdd = selectedGroupToGroupConnections.filter(id => !currentConns.includes(id));
+      const toRemove = currentConns.filter(id => !selectedGroupToGroupConnections.includes(id));
+
+      for (const targetId of toAdd) {
+        await api.post('/groups/connections', {
+          source_id: selectedGroupForConnection.id,
+          target_id: targetId
+        });
+      }
+
+      for (const targetId of toRemove) {
+        await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
+      }
+
+      await fetchAll();
+      setShowGroupConnectionModal(false);
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const toggleNodeVisibility = useCallback((nodeId) => {
+    setHiddenNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const showOnlySelected = useCallback(() => {
+    if (selectedForHiding.size > 0) {
+      const allNodeIds = new Set([
+        ...nodes.map(n => n.id),
+        ...groups.map(g => `group-${g.id}`)
+      ]);
+      
+      const nodesToHide = new Set(
+        [...allNodeIds].filter(id => !selectedForHiding.has(id))
+      );
+      
+      setHiddenNodes(nodesToHide);
+      setSelectedForHiding(new Set());
+    }
+  }, [selectedForHiding, nodes, groups]);
+
+  const showAllNodes = useCallback(() => {
+    setHiddenNodes(new Set());
+    setSelectedForHiding(new Set());
+  }, []);
+
+  const onNodeDragStart = useCallback((event, node) => {
+    if (node.parentNode) {
+      setDraggedNode(node.id);
+      dragStateRef.current = { isDragging: true, startTime: Date.now() };
+    }
+  }, []);
+
+  const onNodeDrag = useCallback((event, node) => {
+    if (!node.parentNode || !draggedNode) return;
+
+    const currentNodes = nodesRef.current;
+    const groupNode = currentNodes.find(n => n.id === node.parentNode);
+    if (!groupNode) return;
+
+    const { itemsPerRow, itemWidth, itemHeight, gap, padding } = DIMENSIONS;
+    const relX = node.position.x - padding;
+    const relY = node.position.y - padding - 40;
+
+    const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gap))));
+    const row = Math.max(0, Math.round(relY / (itemHeight + gap)));
+    
+    const newIndex = row * itemsPerRow + col;
+    
+    if (newIndex >= 0 && newIndex <= currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode).length) {
+      setHoverPosition({
+        groupId: node.parentNode,
+        index: newIndex,
+        relativeX: padding + col * (itemWidth + gap),
+        relativeY: padding + 40 + row * (itemHeight + gap),
+        absoluteX: groupNode.position.x + padding + col * (itemWidth + gap),
+        absoluteY: groupNode.position.y + padding + 40 + row * (itemHeight + gap),
+      });
+    }
+  }, [draggedNode]);
+
+  const onNodeDragStop = useCallback(async (event, node) => {
+    const dragDuration = Date.now() - dragStateRef.current.startTime;
+    dragStateRef.current = { isDragging: false, startTime: 0 };
+
+    if (dragDuration < 100) {
+      setDraggedNode(null);
+      setHoverPosition(null);
+      return;
+    }
+
+    if (!draggedNode || !hoverPosition || !node.parentNode) {
+      setDraggedNode(null);
+      setHoverPosition(null);
+      isReorderingRef.current = false;
+      return;
+    }
+
+    try {
+      await api.patch(`/cmdb/${node.id}/reorder`, {
+        new_order: hoverPosition.index
+      });
+
+      setNodes(prevNodes => {
+        const updatedNodes = prevNodes.map(n => {
+          if (n.id === draggedNode) {
+            return {
+              ...n,
+              position: {
+                x: hoverPosition.relativeX,
+                y: hoverPosition.relativeY
+              },
+              data: { 
+                ...n.data, 
+                orderInGroup: hoverPosition.index 
+              }
+            };
+          }
+          return n;
+        });
+        
+        nodesRef.current = updatedNodes;
+        return updatedNodes;
+      });
+
+      setTimeout(() => {
+        isReorderingRef.current = false;
+        fetchAll();
+      }, 500);
+
+    } catch (err) {
+      console.error('Failed to reorder:', err);
+      toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
+      isReorderingRef.current = false;
+    } finally {
+      setDraggedNode(null);
+      setHoverPosition(null);
+    }
+  }, [draggedNode, hoverPosition, setNodes, fetchAll]);
+
+  const onMouseDown = useCallback((event) => {
+    if (selectionMode !== 'rectangle') return;
+    
+    const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+    if (!bounds) return;
+
+    setIsSelecting(true);
+    setSelectionStart({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+    setSelectionEnd({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+  }, [selectionMode]);
+
+  const onMouseMove = useCallback((event) => {
+    if (!isSelecting || selectionMode !== 'rectangle') return;
+
+    const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+    if (!bounds) return;
+
+    setSelectionEnd({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
+  }, [isSelecting, selectionMode]);
+
+  const onMouseUp = useCallback(() => {
+    if (!isSelecting || !selectionStart || !selectionEnd || !reactFlowInstance.current) {
+      setIsSelecting(false);
+      return;
+    }
+
+    const viewport = reactFlowInstance.current.getViewport();
+    const minX = Math.min(selectionStart.x, selectionEnd.x);
+    const maxX = Math.max(selectionStart.x, selectionEnd.x);
+    const minY = Math.min(selectionStart.y, selectionEnd.y);
+    const maxY = Math.max(selectionStart.y, selectionEnd.y);
+
+    const flowMinX = (minX - viewport.x) / viewport.zoom;
+    const flowMaxX = (maxX - viewport.x) / viewport.zoom;
+    const flowMinY = (minY - viewport.y) / viewport.zoom;
+    const flowMaxY = (maxY - viewport.y) / viewport.zoom;
+
+    const selectedNodes = nodes.filter(node => {
+      if (node.type === 'group') {
+        const centerX = node.position.x + (node.data.width || 0) / 2;
+        const centerY = node.position.y + (node.data.height || 0) / 2;
+        return centerX >= flowMinX && centerX <= flowMaxX &&
+               centerY >= flowMinY && centerY <= flowMaxY;
+      }
+      
+      const nodeX = node.parentNode 
+        ? nodes.find(n => n.id === node.parentNode)?.position.x + node.position.x
+        : node.position.x;
+      const nodeY = node.parentNode
+        ? nodes.find(n => n.id === node.parentNode)?.position.y + node.position.y
+        : node.position.y;
+      
+      return nodeX >= flowMinX && nodeX <= flowMaxX &&
+             nodeY >= flowMinY && nodeY <= flowMaxY;
+    });
+
+    setSelectedForHiding(prev => {
+      const newSet = new Set(prev);
+      selectedNodes.forEach(node => newSet.add(node.id));
+      return newSet;
+    });
+
+    setIsSelecting(false);
+    setSelectionStart(null);
+    setSelectionEnd(null);
+  }, [isSelecting, selectionStart, selectionEnd, nodes]);
+
+  const handleNodesChange = useCallback((changes) => {
+    const hasPositionChange = changes.some(change => 
+      change.type === 'position' && change.dragging === false
+    );
+    
+    if (hasPositionChange) {
+      isManualActionRef.current = true;
+      pushState([...nodes]);
+    }
+    
+    onNodesChange(changes);
+  }, [onNodesChange, pushState, nodes]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (event.key === 'Escape' && highlightMode && highlightedNodeId) {
+        clearHighlight();
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        if (canUndo) {
+          const previousState = undo();
+          if (previousState) {
+            setNodes(previousState);
+            toast.info('Undo', { duration: 1000 });
+          }
+        }
+      }
+      
+      if (((event.ctrlKey || event.metaKey) && event.key === 'y') ||
+          ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')) {
+        event.preventDefault();
+        if (canRedo) {
+          const nextState = redo();
+          if (nextState) {
+            setNodes(nextState);
+            toast.info('Redo', { duration: 1000 });
+          }
+        }
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        handleSavePositions();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [canUndo, canRedo, undo, redo, setNodes, highlightMode, highlightedNodeId, clearHighlight]);
+
+  const autoSavePositions = useCallback(async () => {
+    if (!isManualActionRef.current) return;
+    
+    setIsAutoSaving(true);
+    try {
+      const updatePromises = [];
+      
+      nodes.forEach((node) => {
+        if (node.type === 'custom' && !node.parentNode) {
+          updatePromises.push(
+            api.put(`/cmdb/${node.id}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
+        } else if (node.type === 'group') {
+          const groupId = node.id.replace('group-', '');
+          updatePromises.push(
+            api.put(`/groups/${groupId}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
+        }
+      });
+
+      await Promise.all(updatePromises);
+      lastSavedNodesRef.current = JSON.stringify(nodes);
+      isManualActionRef.current = false;
+    } catch (err) {
+      console.error('Auto-save error:', err);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [nodes]);
+
+  useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
+
+  const handleSavePositions = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      const updatePromises = nodes.map(node => {
+        if (node.type === 'custom' && !node.parentNode) {
+          return api.put(`/cmdb/${node.id}/position`, {
+            position: { x: node.position.x, y: node.position.y },
+          });
+        } else if (node.type === 'group') {
+          const groupId = node.id.replace('group-', '');
+          return api.put(`/groups/${groupId}/position`, {
+            position: { x: node.position.x, y: node.position.y },
+          });
+        }
+        return Promise.resolve();
+      });
+
+      await Promise.all(updatePromises);
+      lastSavedNodesRef.current = JSON.stringify(nodes);
+      toast.success('Posisi berhasil disimpan!');
+    } catch (err) {
+      toast.error('Gagal menyimpan posisi', {
+        description: err.response?.data?.error || err.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [nodes]);
+
+  const handleContextEdit = useCallback(() => {
+    const editData = handleEditFromVisualization(contextMenu.node);
+    if (editData.type === 'group') {
+      handleEditGroup(editData.data);
+    } else {
+      handleEditItem(editData.data);
+    }
+  }, [contextMenu.node, handleEditFromVisualization, handleEditGroup, handleEditItem]);
+
+  const handleContextDelete = useCallback(async () => {
+    await handleDeleteFromVisualization(contextMenu.node);
+  }, [contextMenu.node, handleDeleteFromVisualization]);
+
+  const handleContextManageConnections = useCallback(() => {
+    const item = handleManageConnectionsFromVisualization(contextMenu.node);
+    if (item) {
+      handleOpenConnectionModal(item);
+    }
+  }, [contextMenu.node, handleManageConnectionsFromVisualization, handleOpenConnectionModal]);
+
+  const handleContextToggleVisibility = useCallback(() => {
+    toggleNodeVisibility(contextMenu.node.id);
+  }, [contextMenu.node, toggleNodeVisibility]);
+
   return (
     <div className="w-full h-screen flex flex-col">
       <VisualizationNavbar
         draggedNode={draggedNode}
         selectionMode={selectionMode}
-        highlightMode={highlightMode} 
-        highlightedNodeId={highlightedNodeId} 
+        highlightMode={highlightMode}
+        highlightedNodeId={highlightedNodeId}
         selectedForHiding={selectedForHiding}
         hiddenNodes={hiddenNodes}
         isSaving={isSaving}
@@ -1129,14 +1052,84 @@ export default function CMDBVisualization() {
         isAutoSaveEnabled={isAutoSaveEnabled}
         canUndo={canUndo}
         canRedo={canRedo}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onToggleAutoSave={handleToggleAutoSave}
-        onSetHighlightMode={setHighlightMode} 
-        onClearHighlight={clearHighlight} 
+        onUndo={() => {
+          const previousState = undo();
+          if (previousState) {
+            setNodes(previousState);
+            toast.info('Undo', { duration: 1000 });
+          }
+        }}
+        onRedo={() => {
+          const nextState = redo();
+          if (nextState) {
+            setNodes(nextState);
+            toast.info('Redo', { duration: 1000 });
+          }
+        }}
+        onToggleAutoSave={() => setIsAutoSaveEnabled(prev => !prev)}
+        onSetHighlightMode={setHighlightMode}
+        onClearHighlight={clearHighlight}
         showVisibilityPanel={showVisibilityPanel}
         nodes={nodes}
-        onNodeSearch={handleNodeSearch}
+        onNodeSearch={useCallback((node) => {
+          if (!reactFlowInstance.current) return;
+
+          if (hiddenNodes.has(node.id)) {
+            setHiddenNodes(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(node.id);
+              return newSet;
+            });
+          }
+
+          let targetX = node.position.x;
+          let targetY = node.position.y;
+
+          if (node.parentNode) {
+            const parentNode = nodes.find(n => n.id === node.parentNode);
+            if (parentNode) {
+              targetX += parentNode.position.x;
+              targetY += parentNode.position.y;
+            }
+          }
+
+          if (node.type === 'group') {
+            targetX += (node.data.width || 0) / 2;
+            targetY += (node.data.height || 0) / 2;
+          } else {
+            targetX += 90;
+            targetY += 60;
+          }
+
+          reactFlowInstance.current.setCenter(targetX, targetY, {
+            zoom: 1.5,
+            duration: 800,
+          });
+
+          setNodes(prevNodes => 
+            prevNodes.map(n => ({
+              ...n,
+              style: {
+                ...n.style,
+                outline: n.id === node.id ? '3px solid #3b82f6' : 'none',
+                outlineOffset: '2px',
+                transition: 'outline 0.3s ease',
+              }
+            }))
+          );
+
+          setTimeout(() => {
+            setNodes(prevNodes =>
+              prevNodes.map(n => ({
+                ...n,
+                style: {
+                  ...n.style,
+                  outline: selectedForHiding.has(n.id) ? '3px solid #3b82f6' : 'none',
+                }
+              }))
+            );
+          }, 3000);
+        }, [hiddenNodes, nodes, selectedForHiding, setNodes])}
         reactFlowInstance={reactFlowInstance}
         onSetSelectionMode={setSelectionMode}
         onShowOnlySelected={showOnlySelected}
@@ -1148,7 +1141,9 @@ export default function CMDBVisualization() {
         onOpenExportModal={() => setShowExportModal(true)}
       />
 
+      {/* Rest of your JSX remains mostly the same, but uses processedNodes and processedEdges */}
       <div className="flex-1 relative flex overflow-y-auto">
+        {/* Visibility Panel */}
         {showVisibilityPanel && (
           <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto shadow-lg">
             <div className="p-4 border-b border-gray-200 bg-gray-50">
@@ -1158,6 +1153,7 @@ export default function CMDBVisualization() {
               </p>
             </div>
             <div className="p-4 space-y-4">
+              {/* Groups section */}
               {groups.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -1186,6 +1182,7 @@ export default function CMDBVisualization() {
                 </div>
               )}
 
+              {/* Ungrouped items section */}
               {items.filter(i => !i.group_id).length > 0 && (
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -1214,6 +1211,7 @@ export default function CMDBVisualization() {
                 </div>
               )}
 
+              {/* Group items sections */}
               {groups.map(group => {
                 const groupItems = items.filter(i => i.group_id === group.id);
                 if (groupItems.length === 0) return null;
@@ -1259,6 +1257,7 @@ export default function CMDBVisualization() {
           </div>
         )}
 
+        {/* Main Visualization Area */}
         <div 
           ref={reactFlowWrapper}
           className="flex-1 relative"
@@ -1267,83 +1266,58 @@ export default function CMDBVisualization() {
           onMouseUp={onMouseUp}
         >
           <ReactFlow
-            nodes={nodes.map(node => {
-              let opacity = 1;
-              let outline = 'none';
-              let zIndex = node.style?.zIndex || 1;
-
-              if (selectedForHiding.has(node.id)) {
-                outline = '3px solid #3b82f6';
-              }
-
-              if (highlightMode && highlightedNodeId) {
-                if (node.id === highlightedNodeId) {
-                  opacity = 1;
-                  // outline = '2px solid #ff4d00ff';
-                  zIndex = 100;
-                } else if (relatedNodes && relatedNodes.has(node.id)) {
-                  opacity = 1;
-                  zIndex = 50;
-                } else {
-                  opacity = 0.08;
-                  zIndex = 1;
-                }
-              }
-
-              return {
-                ...node,
-                style: {
-                  ...node.style,
-                  opacity,
-                  outline,
-                  outlineOffset: '2px',
-                  zIndex,
-                  transition: 'opacity 0.3s ease, outline 0.3s ease',
-                }
-              };
-            })}
-            edges={edges.map(edge => {
-              let opacity = edge.style?.opacity || 1;
-              let strokeWidth = edge.style?.strokeWidth || 2;
-              let zIndex = edge.zIndex || 10;
-
-              if (highlightMode && highlightedNodeId) {
-                if (relatedEdges && relatedEdges.has(edge.id)) {
-                  opacity = 1;
-                  strokeWidth = 3;
-                  zIndex = 60;
-                } else {
-                  opacity = 0.1;
-                  zIndex = 1;
-                }
-              }
-
-              return {
-                ...edge,
-                style: {
-                  ...edge.style,
-                  opacity,
-                  strokeWidth,
-                  transition: 'opacity 0.3s ease, stroke-width 0.3s ease',
-                },
-                zIndex,
-              };
-            })}
+            nodes={processedNodes}
+            edges={processedEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
+            onNodeClick={useCallback((event, node) => {
+              if (selectionMode === 'single') {
+                setSelectedForHiding(prev => {
+                  const newSet = new Set(prev);
+                  if (newSet.has(node.id)) {
+                    newSet.delete(node.id);
+                  } else {
+                    newSet.add(node.id);
+                  }
+                  return newSet;
+                });
+              } else if (highlightMode) {
+                if (highlightedNodeId === node.id) {
+                  clearHighlight();
+                } else {
+                  highlightNode(node.id);
+                }
+              }
+            }, [selectionMode, highlightMode, highlightedNodeId, clearHighlight, highlightNode])}
             onNodeContextMenu={handleNodeContextMenu}
             onNodeDragStart={onNodeDragStart}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
-            onReconnect={onReconnect}
+            onReconnect={useCallback(async (oldEdge, newConnection) => {
+              const newEdgeHandles = {
+                ...edgeHandles,
+                [oldEdge.id]: {
+                  sourceHandle: newConnection.sourceHandle,
+                  targetHandle: newConnection.targetHandle,
+                }
+              };
+              
+              await saveEdgeHandle(
+                oldEdge.id,
+                newConnection.sourceHandle,
+                newConnection.targetHandle
+              );
+              
+              setEdgeHandles(newEdgeHandles);
+              setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+            }, [edgeHandles, setEdges])}
             nodeTypes={nodeTypes}
             nodesDraggable={true}
             nodesConnectable={false}
             elementsSelectable={true}
             connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
             connectionLineType="smoothstep"
-            onInit={(instance) => { reactFlowInstance.current = instance;}}
+            onInit={(instance) => { reactFlowInstance.current = instance; }}
             fitView
             panOnDrag={selectionMode === 'freeroam' || selectionMode !== 'rectangle'}
             onPaneClick={() => {
@@ -1353,9 +1327,10 @@ export default function CMDBVisualization() {
             }}
           >
             <Background />
-            <Controls/>
+            <Controls />
           </ReactFlow>
 
+          {/* Context Menu */}
           <NodeContextMenu
             show={contextMenu.show}
             position={contextMenu.position}
@@ -1368,6 +1343,7 @@ export default function CMDBVisualization() {
             onClose={closeContextMenu}
           />
 
+          {/* Selection Rectangle */}
           {selectionRect && (
             <div
               style={{
@@ -1384,6 +1360,7 @@ export default function CMDBVisualization() {
             />
           )}
 
+          {/* Drag Hover Indicator */}
           {hoverPosition && draggedNode && (
             <div
               style={{
@@ -1418,6 +1395,7 @@ export default function CMDBVisualization() {
             </div>
           )}
 
+          {/* Selection Mode Indicators */}
           {selectionMode === 'rectangle' && !isSelecting && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] px-4 text-white py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
               <FaSquare />
@@ -1426,14 +1404,15 @@ export default function CMDBVisualization() {
           )}
  
           {selectionMode === 'single' && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
-            <FaMousePointer />
-            <span>Click nodes to select/deselect</span>
-          </div>
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
+              <FaMousePointer />
+              <span>Click nodes to select/deselect</span>
+            </div>
           )}
         </div>
       </div>
 
+      {/* Modals - Keep existing implementation */}
       <ItemFormModal
         show={showItemModal}
         editMode={editItemMode}
@@ -1532,6 +1511,7 @@ export default function CMDBVisualization() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Highlight Mode Indicators */}
       {highlightMode && !highlightedNodeId && (
         <div className="absolute top-28 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
           <FaProjectDiagram />
