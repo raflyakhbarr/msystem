@@ -147,7 +147,9 @@ const Endpoint = () => {
       label: 'Actions',
       render: (item: MenuItem) => (
         <ActionsCell item={item} onEdit={handleEditMenu} onViewDetails={handleViewDetails} />
-      )
+      ),
+      searchable:false,
+      sortable:false
     }
   ];
 

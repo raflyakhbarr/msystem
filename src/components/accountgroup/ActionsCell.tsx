@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PencilIcon, ListBulletIcon, PuzzlePieceIcon } from '@heroicons/react/24/outline';
+import {Edit, MonitorCog, SlidersVertical} from 'lucide-react'
 import type { AccGroupItem } from '@/api/accgroupApi';
 
 interface ActionsCellProps {
@@ -26,19 +26,19 @@ const ActionsCell: React.FC<ActionsCellProps> = ({ item, onEdit }) => {
         className="text-primary hover:text-primary/80"
         onClick={() => onEdit(item)}
       >
-        <PencilIcon className="h-4 w-4" />
+        <Edit className="h-4 w-4" />
       </button>
       <button
         className="hover:text-purple-800 dark:hover:text-purple-300 text-purple-600 dark:text-purple-400 px-2"
         onClick={() => handleShowSettingmenu(item)}
       >
-        <ListBulletIcon className="h-4 w-4" />
+        <MonitorCog className="h-4 w-4" />
       </button>
       <button
         className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
         onClick={() => handleShowSettingFeature(item)}
       >
-        <PuzzlePieceIcon className="h-4 w-4"/>
+        <SlidersVertical className="h-4 w-4"/>
       </button>
     </div>
   );

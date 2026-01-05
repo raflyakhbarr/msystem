@@ -1,5 +1,5 @@
 import React from 'react';
-import { PencilIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import {Edit, RefreshCcw} from 'lucide-react'
 import type { AccountItem } from '@/api/accountApi';
 
 interface ActionsCellProps {
@@ -25,14 +25,14 @@ const ActionsCell: React.FC<ActionsCellProps> = ({ item, onEdit, onResetMac }) =
         onClick={() => onEdit(item)}
         title="Edit Account"
       >
-        <PencilIcon className="h-4 w-4" />
+        <Edit className="h-4 w-4" />
       </button>
       <button
         className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
         onClick={handleResetMac}
         title="Reset MAC Address"
       >
-        <ArrowPathIcon className="h-4 w-4" />
+        <RefreshCcw className="h-4 w-4" />
       </button>
     </div>
   );

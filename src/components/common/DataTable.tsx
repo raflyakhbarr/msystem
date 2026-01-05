@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { WorkBook } from 'xlsx';
-import { ArrowDownTrayIcon, ArrowPathIcon, PlusIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
-import { Disc } from "lucide-react";
+import { Download, RefreshCw, Plus, CheckCircle, XCircle, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import {
   Table,
   TableHeader,
@@ -353,49 +354,53 @@ const DataTable = ({
       {/* Header Section - Shrinks/Grows as needed but doesn't scroll */}
       <div className="shrink-0">
         <h2 className="text-xl font-bold text-foreground mb-4">{title || 'Data'} ({data.length} Total)</h2>
-        <div className="flex items-center space-x-4">
-          {actionButtons && actionButtons.length > 0 && actionButtons.map((btn, index) => (
-            <button
-              key={index}
-              className={`px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
-                btn.className || 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
-              }`}
-              onClick={btn.onClick}
-            >
-              {btn.icon}
-              {btn.label}
-            </button>
-          ))}
-          {showAddButton && onAdd && (
-            <button
-              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors"
-              onClick={onAdd}
-            >
-              <PlusIcon className='h-5 w-5 text-blue-600'/>
-            </button>
-          )}
-          {showExportButton && (
-            <button
-              type="button"
-              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                exportToExcel();
-              }}
-            >
-              <ArrowDownTrayIcon className='h-5 w-5 text-foreground'/>
-            </button>
-          )}
-          {showRefreshButton && onRefresh && (
-            <button
-              className={`bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              <ArrowPathIcon className={`h-5 w-5 text-foreground ${refreshing ? 'animate-spin' : ''}`}/>
-            </button>
-          )}
+        <div className="flex items-center gap-4">
+          <ButtonGroup>
+            {actionButtons && actionButtons.length > 0 && actionButtons.map((btn, index) => (
+              <Button
+                key={index}
+                variant="secondary"
+                size="default"
+                onClick={btn.onClick}
+                className={btn.className}
+              >
+                {btn.icon}
+                {btn.label}
+              </Button>
+            ))}
+            {showAddButton && onAdd && (
+              <Button variant="secondary" size="default" onClick={onAdd} className='bg-primary text-background'>
+                Add
+                <Plus className="h-5 w-5" />
+              </Button>
+            )}
+          </ButtonGroup>
+          <ButtonGroup>
+            {showExportButton && (
+              <Button
+                variant="outline"
+                size="default"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  exportToExcel();
+                }}
+              >
+                <Download className="h-5 w-5" />
+              </Button>
+            )}
+            <ButtonGroupSeparator />
+            {showRefreshButton && onRefresh && (
+              <Button
+                variant="outline"
+                size="default"
+                onClick={onRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
+          </ButtonGroup>
         </div>
       </div>
       <div className="flex-1 min-h-0 bg-card rounded-xl shadow-lg flex flex-col overflow-hidden border border-border/50">
@@ -415,11 +420,13 @@ const DataTable = ({
                           onClick={() => column.sortable !== false && handleSortClick(column.key)}
                         >
                           {column.label}
-                          {sortOrder === column.key && (
-                            <span className="ml-1 text-primary">
-                              {sortDirection === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
+                          <span className="ml-1 text-muted-foreground">
+                            {sortOrder === column.key ? (
+                              sortDirection === 'asc' ? <MoveUp className="h-3 w-3 text-primary" /> : <MoveDown className="h-3 w-3 text-primary" />
+                            ) : (
+                              <MoveVertical className="h-3 w-3" />
+                            )}
+                          </span>
                         </div>
                         {column.isEnum ? (
                           <select
@@ -484,11 +491,11 @@ const DataTable = ({
                             <div className="flex items-center">
                               {item[column.key] === true ? (
                                 <div title={column.trueLabel || 'Active'}>
-                                  <Disc className="h-5 w-5 text-green-500" fill="currentColor" />
+                                  <Circle className="h-5 w-5 text-green-500" fill="currentColor" />
                                 </div>
                               ) : (
                                 <div title={column.falseLabel || 'Inactive'}>
-                                  <Disc className="h-5 w-5 text-red-500" fill="currentColor" />
+                                  <Circle className="h-5 w-5 text-red-500" fill="currentColor" />
                                 </div>
                               )}
                             </div>

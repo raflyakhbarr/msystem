@@ -1,5 +1,6 @@
 import React from 'react';
-import { PencilIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import {Edit, List} from 'lucide-react'
+
 import type { MenuItem } from '@/api/menuApi';
 
 interface ActionsCellProps {
@@ -16,14 +17,14 @@ const ActionsCell = ({ item, onEdit, onViewDetails }: ActionsCellProps) => {
         onClick={() => onEdit(item)}
         title="Edit"
       >
-        <PencilIcon className="h-4 w-4" />
+        <Edit className="h-4 w-4" />
       </button>
       <button
         className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
         onClick={() => onViewDetails(item)}
         title="View Details"
       >
-        <InformationCircleIcon className="h-4 w-4" />
+        <List className="h-4 w-4" />
       </button>
     </div>
   );

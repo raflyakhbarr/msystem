@@ -5,7 +5,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
 interface FiturItem {
@@ -41,143 +40,136 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
   systems = [], 
   setShowModal 
 }) => {
+  if (!item) return null;
+
   const handleCloseModal = () => {
     setShowModal(false);
   };
 
-  // Get system name based on idSistem
-  const getSystemName = () => {
-    if (!item?.idSistem) return 'Not assigned';
-    
-    // If idSistem is an object with nama property
+  // Logic to resolve system name from ID or Object
+  const systemName = React.useMemo(() => {
+    if (!item.idSistem) return 'Not assigned';
     if (typeof item.idSistem === 'object' && item.idSistem.nama) {
       return item.idSistem.nama;
     }
-    
-    // If idSistem is just an ID, find the system name
     const system = systems.find(s => s.id === item.idSistem);
     return system ? system.nama : `System ID: ${item.idSistem}`;
+  }, [item.idSistem, systems]);
+
+  // Helper for consistent date formatting
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
     <Dialog open={showModal} onOpenChange={handleCloseModal}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 py-6 pb-2">
           <DialogTitle>Fitur Details</DialogTitle>
         </DialogHeader>
         
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="space-y-4">
-            {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Menu</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.menu}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Route</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.route}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Order</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.urutan}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Show Feature</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.showFiture}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">
-                  <Badge variant={item?.status ? 'default' : 'secondary'}>
-                    {item?.status ? 'Active' : 'Inactive'}
-                  </Badge>
-                </p>
+        <div className="overflow-y-auto px-6 pb-6 pt-2">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+            
+            {/* --- Basic Identity --- */}
+            <div className="col-span-2 sm:col-span-1">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Menu Name</h4>
+              <p className="text-sm font-semibold text-foreground">{item.menu}</p>
+            </div>
+
+            <div className="col-span-2 sm:col-span-1">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Order Sequence</h4>
+              <p className="text-sm font-medium text-foreground">#{item.urutan}</p>
+            </div>
+
+            {/* --- Route (Full Width) --- */}
+            <div className="col-span-2">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Route Path</h4>
+              <div className="rounded-md bg-muted/50 border border-border p-2.5 inline-block">
+                <code className="text-xs font-mono text-foreground break-all">
+                  {item.route || '/'}
+                </code>
               </div>
             </div>
 
-            {/* Icon Information */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Icon</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div className="flex items-center space-x-3">
-                  {item?.icon && (
-                    <img 
+            {/* --- Icon Display --- */}
+            <div className="col-span-2">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Icon</h4>
+              <div className="flex items-center gap-4">
+                {/* Icon Preview Box */}
+                <div className="h-12 w-12 rounded-md border border-border bg-muted/30 flex items-center justify-center shrink-0 overflow-hidden">
+                   {item.icon ? (
+                      <img 
                       src={`/icons/${item.icon}`} 
-                      alt={item?.menu}
-                      className="h-8 w-8"
+                      alt={item.menu}
+                      className="h-6 w-6 object-contain"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.style.display = 'none';
                       }}
                     />
-                  )}
-                  <div>
-                    <p className="text-sm text-foreground font-mono">{item?.icon || 'No icon'}</p>
-                    {item?.icon && (
-                      <p className="text-xs text-muted-foreground">/icons/{item.icon}</p>
-                    )}
-                  </div>
+                   ) : (
+                     <span className="text-xs text-muted-foreground">N/A</span>
+                   )}
+                </div>
+                {/* Icon Path Text */}
+                <div className="flex flex-col">
+                   <span className="text-sm font-medium text-foreground">{item.icon || 'No icon assigned'}</span>
+                   {item.icon && <span className="text-xs text-muted-foreground font-mono">/icons/{item.icon}</span>}
                 </div>
               </div>
             </div>
 
-            {/* System Information */}
+            {/* --- Configuration --- */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">System Information</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div>
-                  <span className="text-xs text-muted-foreground">System Name:</span>
-                  <p className="text-sm text-foreground">{getSystemName()}</p>
-                </div>
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Show Feature</h4>
+              <p className="text-sm font-medium text-foreground capitalize">{item.showFiture}</p>
             </div>
 
-            {/* Timestamps */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Timestamps</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-xs text-muted-foreground">Created At:</span>
-                    <p className="text-sm text-foreground">
-                      {item?.createdAt ? new Date(item.createdAt).toLocaleString() : 'Not available'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Updated At:</span>
-                    <p className="text-sm text-foreground">
-                      {item?.updatedAt ? new Date(item.updatedAt).toLocaleString() : 'Not available'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                  <div>
-                    <span className="text-xs text-muted-foreground">Created By:</span>
-                    <p className="text-sm text-foreground">{item?.createdBy || 'Not available'}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Updated By:</span>
-                    <p className="text-sm text-foreground">{item?.updatedBy || 'Not available'}</p>
-                  </div>
-                </div>
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Status</h4>
+              <Badge variant={item.status ? 'default' : 'secondary'} className={!item.status ? "bg-red-100 text-red-700 hover:bg-red-100" : ""}>
+                {item.status ? 'Active' : 'Inactive'}
+              </Badge>
             </div>
-          </div>
 
-          {/* Close Button */}
-          <div className="flex justify-end pt-4 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCloseModal}
-            >
-              Close
-            </Button>
+            {/* --- System Association --- */}
+            <div className="col-span-2">
+               <h4 className="text-sm font-medium text-muted-foreground mb-1">System</h4>
+               <p className="text-sm font-medium text-foreground">{systemName}</p>
+            </div>
+
+            {/* Divider */}
+            <div className="col-span-2 border-t my-1"></div>
+
+            {/* --- Audit Trail --- */}
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
+              <p className="text-sm font-medium text-foreground">
+                {formatDate(item.createdAt)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                by <span className="font-medium text-foreground">{item.createdBy || 'Unknown'}</span>
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Last Updated</h4>
+              <p className="text-sm font-medium text-foreground">
+                {formatDate(item.updatedAt)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                by <span className="font-medium text-foreground">{item.updatedBy || 'Unknown'}</span>
+              </p>
+            </div>
+
           </div>
         </div>
       </DialogContent>

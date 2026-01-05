@@ -6,79 +6,101 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area" // Optional: using standard div overflow if you don't have ScrollArea
 
 const DetailsModal = ({ showModal, item, setShowModal }) => {
   if (!item) {
     return null;
   }
 
+  // Helper for consistent formatting
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <Dialog open={showModal} onOpenChange={setShowModal}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 py-6 pb-2">
           <DialogTitle>System Details</DialogTitle>
         </DialogHeader>
         
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="grid grid-cols-2 gap-4">
+        {/* Scrollable Content Area */}
+        <div className="overflow-y-auto px-6 pb-6 pt-2">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+            
+            {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-foreground">Nama</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {item.nama}
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Name</h4>
+              <p className="text-sm font-semibold text-foreground">{item.nama}</p>
             </div>
+
+            {/* URL */}
             <div>
-              <label className="block text-sm font-medium text-foreground">URL</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">URL</h4>
+              <a href={`https://${item.url}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-primary hover:underline decoration-dashed underline-offset-4">
                 {item.url}
-              </div>
+              </a>
             </div>
+
+            {/* Destination */}
             <div>
-              <label className="block text-sm font-medium text-foreground">Destination</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {item.destination}
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Destination</h4>
+              <p className="text-sm font-medium text-foreground">{item.destination}</p>
             </div>
+
+            {/* API Type */}
             <div>
-              <label className="block text-sm font-medium text-foreground">Type API</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {item.typeApi}
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">API Type</h4>
+              <p className="text-sm font-medium text-foreground capitalize">{item.typeApi}</p>
             </div>
+
+            {/* Status */}
             <div>
-              <label className="block text-sm font-medium text-foreground">Status</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                <Badge variant={item.status ? "default" : "destructive"}>
-                  {item.status ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Status</h4>
+              <Badge variant={item.status ? "default" : "secondary"} className={!item.status ? "bg-red-100 text-red-700 hover:bg-red-100" : ""}>
+                {item.status ? 'Active' : 'Inactive'}
+              </Badge>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground">Created At</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {new Date(item.createdAt).toLocaleDateString()}
-              </div>
+
+            {/* Timestamps - Grouped logically */}
+            <div className="col-span-1">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Last Updated</h4>
+              <p className="text-sm font-medium text-foreground">{formatDate(item.updatedAt)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Created: {formatDate(item.createdAt)}</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground">Updated At</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {new Date(item.updatedAt).toLocaleDateString()}
-              </div>
-            </div>
+
+            {/* Divider if you want visual separation */}
+            <div className="col-span-2 border-t my-1"></div>
+
+            {/* Headers - Full Width Code Block */}
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-foreground">Headers</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                <pre className="text-xs overflow-x-auto">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Headers</h4>
+              <div className="rounded-md bg-muted/50 border border-border p-3">
+                <pre className="text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap break-all">
                   {item.headers}
                 </pre>
               </div>
             </div>
+
+            {/* Token - Full Width */}
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-foreground">Token</label>
-              <div className="mt-1 px-3 py-2 bg-muted/50 border border-border rounded-md text-foreground">
-                {item.token || 'N/A'}
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Token</h4>
+               {item.token ? (
+                <div className="rounded-md bg-muted/50 border border-border p-3 break-all">
+                   <code className="text-xs font-mono text-foreground">{item.token}</code>
+                </div>
+               ) : (
+                 <p className="text-sm text-muted-foreground italic">No token available</p>
+               )}
             </div>
+
           </div>
         </div>
       </DialogContent>
