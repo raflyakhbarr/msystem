@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 interface DetailsModalProps {
   showModal: boolean;
@@ -15,139 +15,116 @@ interface DetailsModalProps {
 }
 
 const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
+  if (!item) return null;
+
   const handleCloseModal = () => {
     setShowModal(false);
   };
 
+  // Helper for consistent date formatting
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // specific logic to safely access nested group/system data
+  const systemName = typeof item.group_menu === 'object' && item.group_menu?.sistem 
+    ? item.group_menu.sistem.nama 
+    : 'N/A';
+
+  const groupName = typeof item.group_menu === 'object' 
+    ? item.group_menu.nama 
+    : (item.group_menu || 'N/A');
+
   return (
     <Dialog open={showModal} onOpenChange={handleCloseModal}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 py-6 pb-2">
           <DialogTitle>Endpoint Details</DialogTitle>
         </DialogHeader>
         
-        <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="space-y-4">
-            {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Endpoint Name</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.nama}</p>
-              </div>
+        <div className="overflow-y-auto px-6 pb-6 pt-2">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+            
+            {/* --- Core Identity --- */}
+            <div className="col-span-2 sm:col-span-1">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Endpoint Name</h4>
+              <p className="text-sm font-semibold text-foreground">{item.nama}</p>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Menu Number</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.noMenu}</p>
-              </div>
+            <div className="col-span-2 sm:col-span-1">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Menu Number</h4>
+              <p className="text-sm font-medium text-foreground">{item.noMenu || '-'}</p>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Show in Sidebar</label>
-                <p className="text-sm text-foreground bg-muted/50 p-2 rounded">
-                  {item?.isSidebar ? 'Yes' : 'No'}
-                </p>
+            {/* --- Description (Full Width) --- */}
+            <div className="col-span-2">
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Description</h4>
+              <p className="text-sm text-foreground leading-relaxed">
+                {item.fitur || <span className="text-muted-foreground italic">No description provided</span>}
+              </p>
+            </div>
+
+            {/* --- Technical Path (Full Width) --- */}
+            <div className="col-span-2">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Endpoint Path</h4>
+              <div className="rounded-md bg-muted/50 border border-border p-2.5">
+                <code className="text-xs font-mono text-foreground break-all">
+                  {item.pathMenu}
+                </code>
               </div>
             </div>
 
-            {/* Description */}
+            {/* --- Configuration --- */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-              <p className="text-sm text-foreground bg-muted/50 p-2 rounded">{item?.fitur}</p>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Sidebar Visibility</h4>
+              <Badge variant={item.isSidebar ? 'default' : 'outline'}>
+                {item.isSidebar ? 'Visible' : 'Hidden'}
+              </Badge>
             </div>
 
-            {/* Endpoint Path */}
+             {/* Spacer to keep grid alignment if needed, or System Name */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Endpoint Path</label>
-              <p className="text-sm text-foreground bg-muted/50 p-2 rounded font-mono break-all">{item?.pathMenu}</p>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">System Name</h4>
+              <p className="text-sm font-medium text-foreground">{systemName}</p>
             </div>
 
-            {/* System Information */}
+            {/* --- Grouping Info --- */}
+            <div className="col-span-2 sm:col-span-1">
+               <h4 className="text-sm font-medium text-muted-foreground mb-1">Group Name</h4>
+               <p className="text-sm font-medium text-foreground">{groupName}</p>
+            </div>
+
+            {/* Divider */}
+            <div className="col-span-2 border-t my-1"></div>
+
+            {/* --- Timestamps / Audit --- */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">System Information</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {typeof item?.group_menu === 'object' && item?.group_menu?.sistem && (
-                    <div>
-                      <span className="text-xs text-muted-foreground">System Name:</span>
-                      <p className="text-sm text-foreground">{item.group_menu.sistem.nama}</p>
-                    </div>
-                  )}
-                  {!item?.group_menu && (
-                    <div>
-                      <span className="text-xs text-muted-foreground">System Name:</span>
-                      <p className="text-sm text-foreground">Not assigned</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
+              <p className="text-sm font-medium text-foreground">
+                {formatDate(item.createdAt)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                by <span className="font-medium text-foreground">{item.createdBy || 'Unknown'}</span>
+              </p>
             </div>
 
-            {/* Group Information */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Group Information</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {typeof item?.group_menu === 'object' ? (
-                    <>
-                      <div>
-                        <span className="text-xs text-muted-foreground">Group ID:</span>
-                        <p className="text-sm text-foreground">{item.group_menu.id || 'Not assigned'}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-muted-foreground">Group Name:</span>
-                        <p className="text-sm text-foreground">{item.group_menu.nama || 'Not assigned'}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="col-span-2">
-                      <span className="text-xs text-muted-foreground">Group ID:</span>
-                      <p className="text-sm text-foreground">{item?.group_menu || 'Not assigned'}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-1">Last Updated</h4>
+              <p className="text-sm font-medium text-foreground">
+                {formatDate(item.updatedAt)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                by <span className="font-medium text-foreground">{item.updatedBy || 'Unknown'}</span>
+              </p>
             </div>
 
-            {/* Timestamps */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Timestamps</label>
-              <div className="bg-muted/50 p-3 rounded">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-xs text-muted-foreground">Created At:</span>
-                    <p className="text-sm text-foreground">
-                      {item?.createdAt ? new Date(item.createdAt).toLocaleString() : 'Not available'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Updated At:</span>
-                    <p className="text-sm text-foreground">
-                      {item?.updatedAt ? new Date(item.updatedAt).toLocaleString() : 'Not available'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                  <div>
-                    <span className="text-xs text-muted-foreground">Created By:</span>
-                    <p className="text-sm text-foreground">{item?.createdBy || 'Not available'}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Updated By:</span>
-                    <p className="text-sm text-foreground">{item?.updatedBy || 'Not available'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Close Button */}
-          <div className="flex justify-end mt-6 pt-4 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCloseModal}
-            >
-              Close
-            </Button>
           </div>
         </div>
       </DialogContent>
