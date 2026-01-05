@@ -1,9 +1,15 @@
 import {
   FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, 
   FaProjectDiagram, FaDownload, FaHandPaper, FaUndo, FaRedo,
-  FaToggleOn, FaToggleOff, FaHighlighter
+  FaToggleOn, FaToggleOff, FaHighlighter, FaChevronDown
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '../ui/sidebar';
 import SearchBar from './SearchBar';
 
@@ -37,123 +43,143 @@ export default function VisualizationNavbar({
   onOpenManageGroups,
   onOpenExportModal,
 }) {
+  // Helper functions untuk selection mode dropdown
+  const getSelectionIcon = () => {
+    switch (selectionMode) {
+      case 'freeroam': return <FaHandPaper size={14} />;
+      case 'single': return <FaMousePointer size={14} />;
+      case 'rectangle': return <FaSquare size={14} />;
+      default: return <FaMousePointer size={14} />;
+    }
+  };
+
+  const getSelectionLabel = () => {
+    switch (selectionMode) {
+      case 'freeroam': return 'Free';
+      case 'single': return 'Single';
+      case 'rectangle': return 'Rectangle';
+      default: return 'Mode';
+    }
+  };
+
   return (
-    <div className="bg-muted/10 relative z-5 shadow-md">
+    <div className="bg-muted/10 relative z-5 shadow-md pt-3 pb-3">
       {/* Top Row - Main Actions */}
       <div className="px-1 py-0.5 items-center justify-between">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="ml-0 transition-all ml-2" />
+          {/* Left Side - Actions */}
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="ml-2 transition-all" />
             <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
             
-            {/* Add Item */}
-            <Button
-              onClick={onOpenAddItem}
-              variant="default"
-              size="sm"
-              title="Tambah Item Baru"
-            >
-              <FaPlus />
-              <span className="hidden md:inline">Item</span>
-            </Button>
+            {/* Add Item & Groups */}
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={onOpenAddItem}
+                variant="default"
+                size="sm"
+                title="Tambah Item Baru"
+              >
+                <FaPlus />
+                <span className="hidden xl:inline ml-1">Item</span>
+              </Button>
 
-            {/* Manage Groups */}
-            <Button
-              onClick={onOpenManageGroups}
-              variant="secondary"
-              size="sm"
-              title="Kelola Groups"
-            >
-              <FaLayerGroup />
-              <span className="hidden md:inline">Groups</span>
-            </Button>
-
-            {/* Export Button */}
-            <Button
-              onClick={onOpenExportModal}
-              title="Ekspor sebagai Gambar atau PDF"
-              variant="secondary"
-              size="sm"
-            >
-              <FaDownload />
-              <span className="hidden md:inline">Export</span>
-            </Button>
-
-            <div className="h-8 w-px bg-border"></div>
-
-            {/* Undo Button */}
-            <Button
-              onClick={onUndo}
-              disabled={!canUndo}
-              variant="outline"
-              size="sm"
-              title="Undo (Ctrl+Z)"
-              className="disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FaUndo size={14} />
-              <span className="hidden md:inline">Undo</span>
-            </Button>
-
-            {/* Redo Button */}
-            <Button
-              onClick={onRedo}
-              disabled={!canRedo}
-              variant="outline"
-              size="sm"
-              title="Redo (Ctrl+Y)"
-              className="disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FaRedo size={14} />
-              <span className="hidden md:inline">Redo</span>
-            </Button>
+              <Button
+                onClick={onOpenManageGroups}
+                variant="secondary"
+                size="sm"
+                title="Kelola Groups"
+              >
+                <FaLayerGroup />
+                <span className="hidden xl:inline ml-1">Groups</span>
+              </Button>
+              <Button
+                onClick={onOpenExportModal}
+                title="Ekspor sebagai Gambar atau PDF"
+                variant="secondary"
+                size="sm"
+              >
+                <FaDownload />
+                <span className="hidden lg:inline ml-1">Export</span>
+              </Button>
+            </div>
 
             <div className="h-8 w-px bg-border"></div>
 
-            {/* Auto-Save Toggle */}
-            <Button
-              onClick={onToggleAutoSave}
-              variant={isAutoSaveEnabled ? "default" : "outline"}
-              size="sm"
-              title={isAutoSaveEnabled ? "Auto-save Aktif (klik untuk nonaktifkan)" : "Auto-save Nonaktif (klik untuk aktifkan)"}
-              className={isAutoSaveEnabled ? "bg-green-600 hover:bg-green-700 text-white" : ""}
-            >
-              {isAutoSaveEnabled ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
-              <span className="hidden lg:inline">Auto-save</span>
-            </Button>
+            {/* Undo/Redo */}
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={onUndo}
+                disabled={!canUndo}
+                variant="ghost"
+                size="sm"
+                title="Undo (Ctrl+Z)"
+                className="disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FaUndo size={14} />
+              </Button>
 
-            {/* Save Button */}
-            <Button
-              onClick={onSavePositions}
-              disabled={isSaving || isAutoSaving}
-              variant="outline"
-              size="sm"
-              className={!isSaving && !isAutoSaving ? "bg-accent text-accent-foreground hover:bg-accent/90 border-accent" : ""}
-              title="Simpan Posisi Manual (Ctrl+S)"
-            >
-              <FaSave />
-              <span className="hidden md:inline">
-                {isSaving ? 'Menyimpan...' : isAutoSaving ? 'Auto-saving...' : 'Save'}
-              </span>
-            </Button>
+              <Button
+                onClick={onRedo}
+                disabled={!canRedo}
+                variant="ghost"
+                size="sm"
+                title="Redo (Ctrl+Y)"
+                className="disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FaRedo size={14} />
+              </Button>
+            </div>
+
+            <div className="h-8 w-px bg-border"></div>
+
+            {/* Save Controls */}
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={onToggleAutoSave}
+                variant={isAutoSaveEnabled ? "default" : "ghost"}
+                size="sm"
+                title={isAutoSaveEnabled ? "Auto-save Aktif" : "Auto-save Nonaktif"}
+                className={isAutoSaveEnabled ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+              >
+                {isAutoSaveEnabled ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
+                <span className="hidden xl:inline ml-1">Auto</span>
+              </Button>
+
+              <Button
+                onClick={onSavePositions}
+                disabled={isSaving || isAutoSaving}
+                variant="ghost"
+                size="sm"
+                className={!isSaving && !isAutoSaving ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                title="Simpan Posisi Manual (Ctrl+S)"
+              >
+                <FaSave />
+                <span className="hidden xl:inline ml-1">
+                  {isSaving ? 'Saving...' : isAutoSaving ? 'Auto...' : 'Save'}
+                </span>
+              </Button>
+            </div>
 
             {/* Auto-saving Indicator */}
             {isAutoSaving && isAutoSaveEnabled && (
-              <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
-                <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
-                <span className="font-medium">Auto-saving...</span>
+              <div className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                <div className="w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse"></div>
+                <span className="font-medium hidden lg:inline">Auto-saving...</span>
               </div>
             )}
 
             {/* Drag Status */}
             {draggedNode && (
-              <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20 animate-pulse">
+              <div className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20 animate-pulse">
                 <FaProjectDiagram className="animate-bounce" />
-                <span className="font-medium">Drag untuk mengubah urutan</span>
+                <span className="font-medium hidden lg:inline">Dragging...</span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Right Side - View & Search */}
+          <div className="flex items-center gap-2">
             {/* Search Bar */}
             <SearchBar 
               nodes={nodes}
@@ -163,68 +189,84 @@ export default function VisualizationNavbar({
 
             <div className="h-8 w-px bg-border"></div>
 
-            {/* Visibility Panel Toggle */}
-            <Button
-              onClick={onToggleVisibilityPanel}
-              variant={showVisibilityPanel ? "default" : "outline"}
-              size="sm"
-              title="Panel Visibility"
-            >
-              <FaEye size={14} />
-              <span className="hidden md:inline">Visibility</span>
-            </Button>
-
-            {/*Highlight Mode Toggle */}
-            <Button
-              onClick={() => {
-                onSetHighlightMode(!highlightMode);
-                if (highlightMode && highlightedNodeId) {
-                  onClearHighlight();
-                }
-              }}
-              variant={highlightMode ? "default" : "outline"}
-              size="sm"
-              title="Mode Highlight Dependencies"
-              className={highlightMode ? "bg-orange-600 hover:bg-orange-700 text-white" : ""}
-            >
-              <FaHighlighter size={14} />
-              <span className="hidden md:inline">Highlight</span>
-            </Button>
-
-            {/* Selection Mode */}
-            <div className="flex items-center gap-1 bg-card rounded-lg p-1 shadow-sm border border-border">
+            {/* View Controls */}
+            <div className="flex items-center gap-1">
               <Button
-                onClick={() => onSetSelectionMode('freeroam')}
-                variant={selectionMode === 'freeroam' ? "default" : "ghost"}
+                onClick={onToggleVisibilityPanel}
+                variant={showVisibilityPanel ? "default" : "ghost"}
                 size="sm"
-                title="Mode Free Roam - Geser canvas bebas"
+                title="Panel Visibility"
               >
-                <FaHandPaper size={14} />
-                <span className="hidden sm:inline">Free</span>
+                <FaEye size={14} />
+                <span className="hidden lg:inline ml-1">Visibility</span>
               </Button>
+
               <Button
-                onClick={() => onSetSelectionMode('single')}
-                variant={selectionMode === 'single' ? "default" : "ghost"}
+                onClick={() => {
+                  onSetHighlightMode(!highlightMode);
+                  if (highlightMode && highlightedNodeId) {
+                    onClearHighlight();
+                  }
+                }}
+                variant={highlightMode ? "default" : "ghost"}
                 size="sm"
-                title="Mode Seleksi Tunggal"
+                title="Mode Highlight Dependencies"
+                className={highlightMode ? "bg-orange-600 hover:bg-orange-700 text-white" : ""}
               >
-                <FaMousePointer size={14} />
-                <span className="hidden sm:inline">Single</span>
-              </Button>
-              <Button
-                onClick={() => onSetSelectionMode('rectangle')}
-                variant={selectionMode === 'rectangle' ? "default" : "ghost"}
-                size="sm"
-                title="Mode Seleksi Kotak"
-              >
-                <FaSquare size={14} />
-                <span className="hidden sm:inline">Rectangle</span>
+                <FaHighlighter size={14} />
+                <span className="hidden lg:inline ml-1">Highlight</span>
               </Button>
             </div>
+
+            <div className="h-8 w-px bg-border"></div>
+
+            {/* Selection Mode Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  {getSelectionIcon()}
+                  <span className="hidden sm:inline">{getSelectionLabel()}</span>
+                  <FaChevronDown size={10} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => onSetSelectionMode('freeroam')}
+                  className={selectionMode === 'freeroam' ? 'bg-accent' : ''}
+                >
+                  <FaHandPaper className="mr-2" size={14} />
+                  <div className="flex flex-col">
+                    <span>Free Roam</span>
+                    <span className="text-xs text-muted-foreground">Geser canvas bebas</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onSetSelectionMode('single')}
+                  className={selectionMode === 'single' ? 'bg-accent' : ''}
+                >
+                  <FaMousePointer className="mr-2" size={14} />
+                  <div className="flex flex-col">
+                    <span>Single Select</span>
+                    <span className="text-xs text-muted-foreground">Pilih satu node</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onSetSelectionMode('rectangle')}
+                  className={selectionMode === 'rectangle' ? 'bg-accent' : ''}
+                >
+                  <FaSquare className="mr-2" size={14} />
+                  <div className="flex flex-col">
+                    <span>Rectangle Select</span>
+                    <span className="text-xs text-muted-foreground">Pilih area kotak</span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
 
+      {/* Bottom Bar - Selection Info */}
       {(selectedForHiding.size > 0 || hiddenNodes.size > 0) && (
         <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-muted/95 backdrop-blur-sm border-b border-border shadow-lg z-50">
           <div className="flex items-center gap-2">
