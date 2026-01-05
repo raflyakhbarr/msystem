@@ -739,11 +739,6 @@ export default function CMDBVisualization() {
 
         const deps = getDependencies(node.id);
         const dependents = getDependents(node.id);
-        
-        toast.info(`${node.data?.name || 'Node'} dipilih`, {
-          description: `Dependencies: ${deps.size} | Dependents: ${dependents.size}`,
-          duration: 3000,
-        });
       }
     }
   }, [selectionMode, highlightMode, highlightedNodeId, clearHighlight, highlightNode, getDependencies, getDependents]);
@@ -1284,7 +1279,7 @@ export default function CMDBVisualization() {
               if (highlightMode && highlightedNodeId) {
                 if (node.id === highlightedNodeId) {
                   opacity = 1;
-                  outline = '4px solid #f59e0b';
+                  // outline = '2px solid #ff4d00ff';
                   zIndex = 100;
                 } else if (relatedNodes && relatedNodes.has(node.id)) {
                   opacity = 1;
