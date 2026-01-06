@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ConnectionModal({
   show,
+  selectedGroup,
   selectedItem,
   items,
   groups,
@@ -46,9 +47,11 @@ export default function ConnectionModal({
 
   const filteredGroups = groups.filter(g => 
     g.id !== selectedItem.group_id &&
+    !selectedGroupConnections.includes(g.id) &&
     (g.name.toLowerCase().includes(connectionSearch.toLowerCase()) ||
     String(g.id).includes(connectionSearch))
   );
+  
 
   return (
     <Dialog open={show} onOpenChange={onClose}>
