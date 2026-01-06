@@ -156,9 +156,15 @@ const DataTable = ({
         return boolValue.toString() === searchTerm;
       }
       
-      // Handle enum values
+      // Handle enum values - IMPROVED for null/undefined values
       if (column.isEnum) {
-        return searchTerm === '' || itemValue === searchTerm;
+        // Handle "null" search term for empty/null values
+        if (searchTerm === 'null') {
+          return itemValue === null || itemValue === undefined || itemValue === '';
+        }
+        // Convert to string for comparison
+        const itemValueStr = itemValue != null ? itemValue.toString() : '';
+        return searchTerm === '' || itemValueStr === searchTerm;
       }
       
       return (itemValue || '').toString().toLowerCase().includes(searchTerm.toLowerCase());

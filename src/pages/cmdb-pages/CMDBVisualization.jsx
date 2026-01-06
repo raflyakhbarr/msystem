@@ -130,6 +130,7 @@ export default function CMDBVisualization() {
   const [selectedGroupConnections, setSelectedGroupConnections] = useState([]);
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
+  const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB();
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
@@ -642,11 +643,16 @@ export default function CMDBVisualization() {
   const handleOpenGroupConnectionModal = (group) => {
     setSelectedGroupForConnection(group);
     
-    const existingConns = groupConnections
+    const existingGroupConns = groupConnections
       .filter(conn => conn.source_id === group.id)
       .map(conn => conn.target_id);
     
-    setSelectedGroupToGroupConnections(existingConns);
+    const existingItemConns = connections
+      .filter(conn => conn.source_group_id === group.id)
+      .map(conn => conn.target_id);
+    
+    setSelectedGroupToGroupConnections(existingGroupConns);
+    setSelectedGroupToItemConnections(existingItemConns); // TAMBAHKAN INI
     setShowGroupConnectionModal(true);
   };
 
@@ -658,31 +664,57 @@ export default function CMDBVisualization() {
     );
   };
 
+  const handleToggleGroupToItemConnection = (targetItemId) => {
+    setSelectedGroupToItemConnections(prev =>
+      prev.includes(targetItemId)
+        ? prev.filter(id => id !== targetItemId)
+        : [...prev, targetItemId]
+    );
+  };
+
   const handleSaveGroupConnections = async () => {
     try {
-      const currentConns = groupConnections
+      const currentGroupConns = groupConnections
         .filter(conn => conn.source_id === selectedGroupForConnection.id)
         .map(conn => conn.target_id);
 
-      const toAdd = selectedGroupToGroupConnections.filter(id => !currentConns.includes(id));
-      const toRemove = currentConns.filter(id => !selectedGroupToGroupConnections.includes(id));
+      const groupsToAdd = selectedGroupToGroupConnections.filter(id => !currentGroupConns.includes(id));
+      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupToGroupConnections.includes(id));
 
-      for (const targetId of toAdd) {
+      for (const targetId of groupsToAdd) {
         await api.post('/groups/connections', {
           source_id: selectedGroupForConnection.id,
           target_id: targetId
         });
       }
 
-      for (const targetId of toRemove) {
+      for (const targetId of groupsToRemove) {
         await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
+      }
+
+      const currentItemConns = connections
+        .filter(conn => conn.source_group_id === selectedGroupForConnection.id)
+        .map(conn => conn.target_id);
+
+      const itemsToAdd = selectedGroupToItemConnections.filter(id => !currentItemConns.includes(id));
+      const itemsToRemove = currentItemConns.filter(id => !selectedGroupToItemConnections.includes(id));
+
+      for (const targetId of itemsToAdd) {
+        await api.post('/cmdb/connections/from-group', {
+          source_group_id: selectedGroupForConnection.id,
+          target_id: targetId
+        });
+      }
+
+      for (const targetId of itemsToRemove) {
+        await api.delete(`/cmdb/connections/from-group/${selectedGroupForConnection.id}/${targetId}`);
       }
 
       await fetchAll();
       setShowGroupConnectionModal(false);
     } catch (err) {
       console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -963,7 +995,11 @@ export default function CMDBVisualization() {
               position: { x: node.position.x, y: node.position.y },
             })
           );
-        } else if (node.type === 'group') {
+        }
+      });
+
+      nodes.forEach((node) => {
+        if (node.type === 'group') {
           const groupId = node.id.replace('group-', '');
           updatePromises.push(
             api.put(`/groups/${groupId}/position`, {
@@ -985,21 +1021,30 @@ export default function CMDBVisualization() {
 
   useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
 
-  const handleSavePositions = useCallback(async () => {
+  const handleSavePositions = async () => {
     setIsSaving(true);
     try {
-      const updatePromises = nodes.map(node => {
+      const updatePromises = [];
+      
+      nodes.forEach((node) => {
         if (node.type === 'custom' && !node.parentNode) {
-          return api.put(`/cmdb/${node.id}/position`, {
-            position: { x: node.position.x, y: node.position.y },
-          });
-        } else if (node.type === 'group') {
-          const groupId = node.id.replace('group-', '');
-          return api.put(`/groups/${groupId}/position`, {
-            position: { x: node.position.x, y: node.position.y },
-          });
+          updatePromises.push(
+            api.put(`/cmdb/${node.id}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
         }
-        return Promise.resolve();
+      });
+
+      nodes.forEach((node) => {
+        if (node.type === 'group') {
+          const groupId = node.id.replace('group-', '');
+          updatePromises.push(
+            api.put(`/groups/${groupId}/position`, {
+              position: { x: node.position.x, y: node.position.y },
+            })
+          );
+        }
       });
 
       await Promise.all(updatePromises);
@@ -1012,7 +1057,7 @@ export default function CMDBVisualization() {
     } finally {
       setIsSaving(false);
     }
-  }, [nodes]);
+  };
 
   const handleContextEdit = useCallback(() => {
     const editData = handleEditFromVisualization(contextMenu.node);
@@ -1033,6 +1078,17 @@ export default function CMDBVisualization() {
       handleOpenConnectionModal(item);
     }
   }, [contextMenu.node, handleManageConnectionsFromVisualization, handleOpenConnectionModal]);
+
+  const handleContextManageGroupConnections = useCallback(() => {
+    if (!contextMenu.node || contextMenu.node.type !== 'group') return;
+    
+    const groupId = parseInt(contextMenu.node.id.replace('group-', ''));
+    const group = groups.find(g => g.id === groupId);
+    
+    if (group) {
+      handleOpenGroupConnectionModal(group);
+    }
+  }, [contextMenu.node, groups, handleOpenGroupConnectionModal]);
 
   const handleContextToggleVisibility = useCallback(() => {
     toggleNodeVisibility(contextMenu.node.id);
@@ -1339,6 +1395,7 @@ export default function CMDBVisualization() {
             onEdit={handleContextEdit}
             onDelete={handleContextDelete}
             onManageConnections={handleContextManageConnections}
+            onManageGroupConnections={handleContextManageGroupConnections}
             onToggleVisibility={handleContextToggleVisibility}
             onClose={closeContextMenu}
           />
@@ -1474,10 +1531,15 @@ export default function CMDBVisualization() {
         show={showGroupConnectionModal}
         selectedGroup={selectedGroupForConnection}
         groups={groups}
+        items={items}
         selectedConnections={selectedGroupToGroupConnections}
+        selectedGroupConnections={selectedGroupToGroupConnections}
+        selectedItemConnections={selectedGroupToItemConnections}
         onClose={() => setShowGroupConnectionModal(false)}
         onSave={handleSaveGroupConnections}
         onToggleConnection={handleToggleGroupToGroupConnection}
+        onToggleGroupConnection={handleToggleGroupToGroupConnection}
+        onToggleItemConnection={handleToggleGroupToItemConnection}
       />
 
       <ExportModal

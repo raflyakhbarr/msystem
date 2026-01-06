@@ -67,6 +67,7 @@ export default function CMDBItem() {
   const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
+  const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -269,11 +270,16 @@ export default function CMDBItem() {
   const handleOpenGroupConnectionModal = (group) => {
     setSelectedGroupForConnection(group);
     
-    const existingConns = groupConnections
+    const existingGroupConns = groupConnections
       .filter(conn => conn.source_id === group.id)
       .map(conn => conn.target_id);
     
-    setSelectedGroupToGroupConnections(existingConns);
+    const existingItemConns = connections
+      .filter(conn => conn.source_group_id === group.id)
+      .map(conn => conn.target_id);
+    
+    setSelectedGroupToGroupConnections(existingGroupConns);
+    setSelectedGroupToItemConnections(existingItemConns);
     setShowGroupConnectionModal(true);
   };
 
@@ -285,28 +291,53 @@ export default function CMDBItem() {
     );
   };
 
+  const handleToggleGroupToItemConnection = (targetItemId) => {
+    setSelectedGroupToItemConnections(prev =>
+      prev.includes(targetItemId)
+        ? prev.filter(id => id !== targetItemId)
+        : [...prev, targetItemId]
+    );
+  };
+
   const handleSaveGroupConnections = async () => {
     try {
-      const currentConns = groupConnections
+      const currentGroupConns = groupConnections
         .filter(conn => conn.source_id === selectedGroupForConnection.id)
         .map(conn => conn.target_id);
 
-      const toAdd = selectedGroupToGroupConnections.filter(id => !currentConns.includes(id));
-      const toRemove = currentConns.filter(id => !selectedGroupToGroupConnections.includes(id));
+      const groupsToAdd = selectedGroupToGroupConnections.filter(id => !currentGroupConns.includes(id));
+      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupToGroupConnections.includes(id));
 
-      for (const targetId of toAdd) {
+      for (const targetId of groupsToAdd) {
         await api.post('/groups/connections', {
           source_id: selectedGroupForConnection.id,
           target_id: targetId
         });
       }
 
-      for (const targetId of toRemove) {
+      for (const targetId of groupsToRemove) {
         await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
       }
 
+      const currentItemConns = connections
+        .filter(conn => conn.source_group_id === selectedGroupForConnection.id)
+        .map(conn => conn.target_id);
+
+      const itemsToAdd = selectedGroupToItemConnections.filter(id => !currentItemConns.includes(id));
+      const itemsToRemove = currentItemConns.filter(id => !selectedGroupToItemConnections.includes(id));
+
+      for (const targetId of itemsToAdd) {
+        await api.post('/cmdb/connections/from-group', {
+          source_group_id: selectedGroupForConnection.id,
+          target_id: targetId
+        });
+      }
+
+      for (const targetId of itemsToRemove) {
+        await api.delete(`/cmdb/connections/from-group/${selectedGroupForConnection.id}/${targetId}`);
+      }
+
       fetchConnections();
-      const res = await api.get('/groups/connections');
       setShowGroupConnectionModal(false);
     } catch (err) {
       console.error(err);
@@ -351,6 +382,13 @@ export default function CMDBItem() {
         key: 'group_id',
         label: 'Group',
         sortable: true,
+        searchable: true,
+        isEnum: true,
+        enumOptions: [
+          // { value: '', label: 'All' },
+          { value: 'null', label: 'No Group' },
+          ...groups.map(g => ({ value: g.id.toString(), label: g.name }))
+        ],
         render: (item) => {
           const groupId = item.group_id;
           const group = groups.find(g => g.id === groupId);
@@ -475,6 +513,22 @@ export default function CMDBItem() {
             fetchConnections();
             fetchGroups();
           }}
+          onExport={(data) => {
+            return data.map(item => {
+              const group = groups.find(g => g.id === item.group_id);
+              return {
+                'Nama': item.name || '',
+                'Type': item.type || '',
+                'Status': item.status || '',
+                'IP': item.ip || '',
+                'Category': item.category || '',
+                'Location': item.location || '',
+                'Group': group ? group.name : '-',
+                'Environment Type': item.env_type || '',
+                'Description': item.description || '',
+              };
+            });
+          }}
           itemsPerPage={10}
           showAddButton={false}
           showExportButton={true}
@@ -535,10 +589,15 @@ export default function CMDBItem() {
           show={showGroupConnectionModal}
           selectedGroup={selectedGroupForConnection}
           groups={groups}
+          items={items}
           selectedConnections={selectedGroupToGroupConnections}
+          selectedGroupConnections={selectedGroupToGroupConnections}
+          selectedItemConnections={selectedGroupToItemConnections}
           onClose={() => setShowGroupConnectionModal(false)}
           onSave={handleSaveGroupConnections}
           onToggleConnection={handleToggleGroupToGroupConnection}
+          onToggleGroupConnection={handleToggleGroupToGroupConnection}
+          onToggleItemConnection={handleToggleGroupToItemConnection}
         />
       </div>
   );

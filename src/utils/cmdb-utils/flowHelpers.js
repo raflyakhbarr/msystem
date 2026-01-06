@@ -21,6 +21,42 @@ export const getBestHandlePositions = (sourceNode, targetNode) => {
   const sourceInGroup = sourceNode.parentNode;
   const targetInGroup = targetNode.parentNode;
   
+  if (sourceNode.type === 'group' || targetNode.type === 'group') {
+    let sourcePosX = sourceNode.position.x;
+    let sourcePosY = sourceNode.position.y;
+    let targetPosX = targetNode.position.x;
+    let targetPosY = targetNode.position.y;
+    
+    if (sourceNode.type === 'group') {
+      sourcePosX += (sourceNode.data.width || 200) / 2;
+      sourcePosY += (sourceNode.data.height || 250) / 2;
+    }
+    
+    if (targetNode.type === 'group') {
+      targetPosX += (targetNode.data.width || 200) / 2;
+      targetPosY += (targetNode.data.height || 250) / 2;
+    }
+    
+    const dx = targetPosX - sourcePosX;
+    const dy = targetPosY - sourcePosY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    
+    if (absDx > absDy) {
+      if (dx > 0) {
+        return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+      } else {
+        return { sourceHandle: 'source-left', targetHandle: 'target-right' };
+      }
+    } else {
+      if (dy > 0) {
+        return { sourceHandle: 'source-bottom', targetHandle: 'target-top' };
+      } else {
+        return { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+      }
+    }
+  }
+  
   if (!sourceInGroup || !targetInGroup || sourceInGroup !== targetInGroup) {
     return {
       sourceHandle: 'source-bottom',

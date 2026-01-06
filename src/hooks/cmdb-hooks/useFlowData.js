@@ -12,7 +12,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     const flowNodes = [];
     const flowEdges = [];
 
-    // Process groups first
     groups.forEach((group) => {
       const groupItems = items
         .filter(item => item.group_id === group.id)
@@ -50,7 +49,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         hidden: isHidden,
       });
 
-      // Create nodes for items in this group
       groupItems.forEach((item, index) => {
         const row = Math.floor(index / dimensions.itemsPerRow);
         const col = index % dimensions.itemsPerRow;
@@ -91,7 +89,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       });
     });
 
-    // Process items without groups
     const ungroupedItems = items.filter(item => !item.group_id);
     ungroupedItems.forEach((item) => {
       const pos = item.position
@@ -126,8 +123,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       });
     });
 
-    // Create edges for item connections
     connections.forEach((conn) => {
+      if (conn.source_group_id) return;
+      
       const sourceNode = flowNodes.find(n => n.id === String(conn.source_id));
       
       let targetNode, targetId, edgeId, strokeColor, isGroupConnection, showCrossMarker;
@@ -192,16 +190,75 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       flowEdges.push(edgeConfig);
     });
 
-    // Create edges for group connections
+    connections.forEach((conn) => {
+      if (!conn.source_group_id || !conn.target_id) return;
+      
+      const sourceNode = flowNodes.find(n => n.id === `group-${conn.source_group_id}`);
+      const targetNode = flowNodes.find(n => n.id === String(conn.target_id));
+      
+      if (!sourceNode || !targetNode) return;
+
+      const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
+      const isEdgeHidden = hiddenNodes.has(`group-${conn.source_group_id}`) || hiddenNodes.has(String(conn.target_id));
+
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
+      flowEdges.push({
+        id: edgeId,
+        source: `group-${conn.source_group_id}`,
+        target: String(conn.target_id),
+        sourceHandle,
+        targetHandle, 
+        type: 'smoothstep',
+        markerEnd: { type: 'arrowclosed', color: '#8b5cf6' },
+        style: { 
+          stroke: '#8b5cf6', 
+          strokeWidth: 2.5,
+          strokeDasharray: '8,4',
+          opacity: isEdgeHidden ? 0.2 : 1,
+        },
+        zIndex: 8,
+        reconnectable: true, 
+        hidden: isEdgeHidden,
+      });
+    });
+
+    // Create edges for group-to-group connections
     groupConnections.forEach((conn) => {
       const sourceId = `group-${conn.source_id}`;
       const targetId = `group-${conn.target_id}`;
+      const sourceNode = flowNodes.find(n => n.id === sourceId);
+      const targetNode = flowNodes.find(n => n.id === targetId);
+      
+      if (!sourceNode || !targetNode) return;
+      
+      const edgeId = `group-e${conn.source_id}-${conn.target_id}`;
       const isEdgeHidden = hiddenNodes.has(sourceId) || hiddenNodes.has(targetId);
 
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
       flowEdges.push({
-        id: `group-e${conn.source_id}-${conn.target_id}`,
+        id: edgeId,
         source: sourceId,
         target: targetId,
+        sourceHandle, 
+        targetHandle,
         type: 'smoothstep',
         markerEnd: { type: 'arrowclosed', color: '#6366f1' },
         style: { 
@@ -211,10 +268,10 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           opacity: isEdgeHidden ? 0.2 : 1,
         },
         zIndex: 5,
+        reconnectable: true, 
         hidden: isEdgeHidden,
       });
     });
-
     return { flowNodes, flowEdges };
   }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes]);
 

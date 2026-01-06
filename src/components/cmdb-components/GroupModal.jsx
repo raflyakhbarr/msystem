@@ -26,7 +26,7 @@ export default function GroupModal({
 
   return (
     <Dialog open={show} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto z-1002">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto z-50">
         <DialogHeader>
           <DialogTitle>
             {editMode ? 'Edit Group' : 'Tambah Group'}

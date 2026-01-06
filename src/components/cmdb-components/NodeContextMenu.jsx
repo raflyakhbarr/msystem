@@ -8,6 +8,7 @@ export default function NodeContextMenu({
   onEdit,
   onDelete,
   onManageConnections,
+  onManageGroupConnections, // TAMBAHKAN PROP BARU
   onToggleVisibility,
   onClose,
 }) {
@@ -17,6 +18,8 @@ export default function NodeContextMenu({
     action();
     onClose();
   };
+
+  const isGroupNode = node.type === 'group';
 
   return (
     <>
@@ -35,12 +38,23 @@ export default function NodeContextMenu({
         }}
       >
         <div className="px-3 py-2 border-b border-gray-200">
-          <p className="text-xs text-gray-500">Node Actions</p>
+          <p className="text-xs text-gray-500">
+            {isGroupNode ? 'Group Actions' : 'Node Actions'}
+          </p>
           <p className="text-sm font-semibold text-gray-800 truncate">{node.data?.name}</p>
         </div>
         
         <div className="py-1">
-          {node.type !== 'group' && (
+          {/* Kelola Koneksi - Berbeda untuk Group dan Item */}
+          {isGroupNode ? (
+            <button
+              onClick={() => handleAction(onManageGroupConnections)}
+              className="w-full px-4 py-2 text-left hover:bg-purple-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
+            >
+              <FaLink className="text-purple-600" />
+              <span>Kelola Koneksi Group</span>
+            </button>
+          ) : (
             <button
               onClick={() => handleAction(onManageConnections)}
               className="w-full px-4 py-2 text-left hover:bg-blue-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
