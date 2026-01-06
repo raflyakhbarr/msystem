@@ -50,6 +50,7 @@ export default function CMDBItem() {
   const [editMode, setEditMode] = useState(false);
   const [currentId, setCurrentId] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Connection modal state
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -245,6 +246,21 @@ export default function CMDBItem() {
       setEditGroupMode(false);
     } catch (err) {
       alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchItems(),
+        fetchConnections(),
+        fetchGroups(),
+      ]);
+    } catch (error) {
+      console.error('Gagal refresh data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -489,7 +505,7 @@ export default function CMDBItem() {
           title="Items"
           actionButtons={[
             {
-              label: 'Tambah Item',
+              label: 'Item',
               icon: <FaPlus />,
               className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
               onClick: () => {
@@ -498,7 +514,7 @@ export default function CMDBItem() {
               }
             },
             {
-              label: 'Kelola Groups',
+              label: 'Group',
               icon: <FaPlus />,
               className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
               onClick: () => {
@@ -508,11 +524,6 @@ export default function CMDBItem() {
               }
             }
           ]}
-          onRefresh={() => {
-            fetchItems();
-            fetchConnections();
-            fetchGroups();
-          }}
           onExport={(data) => {
             return data.map(item => {
               const group = groups.find(g => g.id === item.group_id);
@@ -532,7 +543,9 @@ export default function CMDBItem() {
           itemsPerPage={10}
           showAddButton={false}
           showExportButton={true}
-          showRefreshButton={false}
+          showRefreshButton={true}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
           maxHeight="max-h-[500px]"
         />
 
