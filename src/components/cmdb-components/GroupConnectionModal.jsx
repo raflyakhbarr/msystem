@@ -30,14 +30,16 @@ export default function GroupConnectionModal({
 
   const filteredGroups = groups.filter(g => 
     g.id !== selectedGroup.id &&
+    !selectedGroupConnections.includes(g.id) &&
     (g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     String(g.id).includes(searchQuery))
   );
 
   const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    !selectedItemConnections.includes(item.id) &&
+    (item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     String(item.id).includes(searchQuery) ||
-    item.type.toLowerCase().includes(searchQuery.toLowerCase())
+    item.type.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -130,7 +132,9 @@ export default function GroupConnectionModal({
                     </div>
                   ))
                 ) : (
-                  <p className="text-muted-foreground text-sm italic">Tidak ada group lain tersedia</p>
+                  <p className="text-muted-foreground text-sm italic">
+                    {searchQuery ? 'Tidak ada group yang sesuai pencarian' : 'Tidak ada group lain tersedia'}
+                  </p>
                 )}
               </div>
             </TabsContent>
@@ -191,7 +195,9 @@ export default function GroupConnectionModal({
                     </div>
                   ))
                 ) : (
-                  <p className="text-muted-foreground text-sm italic">Tidak ada item tersedia</p>
+                  <p className="text-muted-foreground text-sm italic">
+                    {searchQuery ? 'Tidak ada item yang sesuai pencarian' : 'Tidak ada item tersedia'}
+                  </p>
                 )}
               </div>
             </TabsContent>
