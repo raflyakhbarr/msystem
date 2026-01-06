@@ -24,8 +24,8 @@ const SettingMenu = () => {
   // Tree State
   const [treeData, setTreeData] = useState<any[]>([]);
   const [checkedKeys, setCheckedKeys] = useState<any[]>([]);
-  const [expandedKeys, setExpandedKeys] = useState<any[]>([]);
-  const [autoExpandParent, setAutoExpandParent] = useState(true);
+  const [expandedKeysMap, setExpandedKeysMap] = useState<Record<string, any[]>>({});
+  const [autoExpandParentMap, setAutoExpandParentMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (accGroupId) {
@@ -59,7 +59,15 @@ const SettingMenu = () => {
       if (data && data.checked) {
         setCheckedKeys(data.checked.map(String));
       }
-      setExpandedKeys(getAllKeys(formattedTree));
+      // Initialize expanded keys for each system separately
+      const initialExpandedKeysMap: Record<string, any[]> = {};
+      const initialAutoExpandParentMap: Record<string, boolean> = {};
+      formattedTree.forEach((system: any) => {
+        initialExpandedKeysMap[system.key] = getAllKeys([system]);
+        initialAutoExpandParentMap[system.key] = true;
+      });
+      setExpandedKeysMap(initialExpandedKeysMap);
+      setAutoExpandParentMap(initialAutoExpandParentMap);
     } catch (err: any) {
       console.error('API Error:', err);
       setError(err.message || 'Failed to load menu data');
@@ -108,22 +116,18 @@ const SettingMenu = () => {
     return keys;
   };
 
-  // --- CHECK LOGIC ---
   const onCheck = (checkedKeysValue: any, info: any) => {
     const currentChecked = [...checkedKeys];
     const { node, checked } = info;
     const nodeKey = node.key;
     
-    // Get all children keys (recursively) to check/uncheck them together
     const descendants = getDescendantKeys(node);
     const keysToToggle = [nodeKey, ...descendants];
     
     let newCheckedKeys;
     if (checked) {
-      // Add unique keys
       newCheckedKeys = Array.from(new Set([...currentChecked, ...keysToToggle]));
     } else {
-      // Remove keys
       newCheckedKeys = currentChecked.filter(key => !keysToToggle.includes(key));
     }
     setCheckedKeys(newCheckedKeys);
@@ -144,9 +148,15 @@ const SettingMenu = () => {
     setCheckedKeys(newCheckedKeys);
   };
 
-  const onExpand = (expandedKeysValue: any) => {
-    setExpandedKeys(expandedKeysValue);
-    setAutoExpandParent(false);
+  const onExpand = (expandedKeysValue: any, systemKey: string) => {
+    setExpandedKeysMap(prev => ({
+      ...prev,
+      [systemKey]: expandedKeysValue
+    }));
+    setAutoExpandParentMap(prev => ({
+      ...prev,
+      [systemKey]: false
+    }));
   };
   
   const handleTreeCheck = (checkedKeysFromTree: any, systemNode: any) => {
@@ -182,20 +192,16 @@ const SettingMenu = () => {
     ? checkedKeys.filter(k => !k.toString().startsWith('sys-') && !k.toString().startsWith('grp-')).length
     : 0;
 
-  // Filter Logic
   const filteredTreeData = useMemo(() => {
     if (!searchTerm) return treeData;
     const lowerSearch = searchTerm.toLowerCase();
     
-    // Filter Systems that match OR have children that match
     return treeData.map(system => {
       const systemMatches = system.title.toLowerCase().includes(lowerSearch);
       
-      // Filter children (Groups)
       const filteredChildren = system.children?.map((group: any) => {
           const groupMatches = group.title.toLowerCase().includes(lowerSearch);
-          // Filter grandchildren (Menus)
-          const filteredMenus = group.children?.filter((menu: any) => 
+          const filteredMenus = group.children?.filter((menu: any) =>
             menu.title.toLowerCase().includes(lowerSearch)
           );
           
@@ -215,7 +221,6 @@ const SettingMenu = () => {
   return (
     <div className="flex flex-col h-full bg-background animate-in fade-in duration-300">
       
-      {/* CSS Override for rc-tree */}
       <style>{`
         .rc-tree { background: transparent; font-family: inherit; font-size: 0.9rem; }
         .rc-tree-treenode { display: flex; align-items: center; padding-bottom: 2px; line-height: 32px; }
@@ -228,7 +233,6 @@ const SettingMenu = () => {
         .rc-tree-checkbox-checked .rc-tree-checkbox-inner { background-color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
       `}</style>
 
-      {/* HEADER */}
       <div className="flex flex-col border-b bg-background/95 backdrop-blur z-10 sticky top-0">
         <div className="flex items-center justify-between px-6 py-4">
             <div className="flex items-center gap-4">
@@ -243,7 +247,6 @@ const SettingMenu = () => {
             </div>
             </div>
 
-            {/* Search Input */}
             <div className="relative w-64 hidden md:block">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
@@ -256,7 +259,6 @@ const SettingMenu = () => {
         </div>
       </div>
       
-      {/* CONTENT: GRID LAYOUT */}
       <div className="flex-1 overflow-y-auto px-6 py-6 bg-muted/20">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-48 space-y-4">
@@ -291,8 +293,7 @@ const SettingMenu = () => {
                                 </Badge>
                             </CardTitle>
                             
-                            {/* System Select All Checkbox */}
-                            <Button 
+                            <Button
                                 variant="ghost" 
                                 size="sm" 
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
@@ -319,14 +320,13 @@ const SettingMenu = () => {
                                 checkStrictly={false}
                                 showLine={true}
                                 showIcon={false}
-                                // We pass the CHILDREN of the system node, because the Card Header acts as the System Node
                                 treeData={systemNode.children}
                                 onCheck={(keys) => handleTreeCheck(keys, systemNode)}
                                 checkedKeys={checkedKeys}
-                                onExpand={onExpand}
-                                expandedKeys={expandedKeys}
-                                autoExpandParent={autoExpandParent}
-                                motion={null} 
+                                onExpand={(keys) => onExpand(keys, systemNode.key)}
+                                expandedKeys={expandedKeysMap[systemNode.key] || []}
+                                autoExpandParent={autoExpandParentMap[systemNode.key] !== false}
+                                motion={null}
                             />
                             {(!systemNode.children || systemNode.children.length === 0) && (
                                 <p className="text-sm text-muted-foreground italic px-4">No sub-menus available.</p>
@@ -339,7 +339,6 @@ const SettingMenu = () => {
         )}
       </div>
 
-      {/* FOOTER */}
       <div className="flex items-center justify-between px-6 py-4 border-t bg-background shrink-0 sticky bottom-0 z-10">
         <div className="text-sm text-muted-foreground font-medium">
            <span className="text-foreground">{selectedCount}</span> menus authorized
