@@ -31,13 +31,11 @@ const EditModal = ({
   handleSubmit
 }: EditModalProps) => {
   const [saving, setSaving] = useState(false);
-  // Determine if this is an edit operation based on whether formData has an id
   const isEdit = formData && formData.id;
 
   const handleCloseForm = () => {
     setShowModal(false);
     if (!isEdit) {
-      // Reset form data only for add mode
       setFormData({
         isSidebar: false,
         nama: '',
@@ -73,6 +71,28 @@ const EditModal = ({
         
         <form onSubmit={handleFormSubmit}>
           <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+            
+            <Field>
+              <FieldLabel>Endpoint Group</FieldLabel>
+              <FieldContent className="overflow-visible">
+                <MenuGroupComboBox
+                  value={
+                    typeof formData?.group_menu === 'object' && formData.group_menu !== null && 'id' in formData.group_menu
+                      ? (formData.group_menu as any).id
+                      : formData?.group_menu
+                  }
+                  onValueChange={(value) => setFormData({
+                    ...formData,
+                    group_menu: value,
+                    noMenu: value
+                  })}
+                  placeholder="Select menu group..."
+                  className="w-full"
+                />
+              </FieldContent>
+            </Field>
+            
+            
             <Field>
               <FieldLabel>Endpoint Name</FieldLabel>
               <FieldContent>
@@ -80,18 +100,6 @@ const EditModal = ({
                   value={formData?.nama || ''}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, nama: e.target.value})}
                   placeholder="Enter endpoint name"
-                  required
-                />
-              </FieldContent>
-            </Field>
-
-            <Field>
-              <FieldLabel>Description</FieldLabel>
-              <FieldContent>
-                <Input
-                  value={formData?.fitur || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, fitur: e.target.value})}
-                  placeholder="Enter description"
                   required
                 />
               </FieldContent>
@@ -110,21 +118,13 @@ const EditModal = ({
             </Field>
 
             <Field>
-              <FieldLabel>Endpoint Group</FieldLabel>
-              <FieldContent className="overflow-visible">
-                <MenuGroupComboBox
-                  value={
-                    typeof formData?.group_menu === 'object' && formData.group_menu !== null && 'id' in formData.group_menu
-                      ? (formData.group_menu as any).id
-                      : formData?.group_menu
-                  }
-                  onValueChange={(value) => setFormData({
-                    ...formData,
-                    group_menu: value,
-                    noMenu: value
-                  })}
-                  placeholder="Select menu group..."
-                  className="w-full"
+              <FieldLabel>Description</FieldLabel>
+              <FieldContent>
+                <Input
+                  value={formData?.fitur || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, fitur: e.target.value})}
+                  placeholder="Enter description"
+                  required
                 />
               </FieldContent>
             </Field>

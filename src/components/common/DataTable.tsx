@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { WorkBook } from 'xlsx';
-import { Download, RefreshCw, Plus, CheckCircle, XCircle, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
+import { Download, RefreshCw, Plus, CheckCircle, XCircle, Circle, MoveUp, MoveDown, MoveVertical, ArrowUpDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
@@ -375,7 +375,7 @@ const DataTable = ({
               </Button>
             ))}
             {showAddButton && onAdd && (
-              <Button variant="secondary" size="default" onClick={onAdd} className='bg-primary text-background'>
+              <Button variant="default" size="default" onClick={onAdd} className='bg-primary text-background'>
                 Add
                 <Plus className="h-5 w-5" />
               </Button>
@@ -428,9 +428,9 @@ const DataTable = ({
                           {column.label}
                           <span className="ml-1 text-muted-foreground">
                             {sortOrder === column.key ? (
-                              sortDirection === 'asc' ? <MoveUp className="h-3 w-3 text-primary" /> : <MoveDown className="h-3 w-3 text-primary" />
+                              sortDirection === 'asc' ? <MoveUp className="h-2.5 w-2.5 text-primary" /> : <MoveDown className="h-2.5 w-2.5 text-primary" />
                             ) : (
-                              <MoveVertical className="h-3 w-3" />
+                              <ArrowUpDown className="h-3 w-3" />
                             )}
                           </span>
                         </div>
