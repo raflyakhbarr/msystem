@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Settings,
   ChevronsUpDown,
@@ -48,6 +49,7 @@ export function NavUser({
   onLogout?: () => void
 }) {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   return (
@@ -95,7 +97,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings />
                 Settings
               </DropdownMenuItem>
