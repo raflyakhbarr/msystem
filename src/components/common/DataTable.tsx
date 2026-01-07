@@ -16,7 +16,6 @@ import {
   TableCaption,
 } from "@/components/ui/table";
 
-// Define TypeScript interfaces for the DataTable props
 interface Column {
   key: string;
   label: string;
@@ -35,7 +34,6 @@ interface Column {
   render?: (item: any) => React.ReactNode;
 }
 
-// Define a generic data item type
 interface DataItem {
   [key: string]: any;
   id?: string | number;
@@ -90,7 +88,6 @@ const DataTable = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Initialize search terms for all searchable columns
   React.useEffect(() => {
     const initialSearchTerms: Record<string, string> = {};
     columns.forEach(column => {
@@ -102,22 +99,17 @@ const DataTable = ({
   }, [columns]);
 
   const handleSortClick = (field: string) => {
-    // If clicking the same column that's already sorted, cycle through states
     if (sortOrder === field) {
       if (sortDirection === 'asc') {
-        // Ascending → Descending
         setSortDirection('desc');
       } else if (sortDirection === 'desc') {
-        // Descending → All (no sort)
         setSortOrder(null);
         setSortDirection(null);
       } else {
-        // All → Ascending
         setSortOrder(field);
         setSortDirection('asc');
       }
     } else {
-      // New column → Ascending
       setSortOrder(field);
       setSortDirection('asc');
     }
@@ -139,29 +131,24 @@ const DataTable = ({
       
       let itemValue = item[column.key];
       
-      // Handle nested properties
       if (column.nested) {
         const keys = column.key.split('.');
         itemValue = keys.reduce((obj, key) => obj?.[key], item);
       }
       
-      // Handle date formatting for search
       if (column.isDate && itemValue) {
         itemValue = new Date(itemValue).toLocaleDateString();
       }
       
-      // Handle boolean values
       if (column.isBoolean || typeof itemValue === 'boolean') {
         const boolValue = typeof itemValue === 'boolean' ? itemValue : itemValue === 'true' || itemValue === true;
         return boolValue.toString() === searchTerm;
       }
       
-      // Handle enum values
       if (column.isEnum) {
         if (searchTerm === 'null') {
           return itemValue === null || itemValue === undefined || itemValue === '';
         }
-        // Convert to string for comparison
         const itemValueStr = itemValue != null ? itemValue.toString() : '';
         return searchTerm === '' || itemValueStr === searchTerm;
       }
@@ -171,7 +158,6 @@ const DataTable = ({
   });
 
   const sortedData = React.useMemo(() => {
-    // If no sort order or direction, return filtered data as-is
     if (!sortOrder || !sortDirection) {
       return [...filteredData];
     }
@@ -181,7 +167,6 @@ const DataTable = ({
       let aValue = a[sortOrder];
       let bValue = b[sortOrder];
       
-      // Handle nested properties
       const column = columns.find(col => col.key === sortOrder);
       if (column?.nested) {
         const keys = sortOrder.split('.');
@@ -189,13 +174,11 @@ const DataTable = ({
         bValue = keys.reduce((obj, key) => obj?.[key], b);
       }
       
-      // Handle date sorting
       if (column?.isDate) {
         aValue = new Date(aValue || 0);
         bValue = new Date(bValue || 0);
         comparison = aValue.getTime() - bValue.getTime();
       } else {
-        // Handle string comparison
         aValue = (aValue || '').toString();
         bValue = (bValue || '').toString();
         comparison = aValue.localeCompare(bValue);
@@ -217,25 +200,21 @@ const DataTable = ({
       if (onExport) {
         exportData = onExport(sortedData);
       } else {
-        // Default export functionality
         exportData = sortedData.map((item: DataItem) => {
           const exportItem: Record<string, any> = {};
           columns.forEach(column => {
             if (column.exportable !== false) {
               let value = item[column.key];
                
-              // Handle nested properties
               if (column.nested) {
                 const keys = column.key.split('.');
                 value = keys.reduce((obj: any, key) => obj?.[key], item);
               }
-               
-              // Handle boolean values
+                 
               if (typeof value === 'boolean') {
                 value = value ? 'Yes' : 'No';
               }
-               
-              // Handle dates
+                 
               if (column.isDate && value) {
                 value = new Date(value).toLocaleDateString();
               }
@@ -247,7 +226,6 @@ const DataTable = ({
         });
       }
 
-      // Create and download the Excel file
       if (exportData && exportData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb: WorkBook = XLSX.utils.book_new();
@@ -260,7 +238,6 @@ const DataTable = ({
       }
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      // Fallback: try a simpler approach
       try {
         const simpleData = sortedData.map((item: DataItem) => {
           const exportItem: Record<string, any> = {};
@@ -301,7 +278,6 @@ const DataTable = ({
         <div className="flex-1 min-h-0 bg-card rounded-xl shadow-lg flex flex-col overflow-hidden border border-border/50">
           <div className="overflow-y-auto">
             <Table>
-              {/* Header Skeleton */}
               <TableHeader className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
                 <TableRow>
                   {columns.map((column, index) => (
@@ -312,7 +288,6 @@ const DataTable = ({
                   ))}
                 </TableRow>
               </TableHeader>
-              {/* Body Skeleton */}
               <TableBody className="divide-y divide-border">
                 {Array.from({ length: itemsPerPage }).map((_, rowIndex) => (
                   <TableRow key={rowIndex}>
@@ -353,10 +328,8 @@ const DataTable = ({
   }
 
   return (
-    // Changed space-y-6 to gap-4 to better control flex layout spacing
     <div className="h-full flex flex-col gap-4">
-      
-      {/* Header Section - Shrinks/Grows as needed but doesn't scroll */}
+      {/* Header Section */}      
       <div className="shrink-0">
         <h2 className="text-xl font-bold text-foreground mb-4">{title || 'Data'} ({data.length} Total)</h2>
         <div className="flex items-center gap-4">
@@ -410,10 +383,8 @@ const DataTable = ({
       </div>
       <div className="flex-1 min-h-0 bg-card rounded-xl shadow-lg flex flex-col overflow-hidden border border-border/50">
         
-        {/* Scrollable Area */}
         <div className={`flex-1 overflow-y-auto relative ${maxHeight || ''}`}>
           <Table>
-            {/* Sticky Header */}
             <TableHeader className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
               <TableRow>
                 {columns.map(column => (
@@ -532,7 +503,6 @@ const DataTable = ({
           </Table>
         </div>
 
-        {/* Pagination Section - Fixed at bottom */}
         <div className="flex justify-between items-center px-6 py-4 border-t border-border bg-card shrink-0 z-20">
           <span className="text-sm text-foreground">
             Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, sortedData.length)} of {sortedData.length} results

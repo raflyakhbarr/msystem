@@ -29,15 +29,15 @@ import {
 
 // Get user data from localStorage
 const getUserData = () => {
-  const username = localStorage.getItem('username') || 'User'
+  const username = localStorage.getItem('username')
   const userDataString = localStorage.getItem('user')
-  let userData = { name: username, email: '', avatar: '' }
+  let userData = { name: username || '', email: '', avatar: '' }
 
   if (userDataString) {
     try {
       const parsedUser = JSON.parse(userDataString)
       userData = {
-        name: username,
+        name: username || '',
         email: parsedUser.email || '',
         avatar: parsedUser.avatar || ''
       }

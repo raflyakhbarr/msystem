@@ -12,7 +12,7 @@ import { toast } from "sonner";
 function SystemManagement() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { systems, loading, error, loadSystems } = useSystems()
+  const { systems, loading, error, refetch } = useSystems()
   const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [formData, setFormData] = useState(null)
@@ -22,7 +22,7 @@ function SystemManagement() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await loadSystems()
+      await refetch()
     } catch (error) {
       console.error('Error refreshing systems:', error)
     } finally {
