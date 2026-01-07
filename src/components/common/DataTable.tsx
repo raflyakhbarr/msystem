@@ -347,7 +347,7 @@ const DataTable = ({
               </Button>
             ))}
             {showAddButton && onAdd && (
-              <Button variant="secondary" size="default" onClick={onAdd} className='bg-primary text-background'>
+              <Button variant="default" size="default" onClick={onAdd} className='bg-primary text-background'>
                 Add
                 <Plus className="h-5 w-5" />
               </Button>
