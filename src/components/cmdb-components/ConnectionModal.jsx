@@ -122,6 +122,7 @@ export default function ConnectionModal({
                           {getTypeIcon(item.type)}
                           <span className="font-medium">{item.name}</span>
                         </div>
+                        <span className="text-xs text-muted-foreground">ID: {item.id}</span>
                       </div>
                     </div>
                   ))
