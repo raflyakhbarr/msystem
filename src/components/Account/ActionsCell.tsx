@@ -13,7 +13,6 @@ const ActionsCell: React.FC<ActionsCellProps> = ({ item, onEdit, onResetMac }) =
     if (onResetMac) {
       onResetMac(item);
     } else {
-      // Placeholder functionality since no API is available yet
       alert(`Reset MAC address for account: ${item.nipp}\n\nThis is a placeholder. API integration needed.`);
     }
   };

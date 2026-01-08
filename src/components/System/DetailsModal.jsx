@@ -6,14 +6,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area" // Optional: using standard div overflow if you don't have ScrollArea
+import { ScrollArea } from "@/components/ui/scroll-area" 
 
 const DetailsModal = ({ showModal, item, setShowModal }) => {
   if (!item) {
     return null;
   }
 
-  // Helper for consistent formatting
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -31,17 +30,14 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
           <DialogTitle>System Details</DialogTitle>
         </DialogHeader>
         
-        {/* Scrollable Content Area */}
         <div className="overflow-y-auto px-6 pb-6 pt-2">
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             
-            {/* Name */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Name</h4>
               <p className="text-sm font-semibold text-foreground">{item.nama}</p>
             </div>
 
-            {/* URL */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">URL</h4>
               <a href={`https://${item.url}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-primary hover:underline decoration-dashed underline-offset-4">
@@ -49,19 +45,16 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
               </a>
             </div>
 
-            {/* Destination */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Destination</h4>
               <p className="text-sm font-medium text-foreground">{item.destination}</p>
             </div>
 
-            {/* API Type */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">API Type</h4>
               <p className="text-sm font-medium text-foreground capitalize">{item.typeApi}</p>
             </div>
 
-            {/* Status */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Status</h4>
               <Badge variant={item.status ? "default" : "secondary"} className={!item.status ? "bg-red-100 text-red-700 hover:bg-red-100" : ""}>
@@ -69,17 +62,14 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
               </Badge>
             </div>
 
-            {/* Timestamps - Grouped logically */}
             <div className="col-span-1">
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Last Updated</h4>
               <p className="text-sm font-medium text-foreground">{formatDate(item.updatedAt)}</p>
               <p className="text-xs text-muted-foreground mt-1">Created: {formatDate(item.createdAt)}</p>
             </div>
 
-            {/* Divider if you want visual separation */}
             <div className="col-span-2 border-t my-1"></div>
 
-            {/* Headers - Full Width Code Block */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Headers</h4>
               <div className="rounded-md bg-muted/50 border border-border p-3">
@@ -89,7 +79,6 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
               </div>
             </div>
 
-            {/* Token - Full Width */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Token</h4>
                {item.token ? (

@@ -12,7 +12,6 @@ function Settings() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Check if user is authenticated
     const isAuthenticated = localStorage.getItem('isAuthenticated')
     if (!isAuthenticated) {
       navigate('/login')
@@ -28,7 +27,6 @@ function Settings() {
       return
     }
     
-    // Mock password change
     setPasswordForm({
       currentPassword: '',
       newPassword: '',

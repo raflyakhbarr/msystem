@@ -9,7 +9,6 @@ function Dashboard() {
   const [user, setUser] = useState<{ username?: string; name?: string } | null>(null)
 
   useEffect(() => {
-    // Get user data from localStorage
     const userDataString = localStorage.getItem('user')
     const username = localStorage.getItem('username')
 

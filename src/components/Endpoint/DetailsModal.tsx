@@ -21,7 +21,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
     setShowModal(false);
   };
 
-  // Helper for consistent date formatting
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('id-ID', {
@@ -33,7 +32,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
     });
   };
 
-  // specific logic to safely access nested group/system data
   const systemName = typeof item.group_menu === 'object' && item.group_menu?.sistem 
     ? item.group_menu.sistem.nama 
     : 'N/A';
@@ -52,7 +50,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
         <div className="overflow-y-auto px-6 pb-6 pt-2">
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             
-            {/* --- Core Identity --- */}
             <div className="col-span-2 sm:col-span-1">
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Endpoint Name</h4>
               <p className="text-sm font-semibold text-foreground">{item.nama}</p>
@@ -63,7 +60,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
               <p className="text-sm font-medium text-foreground">{item.noMenu || '-'}</p>
             </div>
 
-            {/* --- Description (Full Width) --- */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Description</h4>
               <p className="text-sm text-foreground leading-relaxed">
@@ -71,7 +67,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
               </p>
             </div>
 
-            {/* --- Technical Path (Full Width) --- */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Endpoint Path</h4>
               <div className="rounded-md bg-muted/50 border border-border p-2.5">
@@ -81,7 +76,6 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
               </div>
             </div>
 
-            {/* --- Configuration --- */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Sidebar Visibility</h4>
               <Badge variant={item.isSidebar ? 'default' : 'outline'}>
@@ -89,22 +83,18 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
               </Badge>
             </div>
 
-             {/* Spacer to keep grid alignment if needed, or System Name */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">System Name</h4>
               <p className="text-sm font-medium text-foreground">{systemName}</p>
             </div>
 
-            {/* --- Grouping Info --- */}
             <div className="col-span-2 sm:col-span-1">
                <h4 className="text-sm font-medium text-muted-foreground mb-1">Group Name</h4>
                <p className="text-sm font-medium text-foreground">{groupName}</p>
             </div>
 
-            {/* Divider */}
             <div className="col-span-2 border-t my-1"></div>
 
-            {/* --- Timestamps / Audit --- */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
               <p className="text-sm font-medium text-foreground">

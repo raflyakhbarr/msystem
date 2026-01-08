@@ -20,7 +20,6 @@ export function MenuGroupComboBox({
 }: MenuGroupComboBoxProps) {
   const { data: menuGroups, loading, error, refetch } = useApiData(fetchMenuGroupSelect);
 
-  // Transform menu groups to ComboBox options
   const options: ComboBoxOption[] = React.useMemo(() => {
     return menuGroups
       .filter(menuGroup => menuGroup.value !== undefined && menuGroup.value !== null && menuGroup.label !== undefined)
@@ -44,7 +43,6 @@ export function MenuGroupComboBox({
     );
   }
 
-  // Ensure value type matches options (API returns strings)
   const normalizedValue = value !== undefined ? String(value) : undefined;
 
   return (

@@ -12,12 +12,10 @@ const ActionsCell: React.FC<ActionsCellProps> = ({ item, onEdit }) => {
   const navigate = useNavigate();
 
   const handleShowSettingmenu = (accGroup: AccGroupItem) => {
-    // Navigate to the SettingMenu page with the account group ID
     navigate(`/account-group/setting-menu/${accGroup.codeGroup || accGroup.id}`);
   };
 
   const handleShowSettingFeature = (accGroup: AccGroupItem) => {
-    // Navigate to the SettingFeature page with the account group ID
     navigate(`/account-group/setting-feature/${accGroup.codeGroup || accGroup.id}`);
   };
   return (

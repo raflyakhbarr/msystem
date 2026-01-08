@@ -14,17 +14,16 @@ import {
 } from "@/components/ui/breadcrumb"
 
 function Layout({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ username?: string; name?: string } | null>(null) // State to hold the user data
+  const [user, setUser] = useState<{ username?: string; name?: string } | null>(null) 
   const navigate = useNavigate()
   const location = useLocation()
 
-  // 1. Authentication Check & User Loading
   useEffect(() => {
     const isAuthenticated = localStorage.getItem('isAuthenticated')
     const token = localStorage.getItem('token')
     
     if (!isAuthenticated || !token) {
-      navigate('/login') // Redirect if not logged in
+      navigate('/login') 
       return
     }
     
@@ -39,7 +38,6 @@ function Layout({ children }: { children: ReactNode }) {
     }
   }, [navigate])
 
-  // 2. Storage Listener (Auto-logout if token is cleared elsewhere)
   useEffect(() => {
     const handleStorageChange = () => {
       const token = localStorage.getItem('token')
@@ -55,7 +53,6 @@ function Layout({ children }: { children: ReactNode }) {
   const getBreadcrumbs = () => {
     const pathnames = location.pathname.split('/').filter(x => x)
     
-    // Navigation data with titles from app-sidebar
     const navData: Record<string, string> = {
       'dashboard': 'Dashboard',
       'sistem': 'System',
@@ -70,20 +67,16 @@ function Layout({ children }: { children: ReactNode }) {
       'setting-token': 'Setting Token'
     }
     
-    // Filter out the accGroupId from the pathnames for breadcrumb display
     const filteredPathnames = pathnames.filter((name, index) => {
-      // Skip the accGroupId if we're in the setting-menu or setting-feature route
       return !(pathnames[index - 1] === 'setting-menu' && pathnames[index - 2] === 'account-group') &&
              !(pathnames[index - 1] === 'setting-feature' && pathnames[index - 2] === 'account-group')
     })
     
     const breadcrumbs = filteredPathnames.map((name, index) => {
-      // Get the original index to build the correct route
       const originalIndex = pathnames.indexOf(name)
       const routeTo = `/${pathnames.slice(0, originalIndex + 1).join('/')}`
       const isLast = index === filteredPathnames.length - 1
       
-      // Use title from navData, fallback to capitalized name if not found
       const displayName = navData[name] || name.charAt(0).toUpperCase() + name.slice(1)
       
       return {

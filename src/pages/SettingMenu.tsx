@@ -21,7 +21,6 @@ const SettingMenu = () => {
   const [accGroupName, setAccGroupName] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Tree State
   const [treeData, setTreeData] = useState<any[]>([]);
   const [checkedKeys, setCheckedKeys] = useState<any[]>([]);
   const [expandedKeysMap, setExpandedKeysMap] = useState<Record<string, any[]>>({});
@@ -59,7 +58,6 @@ const SettingMenu = () => {
       if (data && data.checked) {
         setCheckedKeys(data.checked.map(String));
       }
-      // Initialize expanded keys for each system separately
       const initialExpandedKeysMap: Record<string, any[]> = {};
       const initialAutoExpandParentMap: Record<string, boolean> = {};
       formattedTree.forEach((system: any) => {
@@ -94,7 +92,6 @@ const SettingMenu = () => {
     }));
   };
 
-  // Helper to get all keys (used for initial expansion)
   const getAllKeys = (data: any[]) => {
     let keys: any[] = [];
     data.forEach((item: any) => {
@@ -104,7 +101,6 @@ const SettingMenu = () => {
     return keys;
   };
 
-  // Helper to get all descendant leaf keys (actual menu IDs)
   const getDescendantKeys = (node: any) => {
     let keys: any[] = [];
     if (node.children) {
@@ -133,10 +129,8 @@ const SettingMenu = () => {
     setCheckedKeys(newCheckedKeys);
   };
 
-  // Handle "Select All" for a specific System Card
   const handleSystemCheck = (systemNode: any, isChecked: boolean) => {
     const descendants = getDescendantKeys(systemNode);
-    // Include the System Key itself (though strictly we only save menu IDs, keeping structure is safe)
     const keysToToggle = [systemNode.key, ...descendants];
     
     let newCheckedKeys;
@@ -175,7 +169,6 @@ const SettingMenu = () => {
       setSaving(true);
       
       const keysArray = Array.isArray(checkedKeys) ? checkedKeys : [];
-      // Filter out structural keys (sys-, grp-) to send only Menu IDs to backend
       const finalMenuIds = keysArray.filter(key => !key.toString().startsWith('sys-') && !key.toString().startsWith('grp-'));
       
       await saveAccGroupMenus(accGroupData.codeGroup, finalMenuIds);
@@ -278,7 +271,6 @@ const SettingMenu = () => {
             )}
 
             {filteredTreeData.map((systemNode: any) => {
-                // Determine if all descendants of this system are checked
                 const descendantKeys = getDescendantKeys(systemNode);
                 const allChecked = descendantKeys.length > 0 && descendantKeys.every(k => checkedKeys.includes(k));
                 const someChecked = descendantKeys.some(k => checkedKeys.includes(k));

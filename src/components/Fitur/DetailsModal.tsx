@@ -46,7 +46,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
     setShowModal(false);
   };
 
-  // Logic to resolve system name from ID or Object
   const systemName = React.useMemo(() => {
     if (!item.idSistem) return 'Not assigned';
     if (typeof item.idSistem === 'object' && item.idSistem.nama) {
@@ -56,7 +55,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
     return system ? system.nama : `System ID: ${item.idSistem}`;
   }, [item.idSistem, systems]);
 
-  // Helper for consistent date formatting
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('id-ID', {
@@ -78,7 +76,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
         <div className="overflow-y-auto px-6 pb-6 pt-2">
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             
-            {/* --- Basic Identity --- */}
             <div className="col-span-2 sm:col-span-1">
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Menu Name</h4>
               <p className="text-sm font-semibold text-foreground">{item.menu}</p>
@@ -89,7 +86,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
               <p className="text-sm font-medium text-foreground">#{item.urutan}</p>
             </div>
 
-            {/* --- Route (Full Width) --- */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Route Path</h4>
               <div className="rounded-md bg-muted/50 border border-border p-2.5 inline-block">
@@ -99,11 +95,9 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
               </div>
             </div>
 
-            {/* --- Icon Display --- */}
             <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Icon</h4>
               <div className="flex items-center gap-4">
-                {/* Icon Preview Box */}
                 <div className="h-12 w-12 rounded-md border border-border bg-muted/30 flex items-center justify-center shrink-0 overflow-hidden">
                    {item.icon ? (
                       <img 
@@ -119,7 +113,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                      <span className="text-xs text-muted-foreground">N/A</span>
                    )}
                 </div>
-                {/* Icon Path Text */}
                 <div className="flex flex-col">
                    <span className="text-sm font-medium text-foreground">{item.icon || 'No icon assigned'}</span>
                    {item.icon && <span className="text-xs text-muted-foreground font-mono">/icons/{item.icon}</span>}
@@ -127,7 +120,6 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
               </div>
             </div>
 
-            {/* --- Configuration --- */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Show Feature</h4>
               <p className="text-sm font-medium text-foreground capitalize">{item.showFiture}</p>
@@ -140,16 +132,13 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
               </Badge>
             </div>
 
-            {/* --- System Association --- */}
             <div className="col-span-2">
                <h4 className="text-sm font-medium text-muted-foreground mb-1">System</h4>
                <p className="text-sm font-medium text-foreground">{systemName}</p>
             </div>
 
-            {/* Divider */}
             <div className="col-span-2 border-t my-1"></div>
 
-            {/* --- Audit Trail --- */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
               <p className="text-sm font-medium text-foreground">
