@@ -82,6 +82,10 @@ export default function CMDBVisualization() {
   const isManualActionRef = useRef(false);
   const dragStateRef = useRef({ isDragging: false, startTime: 0 });
 
+  const isSavingRef = useRef(false);
+  const changedNodesRef = useRef(new Set());
+  const lastNodePositionsRef = useRef({});
+
   const {
     pushState,
     undo,
@@ -418,6 +422,13 @@ export default function CMDBVisualization() {
   }, [nodes]);
 
   useEffect(() => {
+    nodes.forEach(node => {
+      if (!lastNodePositionsRef.current[node.id]) {
+        lastNodePositionsRef.current[node.id] = { ...node.position };
+      }
+    });
+  }, [nodes]);
+  useEffect(() => {
     const socket = io('http://localhost:5000', {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -427,7 +438,12 @@ export default function CMDBVisualization() {
     
     socketRef.current = socket;
 
-    socket.on('cmdb_update', fetchAll);
+    socket.on('cmdb_update', () => {
+      // Skip fetch if currently saving
+      if (!isSavingRef.current) {
+        fetchAll();
+      }
+    });
 
     return () => {
       socket.off('cmdb_update');
@@ -929,6 +945,24 @@ export default function CMDBVisualization() {
     if (hasPositionChange) {
       isManualActionRef.current = true;
       pushState([...nodes]);
+      
+      // Track which nodes changed
+      changes.forEach(change => {
+        if (change.type === 'position' && change.dragging === false) {
+          const node = nodes.find(n => n.id === change.id);
+          if (node) {
+            const lastPos = lastNodePositionsRef.current[change.id];
+            const newPos = change.position || node.position;
+            
+            // Check if position actually changed
+            if (!lastPos || 
+                Math.abs(lastPos.x - newPos.x) > 1 || 
+                Math.abs(lastPos.y - newPos.y) > 1) {
+              changedNodesRef.current.add(change.id);
+            }
+          }
+        }
+      });
     }
     
     onNodesChange(changes);
@@ -982,80 +1016,121 @@ export default function CMDBVisualization() {
   }, [canUndo, canRedo, undo, redo, setNodes, highlightMode, highlightedNodeId, clearHighlight]);
 
   const autoSavePositions = useCallback(async () => {
-    if (!isManualActionRef.current) return;
+    if (!isManualActionRef.current || isSavingRef.current) return;
     
+    const changedNodeIds = Array.from(changedNodesRef.current);
+    
+    if (changedNodeIds.length === 0) return;
+    
+    isSavingRef.current = true;
     setIsAutoSaving(true);
+    
     try {
       const updatePromises = [];
       
-      nodes.forEach((node) => {
+      changedNodeIds.forEach((nodeId) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        
         if (node.type === 'custom' && !node.parentNode) {
           updatePromises.push(
             api.put(`/cmdb/${node.id}/position`, {
               position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits
             })
           );
-        }
-      });
-
-      nodes.forEach((node) => {
-        if (node.type === 'group') {
+        } else if (node.type === 'group') {
           const groupId = node.id.replace('group-', '');
           updatePromises.push(
             api.put(`/groups/${groupId}/position`, {
               position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits
             })
           );
         }
       });
 
       await Promise.all(updatePromises);
-      lastSavedNodesRef.current = JSON.stringify(nodes);
+      
+      // Single emit after all updates
+      await api.post('/cmdb/trigger-update');
+      
+      nodes.forEach(node => {
+        lastNodePositionsRef.current[node.id] = { ...node.position };
+      });
+      changedNodesRef.current.clear();
       isManualActionRef.current = false;
+      
     } catch (err) {
       console.error('Auto-save error:', err);
     } finally {
       setIsAutoSaving(false);
+      isSavingRef.current = false;
     }
   }, [nodes]);
 
   useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
 
   const handleSavePositions = async () => {
+    if (isSavingRef.current) {
+      console.log('Save already in progress, skipping...');
+      return;
+    }
+    
+    const changedNodeIds = Array.from(changedNodesRef.current);
+    
+    if (changedNodeIds.length === 0) {
+      toast.info('Tidak ada perubahan untuk disimpan');
+      return;
+    }
+    
+    isSavingRef.current = true;
     setIsSaving(true);
+    
     try {
       const updatePromises = [];
       
-      nodes.forEach((node) => {
+      changedNodeIds.forEach((nodeId) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        
         if (node.type === 'custom' && !node.parentNode) {
           updatePromises.push(
             api.put(`/cmdb/${node.id}/position`, {
               position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits
             })
           );
-        }
-      });
-
-      nodes.forEach((node) => {
-        if (node.type === 'group') {
+        } else if (node.type === 'group') {
           const groupId = node.id.replace('group-', '');
           updatePromises.push(
             api.put(`/groups/${groupId}/position`, {
               position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits
             })
           );
         }
       });
 
       await Promise.all(updatePromises);
-      lastSavedNodesRef.current = JSON.stringify(nodes);
-      toast.success('Posisi berhasil disimpan!');
+      
+      // Single emit after all updates
+      await api.post('/cmdb/trigger-update');
+      
+      nodes.forEach(node => {
+        lastNodePositionsRef.current[node.id] = { ...node.position };
+      });
+      changedNodesRef.current.clear();
+      
+      toast.success(`Posisi berhasil disimpan!`);
+      
     } catch (err) {
       toast.error('Gagal menyimpan posisi', {
         description: err.response?.data?.error || err.message,
       });
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   };
 
