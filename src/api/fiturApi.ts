@@ -1,4 +1,5 @@
 import apiClient from './axiosConfig';
+import type { ApiResponse } from './types';
 
 const ENDPOINT_FITUR = import.meta.env.VITE_API_FITUR;
 const ENDPOINT_FITUR_SAVE = import.meta.env.VITE_API_FITUR_SAVE;
@@ -7,13 +8,6 @@ interface FiturItem {
   id?: number;
   nama?: string;
   code?: string;
-  [key: string]: any;
-}
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
   [key: string]: any;
 }
 

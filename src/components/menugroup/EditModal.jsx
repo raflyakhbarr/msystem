@@ -23,7 +23,6 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
     isAdministrator: editingMenuGroup?.isAdministrator || false
   });
 
-  // Update form data when editingMenuGroup changes
   React.useEffect(() => {
     setFormData({
       nama: editingMenuGroup?.nama || '',
@@ -61,7 +60,6 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
 
   const handleCloseForm = () => {
     if (!editingMenuGroup?.id) {
-      // Reset form data only for add mode
       setFormData({
         nama: '',
         idSistem: '',

@@ -1,4 +1,5 @@
 import apiClient from './axiosConfig';
+import type { ApiResponse } from './types';
 
 const SYSTEM_ENDPOINT = import.meta.env.VITE_API_SISTEM_ENDPOINT
 const SYSTEM_CB = import.meta.env.VITE_API_SISTEM_ENDPOINT_CB
@@ -17,19 +18,11 @@ export type SystemItem = {
   token: string | null;
 };
 
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: any;
-}
-
 export const fetchAllSystems = async (): Promise<SystemItem[]> => {
   try {
     const response = await apiClient.get(SYSTEM_ENDPOINT);
     const apiResponse: ApiResponse<SystemItem[]> = response.data;
 
-    // Validasi: Pastikan data ada dan berupa array
     if (!apiResponse.data || !Array.isArray(apiResponse.data)) {
       return [];
     }
@@ -58,7 +51,6 @@ export const saveSystemData = async (systemData: Partial<SystemItem>): Promise<S
     const response = await apiClient.post(SAVE_DATA_ENDPOINT, dataToSave);
     const apiResponse: ApiResponse<SystemItem> = response.data;
 
-    // Validasi response
     if (!apiResponse.data) {
       throw new Error('Failed to save system data');
     }
@@ -76,7 +68,6 @@ export const fetchSystemsForComboBox = async (): Promise<SystemItem[]> => {
     const response = await apiClient.get(SYSTEM_CB);
     const apiResponse: ApiResponse<SystemItem[]> = response.data;
 
-    // Validasi: Pastikan data ada dan berupa array
     if (!apiResponse.data || !Array.isArray(apiResponse.data)) {
       return [];
     }

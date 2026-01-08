@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDate } from '@/utils/formatDate';
 import {
   Dialog,
   DialogContent,
@@ -6,22 +7,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area" 
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const DetailsModal = ({ showModal, item, setShowModal }) => {
   if (!item) {
     return null;
   }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   return (
     <Dialog open={showModal} onOpenChange={setShowModal}>

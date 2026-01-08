@@ -1,50 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { fetchAccounts, saveAccount } from '../api/accountApi';
 import type { AccountItem } from '../api/accountApi';
 import type { AccountFormData } from '../components/Account/EditModal';
+import { useApiData } from '../hooks/useApiData';
 import DataTable from '../components/common/DataTable';
 import EditModal from '../components/Account/EditModal';
 import ActionsCell from '../components/Account/ActionsCell';
+import { useCrudForm } from '@/hooks/useCrudForm';
 import { toast } from "sonner";
 
 const Account = () => {
-  const [accounts, setAccounts] = useState<AccountItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: accounts, loading, error, refetch } = useApiData<AccountItem>(fetchAccounts, []);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<AccountFormData | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const accountData = await fetchAccounts();
-      setAccounts(accountData);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load accounts';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const data = await fetchAccounts();
-      setAccounts(data);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh data';
-      setError(errorMessage);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleAddNew = () => {
     setFormData({
@@ -66,17 +34,18 @@ const Account = () => {
     }
   };
 
-  const handleSave = async (data: AccountFormData) => {
-    try {
-      await saveAccount(data as AccountItem);
-      setShowModal(false);
-      setFormData(null);
-      handleRefresh();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(errorMessage);
-    }
+  const handleSuccess = () => {
+    setShowModal(false);
+    setFormData(null);
+    refetch();
   };
+
+  const { saving, handleSave } = useCrudForm({
+    saveFunction: (data) => saveAccount(data as AccountItem),
+    onSuccess: handleSuccess,
+    successMessage: 'Account',
+    errorMessagePrefix: 'Error saving account',
+  });
 
   const handleExport = (data: any[]) => {
     const exportData = data.map((item: AccountItem) => ({
@@ -87,7 +56,7 @@ const Account = () => {
     return exportData;
   };
 
-  const columns = [
+  const columns = useMemo(()=> [
     {
       key: 'nipp',
       label: 'NIPP',
@@ -115,19 +84,18 @@ const Account = () => {
         />
       )
     }
-  ];
+  ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={accounts}
+        data={accounts || []}
         columns={columns}
         title="Account Management"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
         onExport={handleExport}
-        refreshing={refreshing}
         showAddButton={true}
         onAdd={handleAddNew}
       />

@@ -40,7 +40,7 @@ export function NavMain({
       <SidebarGroupLabel>Menu</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
-          <Collapsible key={item.title} asChild defaultOpen={item.isActive} open={location.pathname === item.url ? true : undefined}>
+          <Collapsible key={item.title} asChild defaultOpen={item.isActive} open={location.pathname === item.url}>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip={item.title} onClick={() => navigate(item.url)} isActive={location.pathname === item.url}>
                 <item.icon />

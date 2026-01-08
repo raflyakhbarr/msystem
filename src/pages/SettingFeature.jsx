@@ -152,7 +152,7 @@ const SettingFeature = () => {
                   key={feature.id}
                   onClick={() => handleFeatureToggle(feature.id)}
                   className={`
-                    flex items-start space-x-3 p-4 rounded-lg border-l-4 border border transition-all cursor-pointer
+                    flex items-start space-x-3 p-4 rounded-lg border-l-4 border transition-all cursor-pointer
                     ${isSelected
                       ? 'border-l-primary border-l-4 bg-primary/5 hover:bg-primary/10'
                       : 'border-l-border border-l-4 border-t-border border-r-border border-b-border hover:bg-muted/40'

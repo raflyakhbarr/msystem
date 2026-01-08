@@ -1,5 +1,6 @@
 import React from 'react';
 import {Edit, RefreshCcw} from 'lucide-react'
+import { toast } from 'sonner';
 import type { AccountItem } from '@/api/accountApi';
 
 interface ActionsCellProps {
@@ -13,7 +14,7 @@ const ActionsCell: React.FC<ActionsCellProps> = ({ item, onEdit, onResetMac }) =
     if (onResetMac) {
       onResetMac(item);
     } else {
-      alert(`Reset MAC address for account: ${item.nipp}\n\nThis is a placeholder. API integration needed.`);
+      toast.info(`Reset MAC address for account: ${item.nipp}\n\nThis is a placeholder. API integration needed.`);
     }
   };
 

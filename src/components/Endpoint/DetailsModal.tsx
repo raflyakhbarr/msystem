@@ -1,5 +1,6 @@
 import React from 'react';
 import type { MenuItem } from '@/api/menuApi';
+import { formatDate } from '@/utils/formatDate';
 import {
   Dialog,
   DialogContent,
@@ -21,18 +22,7 @@ const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps) => {
     setShowModal(false);
   };
 
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const systemName = typeof item.group_menu === 'object' && item.group_menu?.sistem 
+  const systemName = typeof item.group_menu === 'object' && item.group_menu?.sistem
     ? item.group_menu.sistem.nama 
     : 'N/A';
 

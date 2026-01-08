@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLocation } from 'react-router-dom'
-import { useSystems } from '../hooks/useSystems'
-import { saveSystemData } from '../api/SystemApi'
+import { useApiData } from '../hooks/useApiData'
+import { useCrudForm } from '../hooks/useCrudForm'
+import { saveSystemData, fetchAllSystems } from '../api/SystemApi'
 import DataTable from '../components/common/DataTable'
 import EditModal from '../components/System/EditModal'
 import DetailsModal from '../components/System/DetailsModal'
@@ -12,23 +13,11 @@ import { toast } from "sonner";
 function SystemManagement() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { systems, loading, error, refetch } = useSystems()
+  const { data: systems, loading, error, refetch } = useApiData(fetchAllSystems)
   const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [formData, setFormData] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    try {
-      await refetch()
-    } catch (error) {
-      console.error('Error refreshing systems:', error)
-    } finally {
-      setRefreshing(false)
-    }
-  }
 
   const handleAddNew = () => {
     setFormData({
@@ -70,7 +59,7 @@ function SystemManagement() {
       await saveSystemData(formData)
       setShowModal(false)
       setFormData(null)
-      handleRefresh()
+      refetch()
     } catch (error) {
       console.error('Error saving system:', error)
       toast.error(error.message || 'Failed to save system')
@@ -89,7 +78,7 @@ function SystemManagement() {
     }))
   }
 
-  const columns = [
+  const columns = useMemo(()=> [
     {
       key: 'nama',
       label: 'Nama',
@@ -129,22 +118,25 @@ function SystemManagement() {
       searchable: false,
       sortable: false,
       exportable: false,
-      render: (item) => <ActionsCell item={item} onEdit={handleEditSystem} onShowDetails={handleShowDetails} onSettingToken={handleSettingToken} />
+      render: (item) => 
+          <ActionsCell item={item} 
+              onEdit={handleEditSystem} 
+              onShowDetails={handleShowDetails} 
+              onSettingToken={handleSettingToken} />
     }
-  ];
+  ]);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={systems}
+        data={systems || []}
         columns={columns}
         title="System Management"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
         onAdd={handleAddNew}
         onExport={handleExport}
-        refreshing={refreshing}
       />
 
       <EditModal

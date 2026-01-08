@@ -1,58 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { fetchFitur, saveFitur } from '../api/fiturApi';
 import { fetchAllSystems } from '../api/SystemApi';
+import { useApiData } from '../hooks/useApiData';
+import { useCrudForm } from '../hooks/useCrudForm';
 import DataTable from '../components/common/DataTable';
 import ActionsCell from '../components/Fitur/ActionsCell';
 import EditModal from '../components/Fitur/EditModal';
 import DetailsModal from '../components/Fitur/DetailsModal.tsx';
+import { toast } from 'sonner';
 
 const Fitur = () => {
-  const [fiturs, setFiturs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-
+  const { data: fiturs, loading, error, refetch } = useApiData(fetchFitur, []);
+  const { data: systems } = useApiData(fetchAllSystems, []);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [formData, setFormData] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  const [systems, setSystems] = useState([]);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [fiturData, systemsData] = await Promise.all([
-        fetchFitur(),
-        fetchAllSystems()
-      ]);
-      setFiturs(fiturData);
-      setSystems(systemsData);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load fiturs';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const data = await fetchFitur();
-      setFiturs(data);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh data';
-      setError(errorMessage);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleAddNew = () => {
     setFormData({
@@ -77,38 +41,23 @@ const Fitur = () => {
     setShowDetailsModal(true);
   };
 
-  const handleSubmit = async () => {
-    if (!formData) return;
+  const handleSuccess = () => {
+    setShowModal(false);
+    setFormData(null);
+    refetch();
+  };
 
-    try {
-      const isEdit = formData.id;
+  const { saving, handleSave } = useCrudForm({
+    saveFunction: saveFitur,
+    onSuccess: handleSuccess,
+    successMessage: 'Fitur',
+    errorMessagePrefix: 'Error saving fitur',
+    showToast: false,
+  });
 
-      const sistemId = formData.idSistem && typeof formData.idSistem === 'object'
-        ? formData.idSistem.id
-        : formData.idSistem;
-
-      const dataToSend = {
-        menu: formData.menu,
-        route: formData.route,
-        urutan: parseInt(formData.urutan) || 0,
-        icon: formData.icon,
-        showFiture: formData.showFiture,
-        status: formData.status,
-        idSistem: parseInt(sistemId) || 0
-      };
-
-      if (isEdit) {
-        dataToSend.id = formData.id;
-      }
-
-      await saveFitur(dataToSend);
-
-      setShowModal(false);
-      setFormData(null);
-      handleRefresh();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Error ${formData.id ? 'updating' : 'saving'} fitur: ` + errorMessage);
+  const handleSubmitForm = async () => {
+    if (formData) {
+      await handleSave(formData, 'id');
     }
   };
 
@@ -126,7 +75,7 @@ const Fitur = () => {
     }));
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       key: 'idSistem',
       label: 'System',
@@ -174,20 +123,19 @@ const Fitur = () => {
         <ActionsCell item={item} onEdit={handleEditFitur} onView={handleViewFitur} />
       )
     }
-  ];
+  ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={fiturs}
+        data={fiturs || []}
         columns={columns}
         title="Fitur Management"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
         onAdd={handleAddNew}
         onExport={handleExport}
-        refreshing={refreshing}
       />
 
       <EditModal
@@ -195,7 +143,7 @@ const Fitur = () => {
         formData={formData}
         setFormData={setFormData}
         setShowModal={setShowModal}
-        handleSubmit={handleSubmit}
+        handleSubmit={handleSubmitForm}
       />
 
       <DetailsModal

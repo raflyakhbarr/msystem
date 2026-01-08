@@ -1,4 +1,5 @@
 import apiClient from './axiosConfig';
+import type { ApiResponse } from './types';
 
 const ENDPOINT_LIST = import.meta.env.VITE_API_MENU_GROUP;
 
@@ -22,13 +23,6 @@ export type MenuGroupItem = {
   value?: string;
   label?: string;
 };
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: any;
-}
 
 export const fetchMenuGroup = async (): Promise<MenuGroupItem[]> => {
   try {

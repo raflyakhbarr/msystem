@@ -1,4 +1,5 @@
 import apiClient from './axiosConfig';
+import type { ApiResponse } from './types';
 
 const ENDPOINT_MENU = import.meta.env.VITE_API_MENU;
 const ENDPOINT_MENU_SAVE = import.meta.env.VITE_API_MENU_SAVE;
@@ -24,13 +25,6 @@ export type MenuItem = {
   createdAt?: string;
   updatedAt?: string;
 };
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: any;
-}
 
 export const fetchMenu = async (): Promise<MenuItem[]> => {
   try {

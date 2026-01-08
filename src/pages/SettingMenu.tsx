@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAccGroup, saveAccGroupMenus } from '../api/settingmenu';
 import { fetchAccGroup as fetchAllAccGroups } from '../api/accgroupApi';
-import { Layers, ArrowLeft, Save, Loader2, AlertCircle, Search, CheckSquare, Square } from "lucide-react";
+import { Layers, ArrowLeft, Save, Loader2,  Search, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -337,7 +337,7 @@ const SettingMenu = () => {
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => navigate(-1)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-[140px]">
+          <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-35">
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />

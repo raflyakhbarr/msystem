@@ -1,50 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { fetchMenuGroup, saveMenuGroup } from '../api/menugroupApi';
+import { useApiData } from '../hooks/useApiData';
+import { useCrudForm } from '../hooks/useCrudForm';
 import DataTable from '../components/common/DataTable';
 import EditModal from '../components/menugroup/EditModal';
 import DetailsModal from '../components/menugroup/DetailsModal';
 import ActionsCell from '../components/menugroup/ActionsCell';
 
 const EndpointGroupManagement = () => {
-  const [menuGroups, setMenuGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: menuGroups, loading, error, refetch } = useApiData(fetchMenuGroup, []);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [editingMenuGroup, setEditingMenuGroup] = useState(null);
   const [detailsMenuGroup, setDetailsMenuGroup] = useState(null);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const menuData = await fetchMenuGroup();
-      setMenuGroups(menuData);
-    } catch (error) {
-      console.error("Error loading menu groups:", error);
-      setError(error.message || 'Failed to load menu groups');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const data = await fetchMenuGroup();
-      setMenuGroups(data);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      setError(error.message || 'Failed to refresh data');
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleAddNew = () => {
     const newMenuGroup = {
@@ -77,34 +45,18 @@ const EndpointGroupManagement = () => {
     setShowModal(false);
   };
 
-  const handleSave = async (data) => {
-    try {
-      if (editingMenuGroup?.id) {
-        const dataToSend = {
-          id: data.id,
-          nama: data.nama,
-          idSistem: data.idSistem,
-          status: data.status,
-          isAdministrator: data.isAdministrator || false
-        };
-        await saveMenuGroup(dataToSend);
-      } else {
-        const dataToSend = {
-          nama: data.nama,
-          idSistem: data.idSistem,
-          status: data.status,
-          isAdministrator: data.isAdministrator || false
-        };
-        await saveMenuGroup(dataToSend);
-      }
-
-      handleRefresh();
-      handleCloseModal();
-    } catch (error) {
-      console.error("Error saving menu group:", error);
-      alert('Error saving menu group: ' + error.message);
-    }
+  const handleSuccess = () => {
+    refetch();
+    handleCloseModal();
   };
+
+  const { saving, handleSave } = useCrudForm({
+    saveFunction: saveMenuGroup,
+    onSuccess: handleSuccess,
+    successMessage: 'Menu group',
+    errorMessagePrefix: 'Error saving menu group',
+    showToast: false,
+  });
 
   const handleExport = (data) => {
     const exportData = data.map(item => ({
@@ -119,7 +71,7 @@ const EndpointGroupManagement = () => {
     return exportData;
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       key: 'nama',
       label: 'Nama',
@@ -155,20 +107,19 @@ const EndpointGroupManagement = () => {
       exportable: false,
       render: (item) => <ActionsCell item={item} onEdit={handleEditMenuGroup} onShowDetails={handleShowDetails} />
     }
-  ];
+  ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={menuGroups}
+        data={menuGroups || []}
         columns={columns}
         title="Endpoint Group"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
         onAdd={handleAddNew}
         onExport={handleExport}
-        refreshing={refreshing}
       />
 
       {/* Edit/Add Modal */}

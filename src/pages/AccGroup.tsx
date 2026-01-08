@@ -1,57 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { fetchAccGroup, saveAccGroup } from '../api/accgroupApi';
 import { fetchAllSystems } from '../api/SystemApi';
 import type { AccGroupItem } from '../api/accgroupApi';
 import type { SystemItem } from '../api/SystemApi';
 import type { AccGroupFormData } from '../components/accountgroup/EditModal';
+import { useApiData } from '../hooks/useApiData';
+import { useCrudForm } from '../hooks/useCrudForm';
 import DataTable from '../components/common/DataTable';
 import EditModal from '../components/accountgroup/EditModal';
 import ActionsCell from '../components/accountgroup/ActionsCell';
+import { toast } from 'sonner';
 
 
 const AccGroup = () => {
-  const [accGroups, setAccGroups] = useState<AccGroupItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data: accGroups, loading, error, refetch } = useApiData<AccGroupItem>(fetchAccGroup, []);
+  const { data: systems } = useApiData<SystemItem>(fetchAllSystems, []);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<AccGroupFormData | null>(null);
-  const [systems, setSystems] = useState<SystemItem[]>([]);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [accGroupData, systemsData] = await Promise.all([
-        fetchAccGroup(),
-        fetchAllSystems()
-      ]);
-      setAccGroups(accGroupData);
-      setSystems(systemsData);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load account groups';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const data = await fetchAccGroup();
-      setAccGroups(data);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh data';
-      setError(errorMessage);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleAddNew = () => {
     setFormData({
@@ -76,17 +41,18 @@ const AccGroup = () => {
     }
   };
 
-  const handleSave = async (data: AccGroupFormData) => {
-    try {
-      await saveAccGroup(data as AccGroupItem);
-      setShowModal(false);
-      setFormData(null);
-      handleRefresh();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert('Error saving account group: ' + errorMessage);
-    }
+  const handleSuccess = () => {
+    setShowModal(false);
+    setFormData(null);
+    refetch();
   };
+
+  const { saving, handleSave } = useCrudForm({
+    saveFunction: (data) => saveAccGroup(data as AccGroupItem),
+    onSuccess: handleSuccess,
+    successMessage: 'Account group',
+    errorMessagePrefix: 'Error saving account group',
+  });
 
   const handleExport = (data: any[]) => {
     const exportData = data.map((item: AccGroupItem) => ({
@@ -102,7 +68,7 @@ const AccGroup = () => {
     return exportData;
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       key: 'namaGroup',
       label: 'Nama',
@@ -137,19 +103,18 @@ const AccGroup = () => {
       exportable: false,
       render: (item: AccGroupItem) => <ActionsCell item={item} onEdit={handleEditAccGroup} />
     }
-  ];
+  ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={accGroups}
+        data={accGroups || []}
         columns={columns}
         title="Account Group Management"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
         onExport={handleExport}
-        refreshing={refreshing}
         showAddButton={true}
         onAdd={handleAddNew}
       />

@@ -1,4 +1,5 @@
 import apiClient from './axiosConfig';
+import type { ApiResponse } from './types';
 
 const ENDPOINT_LIST = import.meta.env.VITE_API_ACC_GROUP_ENDPOINT;
 const ENDPOINT_SAVE = import.meta.env.VITE_API_ACC_GROUP_SAVE;
@@ -16,13 +17,6 @@ export type AccGroupItem = {
   updatedAt?: string;
   [key: string]: any;
 };
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: any;
-}
 
 export const fetchAccGroup = async (): Promise<AccGroupItem[]> => {
   try {

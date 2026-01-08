@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDate } from '@/utils/formatDate';
 import {
   Dialog,
   DialogContent,
@@ -12,18 +13,6 @@ const DetailsModal = ({ detailsMenuGroup, onClose }) => {
     return null;
   }
 
-  // Helper for consistent date formatting
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   return (
     <Dialog open={!!detailsMenuGroup} onOpenChange={onClose}>
       <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0">
@@ -34,7 +23,6 @@ const DetailsModal = ({ detailsMenuGroup, onClose }) => {
         <div className="overflow-y-auto px-6 pb-6 pt-2">
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             
-            {/* Primary Info */}
             <div className="col-span-2 sm:col-span-1">
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Endpoint Name</h4>
               <p className="text-sm font-semibold text-foreground">{detailsMenuGroup.nama}</p>
@@ -47,7 +35,6 @@ const DetailsModal = ({ detailsMenuGroup, onClose }) => {
               </p>
             </div>
 
-            {/* Statuses */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Status</h4>
               <Badge variant={detailsMenuGroup.status ? 'default' : 'secondary'} className={!detailsMenuGroup.status ? "bg-red-100 text-red-700 hover:bg-red-100" : ""}>
@@ -62,10 +49,8 @@ const DetailsModal = ({ detailsMenuGroup, onClose }) => {
               </Badge>
             </div>
 
-            {/* Visual Divider */}
             <div className="col-span-2 border-t my-1"></div>
 
-            {/* Audit Logs - Grouped for better readability */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-1">Created</h4>
               <p className="text-sm font-medium text-foreground">

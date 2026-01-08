@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useMemo } from 'react';
 import { fetchMenu, saveMenu } from '../api/menuApi';
 import type { MenuItem } from '../api/menuApi';
 import DataTable from '../components/common/DataTable';
 import ActionsCell from '../components/Endpoint/ActionsCell';
 import EditModal from '../components/Endpoint/EditModal';
 import DetailsModal from '../components/Endpoint/DetailsModal';
+import { useCrudForm } from '@/hooks/useCrudForm';
 
 const Endpoint = () => {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [formData, setFormData] = useState<Partial<MenuItem> | null>(null);
@@ -27,28 +27,14 @@ const Endpoint = () => {
     setLoading(true);
     setError(null);
     try {
-      const menuData = await fetchMenu();
-      setMenus(menuData);
+      const data = await fetchMenu();
+      setMenus(data);
     } catch (error) {
       console.error("Error loading menus:", error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load menus';
       setError(errorMessage);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const data = await fetchMenu();
-      setMenus(data);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh data';
-      setError(errorMessage);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -82,34 +68,23 @@ const Endpoint = () => {
     setShowDetailsModal(true);
   };
 
-  const handleSubmit = async () => {
-    if (!formData) return;
+  const handleSuccess = () => {
+    setShowModal(false);
+    setFormData(null);
+    loadData();
+  };
 
-    try {
-      const isEdit = !!formData.id;
+  const { saving, handleSave } = useCrudForm({
+    saveFunction: (data: any) => saveMenu(data as MenuItem),
+    onSuccess: handleSuccess,
+    successMessage: 'Endpoint',
+    errorMessagePrefix: 'Error saving endpoint',
+    showToast: false,
+  });
 
-      const dataToSend: Partial<MenuItem> = {
-        isSidebar: formData.isSidebar ?? false,
-        nama: formData.nama || '',
-        fitur: formData.fitur || '',
-        pathMenu: formData.pathMenu || '',
-        group_menu: formData.group_menu,
-        noMenu: formData.noMenu
-      };
-
-      if (isEdit && formData.id) {
-        dataToSend.id = formData.id;
-      }
-
-      await saveMenu(dataToSend as MenuItem);
-
-      setShowModal(false);
-      setFormData(null);
-      handleRefresh();
-    } catch (error) {
-      console.error(`Error ${formData.id ? 'updating' : 'saving'} menu:`, error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(errorMessage);
+  const handleSubmitForm = async () => {
+    if (formData) {
+      await handleSave(formData, 'id');
     }
   };
 
@@ -126,7 +101,7 @@ const Endpoint = () => {
     }));
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     { key: 'system', label: 'Sistem', searchable: true, sortable: true,
       render: (item: MenuItem) => {
         if (item.group_menu && typeof item.group_menu === 'object') {
@@ -148,20 +123,19 @@ const Endpoint = () => {
       searchable:false,
       sortable:false
     }
-  ];
+  ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={menus}
+        data={menus || []}
         columns={columns}
         title="Endpoint Management"
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={loadData}
         onAdd={handleAddNew}
         onExport={handleExport}
-        refreshing={refreshing}
       />
 
       <EditModal
@@ -169,7 +143,7 @@ const Endpoint = () => {
         formData={formData}
         setFormData={setFormData}
         setShowModal={setShowModal}
-        handleSubmit={handleSubmit}
+        handleSubmit={handleSubmitForm}
       />
 
       <DetailsModal
