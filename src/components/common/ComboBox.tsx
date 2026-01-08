@@ -22,7 +22,7 @@ import {
 export interface ComboBoxOption {
   value: string | number;
   label: string;
-  [key: string]: any; // Allow additional properties
+  [key: string]: any; 
 }
 
 interface ComboBoxProps {
@@ -58,7 +58,6 @@ export function ComboBox({
   }, [options, searchTerm, searchable])
 
   const selectedOption = React.useMemo(() =>
-    // Only find an option if value is not empty/null/undefined
     value && options.find((option) => String(option.value) === String(value)),
     [options, value]
   )

@@ -80,7 +80,6 @@ const EndpointGroupManagement = () => {
   const handleSave = async (data) => {
     try {
       if (editingMenuGroup?.id) {
-        // Update existing menu group
         const dataToSend = {
           id: data.id,
           nama: data.nama,
@@ -90,7 +89,6 @@ const EndpointGroupManagement = () => {
         };
         await saveMenuGroup(dataToSend);
       } else {
-        // Add new menu group
         const dataToSend = {
           nama: data.nama,
           idSistem: data.idSistem,
@@ -118,11 +116,9 @@ const EndpointGroupManagement = () => {
       'Created At': item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''
     }));
 
-  // This will be handled by DataTable component's default export
     return exportData;
   };
 
-  // Column configuration for endpoint group data
   const columns = [
     {
       key: 'nama',

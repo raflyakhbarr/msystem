@@ -87,7 +87,6 @@ const Account = () => {
     return exportData;
   };
 
-  // Column configuration for account data
   const columns = [
     {
       key: 'nipp',

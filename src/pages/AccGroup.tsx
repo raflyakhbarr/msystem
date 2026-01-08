@@ -72,7 +72,6 @@ const AccGroup = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     if (!formData?.id) {
-      // Only reset form data for add mode
       setFormData(null);
     }
   };
@@ -103,7 +102,6 @@ const AccGroup = () => {
     return exportData;
   };
 
-  // Column configuration for account group data
   const columns = [
     {
       key: 'namaGroup',

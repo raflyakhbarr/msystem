@@ -32,19 +32,16 @@ function Login({ setIsAuthenticated }) {
     e.preventDefault()
     setError('')
     
-    // 1. Validation
     if (!formData.username || !formData.password) {
       setError('Please fill in all fields')
       return
     }
     
-    // 2. API Call
     setLoading(true)
     try {
       const response = await loginApi(formData.username, formData.password);
       
       if (response.statusCode === 200 && response.message === "Login Berhasil") {
-        // Success Logic
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('user', JSON.stringify(response.data));
         if (response.token) {
@@ -53,7 +50,6 @@ function Login({ setIsAuthenticated }) {
         setIsAuthenticated(true);
         navigate('/dashboard');
       } else {
-        // API returned 200 but logical failure
         setError(response.message || 'Invalid credentials');
       }
     } catch (error) {
@@ -118,7 +114,7 @@ function Login({ setIsAuthenticated }) {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
-                  tabIndex={-1} // Prevents tab stopping on the eye icon
+                  tabIndex={-1} 
                 >
                    {showPassword ? (
                       <Eye className="h-4 w-4" />

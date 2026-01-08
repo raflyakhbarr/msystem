@@ -27,7 +27,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-// Get user data from localStorage
 const getUserData = () => {
   const username = localStorage.getItem('username')
   const userDataString = localStorage.getItem('user')

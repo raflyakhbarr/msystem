@@ -3,14 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { fetchSettingFeature, saveAccGroupFeatures } from '../api/settingfeature';
 import { fetchAccGroup } from '../api/accgroupApi';
 import { Link, Layers, Loader2, AlertCircle, ArrowLeft, Save } from 'lucide-react';
-
-// Shadcn UI Components
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SettingFeature = () => {
-  // CHANGE 1: Use Hooks instead of props
   const { accGroupId } = useParams();
   const navigate = useNavigate();
 
@@ -85,20 +82,18 @@ const SettingFeature = () => {
         .map(([id, _]) => id);
         
       await saveAccGroupFeatures(accGroupId, selectedIds);
-      navigate(-1); // Go back
+      navigate(-1); 
     } catch (err) {
       setError(err.message || 'Failed to save feature settings');
     }
   };
 
-  // Helper to calculate stats
   const totalFeatures = featureData?.data?.length || 0;
   const selectedCount = Object.values(selectedFeatures).filter(Boolean).length;
   const isAllSelected = totalFeatures > 0 && selectedCount === totalFeatures;
   const isIndeterminate = selectedCount > 0 && selectedCount < totalFeatures;
 
   return (
-    // CHANGE 2: Full Height Flex Container
     <div className="flex flex-col h-full bg-background animate-in fade-in duration-300">
       
       {/* HEADER - Sticky Top */}

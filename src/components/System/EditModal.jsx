@@ -37,10 +37,8 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    // Prepare data to submit with Accept header based on headersType
     const dataToSubmit = { ...formData };
     
-    // Add Accept header if headersType is selected and not 'none'
     if (formData.headersType && formData.headersType !== 'none') {
       const acceptValue = formData.headersType === 'custom'
         ? formData.customHeadersType
@@ -48,7 +46,6 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
       dataToSubmit.headers = `{"Accept": "${acceptValue}"}`;
     }
     
-    // Remove headersType and customHeadersType from submission
     delete dataToSubmit.headersType;
     delete dataToSubmit.customHeadersType;
     

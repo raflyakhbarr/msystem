@@ -11,8 +11,6 @@ const Endpoint = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [formData, setFormData] = useState<Partial<MenuItem> | null>(null);
@@ -67,7 +65,6 @@ const Endpoint = () => {
   };
 
   const handleEditMenu = (menu: MenuItem) => {
-    // Extract group_menu ID if it's an object, otherwise use the value directly
     const groupId = typeof menu.group_menu === 'object' && menu.group_menu !== null
       ? menu.group_menu.id
       : menu.group_menu;

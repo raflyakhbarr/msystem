@@ -12,13 +12,11 @@ const Fitur = () => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [formData, setFormData] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  // Data for Dropdowns
   const [systems, setSystems] = useState([]);
 
   useEffect(() => {

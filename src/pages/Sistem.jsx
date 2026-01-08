@@ -89,7 +89,6 @@ function SystemManagement() {
     }))
   }
 
-  // Define columns for the DataTable inside the component to access the functions
   const columns = [
     {
       key: 'nama',
