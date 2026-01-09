@@ -1,31 +1,9 @@
 "use client"
-
 import * as React from "react"
-import {
-  Command,
-  Server,
-  Link,
-  Users,
-  SquareStack,
-  User,
-  Braces,
-  Settings,
-  LogOut,
-  LayoutDashboard,
-  GitFork,
-} from "lucide-react"
-
+import {  Command, Server, Link, Users, SquareStack, User, Braces, Settings, LogOut, LayoutDashboard, GitFork,} from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar"
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,} from "@/components/ui/sidebar"
 
 const getUserData = () => {
   const username = localStorage.getItem('username')
@@ -135,7 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <a href="/dashboard">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Command className="size-4" />
                 </div>

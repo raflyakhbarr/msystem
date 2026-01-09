@@ -1,4 +1,4 @@
-import { Moon, Sun, Contrast } from "lucide-react"
+import { Contrast } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/Theme-provider"
