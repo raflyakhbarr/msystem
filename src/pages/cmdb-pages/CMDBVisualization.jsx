@@ -22,6 +22,7 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
+  DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
@@ -1692,6 +1693,12 @@ export default function CMDBVisualization() {
       <Drawer open={showTableDrawer} onOpenChange={setShowTableDrawer}>
         <DrawerContent className="max-h-[96vh]">
           <div className="px-4 overflow-y-auto flex-1">
+            <DrawerHeader>
+            <DrawerTitle>CMDB Items Table</DrawerTitle>
+              <DrawerDescription>
+                Manage and view all CMDB items in table format
+              </DrawerDescription>
+            </DrawerHeader>
             <DataTable
               data={items}
               columns={columns}
