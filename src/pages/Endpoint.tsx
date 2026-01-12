@@ -74,7 +74,7 @@ const Endpoint = () => {
     loadData();
   };
 
-  const { saving, handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm({
     saveFunction: (data: any) => saveMenu(data as MenuItem),
     onSuccess: handleSuccess,
     successMessage: 'Endpoint',

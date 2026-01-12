@@ -20,16 +20,16 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_BASE_URL,
           changeOrigin: true,
           secure: true,
-          configure: (proxy, options) => {
-            proxy.on('error', (err, req, res) => {
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
               console.log('proxy error', err);
             });
-            proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxy.on('proxyReq', (proxyReq) => {
               // Only essential headers for API requests
               proxyReq.setHeader('Content-Type', 'application/json');
               proxyReq.setHeader('Accept', 'application/json');
             });
-            proxy.on('proxyRes', (proxyRes, req, res) => {
+            proxy.on('proxyRes', (proxyRes, req) => {
               console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
             });
           },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAccGroup, saveAccGroupMenus } from '../api/settingmenu';
 import { fetchAccGroup as fetchAllAccGroups } from '../api/accgroupApi';
@@ -26,35 +26,28 @@ const SettingMenu = () => {
   const [expandedKeysMap, setExpandedKeysMap] = useState<Record<string, any[]>>({});
   const [autoExpandParentMap, setAutoExpandParentMap] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (accGroupId) {
-      loadAccGroupData();
-      loadMenuData();
-    }
-  }, [accGroupId]);
-
-  const loadAccGroupData = async () => {
+  const loadAccGroupData = useCallback(async () => {
     try {
       if (accGroupId) {
         const allGroups = await fetchAllAccGroups();
         const targetGroup = allGroups.find((g: any) => g.id === parseInt(accGroupId) || g.codeGroup === accGroupId);
         const groupName = targetGroup?.namaGroup || targetGroup?.nama || accGroupId;
-        setAccGroupData({ codeGroup: accGroupId, nama: groupName });
-        setAccGroupName(groupName);
+        setAccGroupData({ codeGroup: accGroupId, nama: String(groupName) });
+        setAccGroupName(String(groupName));
       }
     } catch (err) {
       console.error('Error loading account group data:', err);
     }
-  };
+  }, [accGroupId]);
 
-  const loadMenuData = async () => {
+  const loadMenuData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await fetchAccGroup(accGroupId);
       const formattedTree = transformToTreeData(data.all_menu);
       setTreeData(formattedTree);
-      
+
       if (data && data.checked) {
         setCheckedKeys(data.checked.map(String));
       }
@@ -66,13 +59,20 @@ const SettingMenu = () => {
       });
       setExpandedKeysMap(initialExpandedKeysMap);
       setAutoExpandParentMap(initialAutoExpandParentMap);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('API Error:', err);
-      setError(err.message || 'Failed to load menu data');
+      setError(err instanceof Error ? err.message : 'Failed to load menu data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [accGroupId]);
+
+  useEffect(() => {
+    if (accGroupId) {
+      loadAccGroupData();
+      loadMenuData();
+    }
+  }, [accGroupId, loadAccGroupData, loadMenuData]);
 
   const transformToTreeData = (systems: any[]) => {
     return systems.map((system: any, sysIdx: number) => ({
@@ -162,24 +162,24 @@ const SettingMenu = () => {
     setCheckedKeys(finalKeys);
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
+    if (!accGroupData) return;
+
+    setSaving(true);
+
     try {
-      if (!accGroupData) return;
-      
-      setSaving(true);
-      
       const keysArray = Array.isArray(checkedKeys) ? checkedKeys : [];
       const finalMenuIds = keysArray.filter(key => !key.toString().startsWith('sys-') && !key.toString().startsWith('grp-'));
-      
+
       await saveAccGroupMenus(accGroupData.codeGroup, finalMenuIds);
-      
       toast.success('Menu settings saved successfully!');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save menu settings');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save menu settings';
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
-  };
+  }, [accGroupData, checkedKeys]);
 
   const selectedCount = Array.isArray(checkedKeys) 
     ? checkedKeys.filter(k => !k.toString().startsWith('sys-') && !k.toString().startsWith('grp-')).length

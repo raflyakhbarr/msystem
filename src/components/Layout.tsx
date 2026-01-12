@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { ModeToggle } from './mode-toggle'
@@ -14,26 +14,6 @@ import {
 } from "@/components/ui/breadcrumb"
 
 function Layout({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ username?: string; name?: string } | null>(() => {
-  if (typeof window !== 'undefined') {
-      const userDataString = localStorage.getItem('user');
-      const username = localStorage.getItem('username'); 
-
-      if (userDataString) {
-        try {
-          const parsedUser = JSON.parse(userDataString);
-          return { 
-              ...parsedUser, 
-              name: username || parsedUser.name || parsedUser.username 
-          };
-        } catch (error) {
-          console.error("Failed to parse user data", error);
-          return null;
-        }
-      }
-    }
-    return null;
-  }); 
   const navigate = useNavigate()
   const location = useLocation()
 

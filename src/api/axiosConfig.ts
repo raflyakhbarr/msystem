@@ -7,13 +7,13 @@ const API_BASE_URL = '';  // Empty string to use Vite proxy
 // Token renewal variables
 let isRefreshing = false;
 interface QueueItem {
-  resolve: (value?: any) => void;
-  reject: (reason?: any) => void;
+  resolve: (value?: unknown) => void;
+  reject: (reason?: unknown) => void;
 }
 let failedQueue: QueueItem[] = [];
 
 // Process the queue of failed requests
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach(prom => {
     if (error) {
       prom.reject(error);
@@ -27,52 +27,48 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // Silent token renewal function
 const renewToken = async () => {
-  try {
-    // Get stored credentials
-    const username = localStorage.getItem('username');
-    const hashedPassword = localStorage.getItem('hashedPassword');
-    
-    if (!username || !hashedPassword) {
-      throw new Error('No stored credentials for token renewal');
-    }
-    
-    // Create a new axios instance for token renewal to avoid interceptor loops
-    const renewalClient = axios.create({
-      baseURL: API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      withCredentials: true,
-    });
-    
-    // Make silent login request
-    const response = await renewalClient.post(import.meta.env.VITE_API_TOKEN_ENDPOINT, {
-      username,
-      password: hashedPassword
-    });
-    
-    if (response.data.token) {
-      // Update stored token
-      localStorage.setItem('token', response.data.token);
-      
-      // Calculate new expiry time
-      const expiryTime = response.data.expiresIn ?
-        new Date().getTime() + (response.data.expiresIn * 1000) :
-        new Date().getTime() + (60 * 60 * 1000); // Default 1 hour
-      localStorage.setItem('tokenExpiry', expiryTime.toString());
-      
-      // Track last renewal time for testing
-      localStorage.setItem('lastRenewal', new Date().getTime().toString());
-      
-      return response.data.token;
-    }
-    
-    throw new Error('No token received from renewal');
-  } catch (error) {
-    throw error;
+  // Get stored credentials
+  const username = localStorage.getItem('username');
+  const hashedPassword = localStorage.getItem('hashedPassword');
+
+  if (!username || !hashedPassword) {
+    throw new Error('No stored credentials for token renewal');
   }
+
+  // Create a new axios instance for token renewal to avoid interceptor loops
+  const renewalClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    withCredentials: true,
+  });
+
+  // Make silent login request
+  const response = await renewalClient.post(import.meta.env.VITE_API_TOKEN_ENDPOINT, {
+    username,
+    password: hashedPassword
+  });
+
+  if (response.data.token) {
+    // Update stored token
+    localStorage.setItem('token', response.data.token);
+
+    // Calculate new expiry time
+    const expiryTime = response.data.expiresIn ?
+      new Date().getTime() + (response.data.expiresIn * 1000) :
+      new Date().getTime() + (60 * 60 * 1000); // Default 1 hour
+    localStorage.setItem('tokenExpiry', expiryTime.toString());
+
+    // Track last renewal time for testing
+    localStorage.setItem('lastRenewal', new Date().getTime().toString());
+
+    return response.data.token;
+  }
+
+  throw new Error('No token received from renewal');
 };
 
 // Check if token needs renewal

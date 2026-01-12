@@ -6,5 +6,5 @@ export interface ApiResponse<T> {
   data?: T;
   message?: string;
   status?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }

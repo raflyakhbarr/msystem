@@ -54,7 +54,7 @@ export function useCrudForm(
     } finally {
       setSaving(false);
     }
-  }, [saveFunction, onSuccess, onError, successMessage, errorMessagePrefix]);
+  }, [saveFunction, onSuccess, onError, successMessage, errorMessagePrefix, showToast]);
 
   return {
     saving,

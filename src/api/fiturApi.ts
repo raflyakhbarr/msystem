@@ -8,7 +8,7 @@ interface FiturItem {
   id?: number;
   nama?: string;
   code?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const fetchFitur = async (): Promise<FiturItem[]> => {

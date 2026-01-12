@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface UseApiDataReturn<T> {
   data: T[];
@@ -9,19 +9,19 @@ interface UseApiDataReturn<T> {
 
 export function useApiData<T>(
   fetchFunction: () => Promise<T[]>,
-  dependencies: any[] = []
+  dependencies: unknown[] = []
 ): UseApiDataReturn<T> {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await fetchFunction();
-        setData(result);
+      setData(result);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
       setError(errorMessage);
@@ -29,11 +29,11 @@ export function useApiData<T>(
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchFunction]);
 
   useEffect(() => {
     loadData();
-  }, dependencies);
+  }, [loadData, ...dependencies]);
 
   return { data, loading, error, refetch: loadData };
 }

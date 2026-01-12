@@ -7,7 +7,6 @@ import DataTable from '../components/common/DataTable';
 import EditModal from '../components/Account/EditModal';
 import ActionsCell from '../components/Account/ActionsCell';
 import { useCrudForm } from '@/hooks/useCrudForm';
-import { toast } from "sonner";
 
 const Account = () => {
   const { data: accounts, loading, error, refetch } = useApiData<AccountItem>(fetchAccounts, []);
@@ -27,20 +26,13 @@ const Account = () => {
     setShowModal(true);
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    if (!formData?.id) {
-      setFormData(null);
-    }
-  };
-
   const handleSuccess = () => {
     setShowModal(false);
     setFormData(null);
     refetch();
   };
 
-  const { saving, handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm({
     saveFunction: (data) => saveAccount(data as AccountItem),
     onSuccess: handleSuccess,
     successMessage: 'Account',

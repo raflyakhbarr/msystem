@@ -8,14 +8,14 @@ export type AccountItem = {
   nipp?: string;
   username?: string;
   email?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 interface ApiResponse<T> {
   data?: T;
   message?: string;
   status?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const fetchAccounts = async (): Promise<AccountItem[]> => {

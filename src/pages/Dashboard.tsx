@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, Server, Link as LinkIcon, SquareStack, GitFork, Settings, LayoutDashboard, Activity, Database, Layers, ArrowRight, Search, Clock, TrendingUp,  Bell, ChevronRight } from "lucide-react"
+import { Users, Server, Link as LinkIcon, SquareStack, GitFork, Settings, Database, Layers, ArrowRight, Search, Clock, TrendingUp } from "lucide-react"
 import { fetchAllSystems } from "@/api/SystemApi"
 import { fetchMenu } from "@/api/menuApi"
 import { fetchMenuGroup } from "@/api/menugroupApi"

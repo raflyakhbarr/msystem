@@ -50,7 +50,7 @@ const EndpointGroupManagement = () => {
     handleCloseModal();
   };
 
-  const { saving, handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm({
     saveFunction: saveMenuGroup,
     onSuccess: handleSuccess,
     successMessage: 'Menu group',

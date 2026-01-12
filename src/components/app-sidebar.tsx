@@ -1,6 +1,6 @@
 "use client"
 import * as React from "react"
-import {  Command, Server, Link, Users, SquareStack, User, Braces, Settings, LogOut, LayoutDashboard, GitFork,} from "lucide-react"
+import {  Command, Server, Link, Users, SquareStack, User, Braces, LayoutDashboard, GitFork,} from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,} from "@/components/ui/sidebar"

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import type { AccountItem } from '@/api/accountApi';
 import {
   Dialog,
   DialogContent,

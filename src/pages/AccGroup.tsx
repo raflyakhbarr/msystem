@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { fetchAccGroup, saveAccGroup } from '../api/accgroupApi';
-import { fetchAllSystems } from '../api/SystemApi';
 import type { AccGroupItem } from '../api/accgroupApi';
-import type { SystemItem } from '../api/SystemApi';
 import type { AccGroupFormData } from '../components/accountgroup/EditModal';
 import { useApiData } from '../hooks/useApiData';
 import { useCrudForm } from '../hooks/useCrudForm';
@@ -13,7 +11,6 @@ import ActionsCell from '../components/accountgroup/ActionsCell';
 
 const AccGroup = () => {
   const { data: accGroups, loading, error, refetch } = useApiData<AccGroupItem>(fetchAccGroup, []);
-  const { data: systems } = useApiData<SystemItem>(fetchAllSystems, []);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<AccGroupFormData | null>(null);
 
@@ -33,24 +30,18 @@ const AccGroup = () => {
     setShowModal(true);
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    if (!formData?.id) {
-      setFormData(null);
-    }
-  };
-
   const handleSuccess = () => {
     setShowModal(false);
     setFormData(null);
     refetch();
   };
 
-  const { saving, handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm({
     saveFunction: (data) => saveAccGroup(data as AccGroupItem),
     onSuccess: handleSuccess,
     successMessage: 'Account group',
     errorMessagePrefix: 'Error saving account group',
+    showToast: false,  
   });
 
   const handleExport = (data: any[]) => {
@@ -121,7 +112,6 @@ const AccGroup = () => {
       <EditModal
         showModal={showModal}
         formData={formData}
-        systems={systems}
         setFormData={setFormData}
         setShowModal={setShowModal}
         handleSubmit={handleSave}

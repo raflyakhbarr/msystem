@@ -15,7 +15,7 @@ export type AccGroupItem = {
   updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export const fetchAccGroup = async (): Promise<AccGroupItem[]> => {

@@ -25,7 +25,7 @@ export const fetchAccGroup = async (idGroup: string = '') => {
   }
 };
 
-export const saveAccGroupMenus = async (idGroup: string, checkedMenus: any) => {
+export const saveAccGroupMenus = async (idGroup: string, checkedMenus: unknown) => {
   try {
     const response = await apiClient.post(UPDATE_SETTING_MENU, {
       idGroup,

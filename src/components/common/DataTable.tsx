@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { WorkBook } from 'xlsx';
-import { Download, RefreshCw, Plus, CheckCircle, XCircle, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
+import { Download, RefreshCw, Plus, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
@@ -9,11 +9,9 @@ import {
   Table,
   TableHeader,
   TableBody,
-  TableFooter,
   TableHead,
   TableRow,
   TableCell,
-  TableCaption,
 } from "@/components/ui/table";
 
 interface Column {
@@ -54,7 +52,6 @@ interface DataTableProps {
   error?: string | null;
   onRefresh?: () => void;
   onAdd?: () => void;
-  onEdit?: (item: DataItem) => void;
   onExport?: (data: DataItem[]) => any;
   itemsPerPage?: number;
   showAddButton?: boolean;
@@ -73,7 +70,6 @@ const DataTable = ({
   error,
   onRefresh,
   onAdd,
-  onEdit,
   onExport,
   itemsPerPage = 10,
   showAddButton = true,

@@ -2,21 +2,6 @@ import apiClient from './axiosConfig';
 
 const SETTING_FEATURE = import.meta.env.VITE_API_SETTING_FEATURE;
 
-interface SettingFeatureItem {
-  id?: number;
-  idGroup?: string;
-  featureId?: string;
-  isEnabled?: boolean;
-  [key: string]: any;
-}
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: any;
-}
-
 export const fetchSettingFeature = async (idGroup: string = '') => {
   try {
     const fullUrl = `${SETTING_FEATURE}${idGroup}`;

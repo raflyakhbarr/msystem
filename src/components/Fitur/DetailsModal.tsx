@@ -35,26 +35,27 @@ interface DetailsModalProps {
   setShowModal: (show: boolean) => void;
 }
 
-const DetailsModal: React.FC<DetailsModalProps> = ({ 
-  showModal, 
-  item, 
-  systems = [], 
-  setShowModal 
+const DetailsModal: React.FC<DetailsModalProps> = ({
+  showModal,
+  item,
+  systems = [],
+  setShowModal
 }) => {
-  if (!item) return null;
-
   const handleCloseModal = () => {
     setShowModal(false);
   };
 
+  // Hook must be called before any early return (Rules of Hooks)
   const systemName = React.useMemo(() => {
-    if (!item.idSistem) return 'Not assigned';
+    if (!item?.idSistem) return 'Not assigned';
     if (typeof item.idSistem === 'object' && item.idSistem.nama) {
       return item.idSistem.nama;
     }
     const system = systems.find(s => s.id === item.idSistem);
     return system ? system.nama : `System ID: ${item.idSistem}`;
-  }, [item.idSistem, systems]);
+  }, [item, systems]);
+
+  if (!item) return null;
 
   return (
     <Dialog open={showModal} onOpenChange={handleCloseModal}>

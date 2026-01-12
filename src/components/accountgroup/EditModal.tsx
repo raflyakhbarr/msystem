@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import SystemComboBox from '../ComboBox/SystemComboBox';
 import MenuGroupComboBox from '../ComboBox/MenuGroupComboBox';
-import type { SystemItem } from '@/api/SystemApi';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +27,6 @@ export type AccGroupFormData = {
 interface EditModalProps {
   showModal: boolean;
   formData: AccGroupFormData | null;
-  systems: SystemItem[];
   setFormData: (data: AccGroupFormData | null) => void;
   setShowModal: (show: boolean) => void;
   handleSubmit: (data: AccGroupFormData) => void;
@@ -37,7 +35,6 @@ interface EditModalProps {
 const EditModal = ({
   showModal,
   formData,
-  systems,
   setFormData,
   setShowModal,
   handleSubmit
