@@ -16,7 +16,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import 'reactflow/dist/style.css';
 import { io } from 'socket.io-client';
 import { FaSquare } from 'react-icons/fa';
@@ -26,7 +36,7 @@ import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
 import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
-import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM } from '../../utils/cmdb-utils/constants';
+import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
@@ -39,10 +49,11 @@ import ExportModal from '@/components/cmdb-components/ExportModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { FaMousePointer, FaProjectDiagram } from 'react-icons/fa';
+import { FaMousePointer, FaProjectDiagram, FaLink, FaEdit,FaTrash } from 'react-icons/fa';
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
+import DataTable from '@/components/common/DataTable';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -141,6 +152,7 @@ export default function CMDBVisualization() {
   
   const [showExportModal, setShowExportModal] = useState(false);
   const [highlightMode, setHighlightMode] = useState(false);
+  const [showTableDrawer, setShowTableDrawer] = useState(false);
   
   const {
     selectedFiles,
@@ -186,7 +198,7 @@ export default function CMDBVisualization() {
     const centerY = (bounds.height / 2 - viewport.y) / viewport.zoom;
     
     return { x: centerX, y: centerY };
-  }, []);
+    }, []);
 
     const exportVisualization = async ({ format, scope, background }) => {
     const reactFlowContainer = document.querySelector('.react-flow');
@@ -734,6 +746,136 @@ export default function CMDBVisualization() {
     }
   };
 
+  const getConnectionInfo = useCallback((itemId) => {
+    const asSource = connections.filter(c => c.source_id === itemId).length;
+    const asTarget = connections.filter(c => c.target_id === itemId).length;
+    return { dependencies: asTarget, dependents: asSource };
+  }, [connections]);
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Nama',
+        searchable: true,
+        sortable: true,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        isEnum: true,
+        enumOptions: [
+          { value: 'active', label: 'Active', color: STATUS_COLORS.active },
+          { value: 'inactive', label: 'Inactive', color: STATUS_COLORS.inactive },
+          { value: 'maintenance', label: 'Maintenance', color: STATUS_COLORS.maintenance },
+          { value: 'decommissioned', label: 'Decommissioned', color: STATUS_COLORS.decommissioned },
+        ],
+        searchable: true,
+        sortable: true,
+      },
+      {
+        key: 'location',
+        label: 'Lokasi',
+        searchable: true,
+        sortable: true,
+      },
+      {
+        key: 'group_id',
+        label: 'Group',
+        sortable: true,
+        searchable: true,
+        isEnum: true,
+        enumOptions: [
+          { value: 'null', label: 'No Group' },
+          ...groups.map(g => ({ value: g.id.toString(), label: g.name }))
+        ],
+        render: (item) => {
+          const groupId = item.group_id;
+          const group = groups.find(g => g.id === groupId);
+          return group ? (
+            <span className="px-2 py-1 rounded text-xs" style={{
+              backgroundColor: group.color,
+              border: '1px solid #6366f1'
+            }}>
+              {group.name}
+            </span>
+          ) : (
+            <span className="text-gray-400 text-xs">-</span>
+          );
+        },
+      },
+      {
+        key: 'connections',
+        label: 'Koneksi',
+        searchable: false,
+        sortable: false,
+        render: (item) => {
+          const info = getConnectionInfo(item.id);
+          return (
+            <div className="text-xs">
+              <div className="text-blue-600">↑ {info.dependencies} dependencies</div>
+              <div className="text-green-600">↓ {info.dependents} dependents</div>
+            </div>
+          );
+        },
+      },
+      {
+        key: 'actions',
+        label: 'Aksi',
+        sortable: false,
+        searchable: false,
+        render: (item) => (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleOpenConnectionModal(item)}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+              title="Kelola Koneksi"
+            >
+              <FaLink size={16} />
+            </button>
+            <button
+              onClick={() => handleEditItem(item)}
+              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
+              title="Edit"
+            >
+              <FaEdit size={16} />
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                  title="Hapus"
+                >
+                  <FaTrash size={16} />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Item ini akan dihapus secara permanen dan tidak dapat dikembalikan.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      await handleDeleteFromVisualization({ id: String(item.id), type: 'custom' });
+                    }}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Ya, Hapus
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        ),
+      },
+    ],
+    [connections, groups, getConnectionInfo, handleOpenConnectionModal, handleEditItem, handleDeleteFromVisualization]
+  );
+
   const toggleNodeVisibility = useCallback((nodeId) => {
     setHiddenNodes(prev => {
       const newSet = new Set(prev);
@@ -1166,7 +1308,11 @@ export default function CMDBVisualization() {
 
   const handleContextToggleVisibility = useCallback(() => {
     toggleNodeVisibility(contextMenu.node.id);
+
   }, [contextMenu.node, toggleNodeVisibility]);
+    const toggleTableDrawer = useCallback(() => {
+    setShowTableDrawer(prev => !prev);
+  }, []);
 
   return (
     <div className="w-full h-screen flex flex-col">
@@ -1269,6 +1415,8 @@ export default function CMDBVisualization() {
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
         onOpenExportModal={() => setShowExportModal(true)}
+        showTableDrawer={showTableDrawer}
+        onToggleTableDrawer={toggleTableDrawer}
       />
 
       {/* Rest of your JSX remains mostly the same, but uses processedNodes and processedEdges */}
@@ -1542,6 +1690,51 @@ export default function CMDBVisualization() {
           )}
         </div>
       </div>
+      <Drawer open={showTableDrawer} onOpenChange={setShowTableDrawer}>
+        <DrawerContent className="max-h-[96vh]">
+          <div className="px-4 overflow-y-auto flex-1">
+            <DrawerHeader>
+            <DrawerTitle>CMDB Items Table</DrawerTitle>
+              <DrawerDescription>
+                Manage and view all CMDB items in table format
+              </DrawerDescription>
+            </DrawerHeader>
+            <DataTable
+              data={items}
+              columns={columns}
+              title=""
+              showAddButton={false}
+              showExportButton={true}
+              showRefreshButton={false}
+              itemsPerPage={5}
+              maxHeight="max-h-[calc(96vh-200px)]"
+              onExport={(data) => {
+                return data.map(item => {
+                  const group = groups.find(g => g.id === item.group_id);
+                  return {
+                    'Nama': item.name || '',
+                    'Type': item.type || '',
+                    'Status': item.status || '',
+                    'IP': item.ip || '',
+                    'Category': item.category || '',
+                    'Location': item.location || '',
+                    'Group': group ? group.name : '-',
+                    'Environment Type': item.env_type || '',
+                    'Description': item.description || '',
+                  };
+                });
+              }}
+            />
+          </div>
+          <DrawerFooter>
+            <DrawerClose asChild>
+              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">
+                Close
+              </button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
 
       {/* Modals - Keep existing implementation */}
       <ItemFormModal

@@ -1,7 +1,7 @@
 import {
   FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, 
   FaProjectDiagram, FaDownload, FaHandPaper, FaUndo, FaRedo,
-  FaToggleOn, FaToggleOff, FaHighlighter, FaChevronDown
+  FaToggleOn, FaToggleOff, FaHighlighter, FaChevronDown, FaTable
 } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,8 +42,9 @@ export default function VisualizationNavbar({
   onOpenAddItem,
   onOpenManageGroups,
   onOpenExportModal,
+  showTableDrawer,
+  onToggleTableDrawer,
 }) {
-  // Helper functions untuk selection mode dropdown
   const getSelectionIcon = () => {
     switch (selectionMode) {
       case 'freeroam': return <FaHandPaper size={14} />;
@@ -93,6 +94,7 @@ export default function VisualizationNavbar({
                 <FaLayerGroup />
                 <span className="hidden xl:inline ml-1">Groups</span>
               </Button>
+
               <Button
                 onClick={onOpenExportModal}
                 title="Ekspor sebagai Gambar atau PDF"
@@ -101,6 +103,16 @@ export default function VisualizationNavbar({
               >
                 <FaDownload />
                 <span className="hidden lg:inline ml-1">Export</span>
+              </Button>
+
+              <Button
+                onClick={onToggleTableDrawer}
+                variant={showTableDrawer ? "default" : "secondary"}
+                className="px-3 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                title="Lihat Tabel"
+              >
+                <FaTable size={16} />
+                <span className="hidden md:inline">Tabel</span>
               </Button>
             </div>
 
