@@ -14,7 +14,26 @@ import {
 } from "@/components/ui/breadcrumb"
 
 function Layout({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ username?: string; name?: string } | null>(null) 
+  const [user, setUser] = useState<{ username?: string; name?: string } | null>(() => {
+  if (typeof window !== 'undefined') {
+      const userDataString = localStorage.getItem('user');
+      const username = localStorage.getItem('username'); 
+
+      if (userDataString) {
+        try {
+          const parsedUser = JSON.parse(userDataString);
+          return { 
+              ...parsedUser, 
+              name: username || parsedUser.name || parsedUser.username 
+          };
+        } catch (error) {
+          console.error("Failed to parse user data", error);
+          return null;
+        }
+      }
+    }
+    return null;
+  }); 
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -27,15 +46,6 @@ function Layout({ children }: { children: ReactNode }) {
       return
     }
     
-    const userDataString = localStorage.getItem('user')
-    if (userDataString) {
-      try {
-        const parsedUser = JSON.parse(userDataString)
-        setUser(parsedUser)
-      } catch (error) {
-        console.error("Failed to parse user data", error)
-      }
-    }
   }, [navigate])
 
   useEffect(() => {
