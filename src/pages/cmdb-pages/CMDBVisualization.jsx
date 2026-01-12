@@ -953,8 +953,7 @@ export default function CMDBVisualization() {
           if (node) {
             const lastPos = lastNodePositionsRef.current[change.id];
             const newPos = change.position || node.position;
-            
-            // Check if position actually changed
+
             if (!lastPos || 
                 Math.abs(lastPos.x - newPos.x) > 1 || 
                 Math.abs(lastPos.y - newPos.y) > 1) {
