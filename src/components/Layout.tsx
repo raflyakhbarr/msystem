@@ -127,8 +127,8 @@ function Layout({ children }: { children: ReactNode }) {
                 <ModeToggle />
               </div>
             </header>
-            <main className="flex-1 overflow-hidden bg-linear-to-br from-background to-background/95 p-6 min-h-0">
-              <div className="w-full h-full overflow-hidden">{children}</div>
+            <main className="flex-1 overflow-hidden p-6 min-h-0">
+              <div className="w-full h-full overflow-hidden rounded-b-xl">{children}</div>
             </main>
           </>
         )}
