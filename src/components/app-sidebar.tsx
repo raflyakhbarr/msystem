@@ -25,79 +25,79 @@ const getUserData = () => {
 
   return userData
 }
-
-const data = {
-  user: getUserData(),
-  navMain: [
-    {
-      title: "Dashboard",
-      url:"/dashboard",
-      icon:LayoutDashboard,
-      isActive: false,
-      items: [],
-    },
-    {
-      title: "System",
-      url: "/sistem",
-      icon: Server,
-      isActive: false,
-      items: [],
-    },
-    {
-      title: "Endpoint Group",
-      url: "/menu",
-      icon: Link,
-      isActive: false,
-      items: [],
-    },
-    {
-      title: "Endpoint",
-      url: "/menu-data",
-      icon: Braces,
-      isActive: false,
-      items: []
-    },
-    {
-      title: "Account Group",
-      url: "/account-group",
-      icon: Users,
-      isActive: false,
-      items: [],
-    },
-    {
-      title: "Account",
-      url: "/account",
-      icon: User,
-      isActive: false,
-      items: []
-    },
-    {
-      title: "Fitur",
-      url: "/fitur",
-      icon: SquareStack,
-      isActive: false,
-      items: [],
-    },
-    {
-      title: "CMDB",
-      url: "/cmdb/dashboard", 
-      icon: GitFork,
-      isActive: false,
-      items: [
-        {
-          title: "Items",
-          url: "/cmdb/items",
-        },
-        {
-          title: "Visualisasi",
-          url: "/cmdb/visualization",
-        },
-      ],
-    },
-  ],
-}
+const navMainItems = [
+  {
+    title: "Dashboard",
+    url:"/dashboard",
+    icon:LayoutDashboard,
+    isActive: false,
+    items: [],
+  },
+  {
+    title: "System",
+    url: "/sistem",
+    icon: Server,
+    isActive: false,
+    items: [],
+  },
+  {
+    title: "Endpoint Group",
+    url: "/menu",
+    icon: Link,
+    isActive: false,
+    items: [],
+  },
+  {
+    title: "Endpoint",
+    url: "/menu-data",
+    icon: Braces,
+    isActive: false,
+    items: []
+  },
+  {
+    title: "Account Group",
+    url: "/account-group",
+    icon: Users,
+    isActive: false,
+    items: [],
+  },
+  {
+    title: "Account",
+    url: "/account",
+    icon: User,
+    isActive: false,
+    items: []
+  },
+  {
+    title: "Fitur",
+    url: "/fitur",
+    icon: SquareStack,
+    isActive: false,
+    items: [],
+  },
+  {
+    title: "CMDB",
+    url: "",
+    icon: GitFork,
+    isActive: true,
+    items: [
+      {
+        title: "Items",
+        url: "/items",
+        isActive: false,
+      },
+      {
+        title: "Visualisasi",
+        url: "/visualization",
+        isActive: false,
+      },
+    ],
+  },
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const user = getUserData()
+
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
     localStorage.removeItem('user')
@@ -124,10 +124,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMainItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} onLogout={handleLogout} />
+        <NavUser user={user} onLogout={handleLogout} />
       </SidebarFooter>
     </Sidebar>
   )

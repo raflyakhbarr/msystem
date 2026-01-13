@@ -10,7 +10,7 @@ import ActionsCell from '../components/accountgroup/ActionsCell';
 
 
 const AccGroup = () => {
-  const { data: accGroups, loading, error, refetch } = useApiData<AccGroupItem>(fetchAccGroup, []);
+  const { data: accGroups, loading, error, refetch } = useApiData<AccGroupItem>(fetchAccGroup);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<AccGroupFormData | null>(null);
 

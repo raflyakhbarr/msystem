@@ -10,8 +10,8 @@ import DetailsModal from '../components/Fitur/DetailsModal.tsx';
 import { toast } from 'sonner';
 
 const Fitur = () => {
-  const { data: fiturs, loading, error, refetch } = useApiData(fetchFitur, []);
-  const { data: systems } = useApiData(fetchAllSystems, []);
+  const { data: fiturs, loading, error, refetch } = useApiData(fetchFitur);
+  const { data: systems } = useApiData(fetchAllSystems);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [formData, setFormData] = useState(null);

@@ -9,7 +9,7 @@ import ActionsCell from '../components/Account/ActionsCell';
 import { useCrudForm } from '@/hooks/useCrudForm';
 
 const Account = () => {
-  const { data: accounts, loading, error, refetch } = useApiData<AccountItem>(fetchAccounts, []);
+  const { data: accounts, loading, error, refetch } = useApiData<AccountItem>(fetchAccounts);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<AccountFormData | null>(null);
 
