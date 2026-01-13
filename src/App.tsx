@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from "@/components/Theme-provider"
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -20,28 +20,19 @@ import { Toaster } from 'sonner'
 
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    localStorage.getItem('isAuthenticated') === 'true'
-  );
-
-  const hasSynced = useRef(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const token = localStorage.getItem('token');
+    const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
+    return !!token && isAuthInStorage;
+  });
 
   useEffect(() => {
-    if (!hasSynced.current) {
-      const token = localStorage.getItem('token');
-      const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
-      const shouldBeAuthenticated = !!token && isAuthInStorage;
-
-      setIsAuthenticated(shouldBeAuthenticated);
-      hasSynced.current = true;
-    }
-
-    const handleStorageChange = () => {
-      const token = localStorage.getItem('token');
-      const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
-      const shouldBeAuthenticated = !!token && isAuthInStorage;
-
-      setIsAuthenticated(shouldBeAuthenticated);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token' || e.key === 'isAuthenticated') {
+        const token = localStorage.getItem('token');
+        const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
+        setIsAuthenticated(!!token && isAuthInStorage);
+      }
     };
 
     window.addEventListener('storage', handleStorageChange);

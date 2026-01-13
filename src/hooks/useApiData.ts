@@ -8,8 +8,7 @@ interface UseApiDataReturn<T> {
 }
 
 export function useApiData<T>(
-  fetchFunction: () => Promise<T[]>,
-  dependencies: unknown[] = []
+  fetchFunction: () => Promise<T[]>
 ): UseApiDataReturn<T> {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -33,7 +32,7 @@ export function useApiData<T>(
 
   useEffect(() => {
     loadData();
-  }, [loadData, ...dependencies]);
+  }, [loadData]);
 
   return { data, loading, error, refetch: loadData };
 }

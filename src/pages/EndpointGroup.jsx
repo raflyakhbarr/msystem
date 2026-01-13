@@ -8,7 +8,7 @@ import DetailsModal from '../components/menugroup/DetailsModal';
 import ActionsCell from '../components/menugroup/ActionsCell';
 
 const EndpointGroupManagement = () => {
-  const { data: menuGroups, loading, error, refetch } = useApiData(fetchMenuGroup, []);
+  const { data: menuGroups, loading, error, refetch } = useApiData(fetchMenuGroup);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [editingMenuGroup, setEditingMenuGroup] = useState(null);
