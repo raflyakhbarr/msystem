@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,15 +18,88 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
-import { Loader2 } from "lucide-react";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table"
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmit }) => {
   const [saving, setSaving] = useState(false);
 
+  // Initialize headers from existing data
+  useEffect(() => {
+    if (!showModal || !formData || Array.isArray(formData.headers)) {
+      return;
+    }
+
+    // If headers is a string (from backend), parse it to array
+    if (typeof formData.headers === 'string' && formData.headers.trim()) {
+      try {
+        const parsed = JSON.parse(formData.headers);
+        const headersArray = Object.entries(parsed).map(([key, value]) => ({
+          id: crypto.randomUUID(),
+          key,
+          value
+        }));
+        setFormData(prev => ({ ...prev, headers: headersArray }));
+      } catch (e) {
+        // If parsing fails, initialize with empty array
+        setFormData(prev => ({ ...prev, headers: [] }));
+      }
+    } else {
+      // Initialize with empty array if no headers exist
+      setFormData(prev => ({ ...prev, headers: [] }));
+    }
+  }, [showModal, formData?.id]);
+
   if (!showModal || !formData) {
     return null;
   }
+
+  // Ensure headers is an array (useEffect handles this, but render happens first)
+  const headers = Array.isArray(formData.headers) ? formData.headers : [];
+
+  // Helper functions for header management
+  const addHeaderRow = () => {
+    setFormData(prev => ({
+      ...prev,
+      headers: [
+        ...(prev.headers || []),
+        { id: crypto.randomUUID(), key: '', value: '' }
+      ]
+    }));
+  };
+
+  const removeHeaderRow = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      headers: (prev.headers || []).filter(h => h.id !== id)
+    }));
+  };
+
+  const updateHeaderKey = (id, value) => {
+    setFormData(prev => ({
+      ...prev,
+      headers: (prev.headers || []).map(h =>
+        h.id === id ? { ...h, key: value } : h
+      )
+    }));
+  };
+
+  const updateHeaderValue = (id, value) => {
+    setFormData(prev => ({
+      ...prev,
+      headers: (prev.headers || []).map(h =>
+        h.id === id ? { ...h, value: value } : h
+      )
+    }));
+  };
 
   const handleChange = (field, value) => {
     setFormData(prev => ({
@@ -37,18 +110,27 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    const dataToSubmit = { ...formData };
-    
-    if (formData.headersType && formData.headersType !== 'none') {
-      const acceptValue = formData.headersType === 'custom'
-        ? formData.customHeadersType
-        : formData.headersType;
-      dataToSubmit.headers = `{"Accept": "${acceptValue}"}`;
+
+    // Convert headers array to JSON object string
+    const headersObject = {};
+    if (Array.isArray(formData.headers)) {
+      formData.headers.forEach(h => {
+        if (h.key && h.value) {
+          headersObject[h.key] = h.value;
+        }
+      });
     }
-    
-    delete dataToSubmit.headersType;
-    delete dataToSubmit.customHeadersType;
-    
+
+    const headersString = Object.keys(headersObject).length > 0
+      ? JSON.stringify(headersObject)
+      : '';
+
+    // Create data to submit with converted headers
+    const dataToSubmit = {
+      ...formData,
+      headers: headersString
+    };
+
     try {
       setSaving(true);
       await handleSubmit(dataToSubmit);
@@ -142,49 +224,83 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
             {formData.typeApi !== 'not_token' && (
               <>
                 <Field>
-                  <FieldLabel>Header</FieldLabel>
+                  <FieldLabel>Headers</FieldLabel>
                   <FieldContent>
-                    <Select
-                      value={formData.headersType || 'none'}
-                      onValueChange={(value) => handleChange('headersType', value === 'none' ? '' : value)}
-                    >
-                      <SelectTrigger>
-                        "Accept": "<SelectValue placeholder="Select content type" />"
-                      </SelectTrigger>
-                      <SelectContent> 
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="application/json">application/json</SelectItem>
-                        <SelectItem value="application/xml">application/xml</SelectItem>
-                        <SelectItem value="custom">Custom...</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={addHeaderRow}
+                        className="w-full sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Header
+                      </Button>
+
+                      {headers.length > 0 && (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[45%]">Header Name</TableHead>
+                              <TableHead className="w-[45%]">Header Value</TableHead>
+                              <TableHead className="w-[10%]">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {headers.map((header) => (
+                              <TableRow key={header.id}>
+                                <TableCell>
+                                  <Input
+                                    type="text"
+                                    value={header.key}
+                                    onChange={(e) => updateHeaderKey(header.id, e.target.value)}
+                                    placeholder="e.g., Accept"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="text"
+                                    value={header.value}
+                                    onChange={(e) => updateHeaderValue(header.id, e.target.value)}
+                                    placeholder="e.g., application/json"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => removeHeaderRow(header.id)}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+
+                      {headers.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No headers added. Click "Add Header" to add custom headers.
+                        </p>
+                      )}
+                    </div>
                   </FieldContent>
                 </Field>
-
-                {formData.headersType === 'custom' && (
-                  <Field>
-                    <FieldLabel>Custom Content Type</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        type="text"
-                        value={formData.customHeadersType || ''}
-                        onChange={(e) => handleChange('customHeadersType', e.target.value)}
-                        placeholder="Enter custom content type (e.g., application/soap+xml)"
-                      />
-                    </FieldContent>
-                  </Field>
-                )}
-
 
                 <Field>
                   <FieldLabel>Token</FieldLabel>
                   <FieldContent>
                     <Input
-                        type="text"
-                        value={formData.token}
-                        onChange={(e) => handleChange('token', e.target.value)}
-                        placeholder="Leave empty if not required"
-                      />
+                      type="text"
+                      value={formData.token}
+                      onChange={(e) => handleChange('token', e.target.value)}
+                      placeholder="Leave empty if not required"
+                    />
                   </FieldContent>
                 </Field>
               </>
