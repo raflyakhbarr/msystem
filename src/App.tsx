@@ -17,6 +17,7 @@ import SettingToken from './pages/SettingToken'
 import CMDBItem from './pages/cmdb-pages/CMDBItem'
 import CMDBVisualization from './pages/cmdb-pages/CMDBVisualization'
 import { Toaster } from 'sonner'
+import CMDBDashboard from './pages/cmdb-pages/CMDBDashboard'
 
 
 function App() {
@@ -193,7 +194,19 @@ function App() {
             }
           />
           <Route
-            path="/items"
+            path="/cmdb/dashboard"
+            element={
+              isAuthenticated ? (
+                <Layout>
+                  <CMDBDashboard />
+                </Layout>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/cmdb/items"
             element={
               isAuthenticated ? (
                 <Layout>
@@ -205,7 +218,7 @@ function App() {
             }
           />
           <Route
-            path="/visualization"
+            path="cmdb/visualization"
             element={
               isAuthenticated ? (
                 <Layout>

@@ -80,19 +80,17 @@ const data = {
     },
     {
       title: "CMDB",
-      url: "", 
+      url: "/cmdb/dashboard", 
       icon: GitFork,
-      isActive: true,
+      isActive: false,
       items: [
         {
           title: "Items",
-          url: "/items",
-          isActive: false,
+          url: "/cmdb/items",
         },
         {
           title: "Visualisasi",
-          url: "/visualization",
-          isActive: false,
+          url: "/cmdb/visualization",
         },
       ],
     },
