@@ -25,7 +25,6 @@ const getUserData = () => {
 
   return userData
 }
-
 const navMainItems = [
   {
     title: "Dashboard",
@@ -78,18 +77,18 @@ const navMainItems = [
   },
   {
     title: "CMDB",
-    url: "",
+    url: "/cmdb/dashboard",
     icon: GitFork,
     isActive: true,
     items: [
       {
         title: "Items",
-        url: "/items",
+        url: "/cmdb/items",
         isActive: false,
       },
       {
         title: "Visualisasi",
-        url: "/visualization",
+        url: "/cmdb/visualization",
         isActive: false,
       },
     ],

@@ -83,7 +83,7 @@ function Layout({ children }: { children: ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="h-screen flex flex-col">
-        {location.pathname === '/visualization' ? (
+        {location.pathname === '/cmdb/visualization' ? (
           <>{children}</>
         ) : (
           <>
