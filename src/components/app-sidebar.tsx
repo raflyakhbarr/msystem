@@ -77,7 +77,7 @@ const navMainItems = [
   },
   {
     title: "CMDB",
-    url: "/cmdb/dashboard",
+    url: "/cmdb",
     icon: GitFork,
     isActive: true,
     items: [

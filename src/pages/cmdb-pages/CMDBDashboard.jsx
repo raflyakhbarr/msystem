@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Activity, 
   Server, 
@@ -9,7 +9,9 @@ import {
   Network,
   Clock,
   Eye,
-  Zap
+  Zap,
+  PieChart as PieChartIcon,
+  BarChart as BarChartIcon
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -17,6 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
+import { io } from 'socket.io-client';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const STATUS_CONFIG = {
   active: { label: 'Active', color: 'text-green-600', bgColor: 'bg-green-50', icon: CheckCircle2 },
@@ -25,9 +29,74 @@ const STATUS_CONFIG = {
   decommissioned: { label: 'Decommissioned', color: 'text-red-600', bgColor: 'bg-red-50', icon: AlertTriangle },
 };
 
+// Warna untuk chart (konversi dari tailwind colors ke hex)
+const CHART_COLORS = {
+  'green-600': '#16a34a',
+  'gray-600': '#4b5563', 
+  'yellow-600': '#ca8a04',
+  'red-600': '#dc2626',
+  'blue-600': '#2563eb',
+  'purple-600': '#9333ea',
+  'indigo-600': '#4f46e5',
+  'pink-600': '#db2777',
+  'teal-600': '#0d9488',
+};
+
+// Custom tooltip untuk chart
+const CustomTooltip = ({ active, payload, total }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const percentage = total > 0 ? (data.value / total) * 100 : 0;
+    
+    return (
+      <div className="bg-background border rounded-lg shadow-lg p-3">
+        <p className="font-medium">{data.name}</p>
+        <p className="text-sm text-muted-foreground">
+          {data.value} item{data.value !== 1 ? 's' : ''} ({percentage.toFixed(1)}%)
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function CMDBDashboard() {
-  const { items, groups, connections, groupConnections, loading } = useCMDB();
+  const { items, groups, connections, groupConnections, loading, fetchAll } = useCMDB();
   const [selectedTab, setSelectedTab] = useState('type');
+  const [chartType, setChartType] = useState('progress'); // 'progress', 'pie', 'bar'
+
+  useEffect(() => {
+    const socket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    socket.on('cmdb_update', () => {
+      fetchAll();
+    });
+
+    socket.on('item_updated', () => {
+      fetchAll();
+    });
+
+    socket.on('connection_updated', () => {
+      fetchAll();
+    });
+
+    socket.on('group_updated', () => {
+      fetchAll();
+    });
+
+    return () => {
+      socket.off('cmdb_update');
+      socket.off('item_updated');
+      socket.off('connection_updated');
+      socket.off('group_updated');
+      socket.disconnect();
+    };
+  }, [fetchAll]);
 
   const stats = useMemo(() => {
     const total = items.length;
@@ -89,6 +158,23 @@ export default function CMDBDashboard() {
     };
   }, [items, connections, groupConnections]);
   
+  // Data untuk chart
+  const chartData = useMemo(() => {
+    return Object.entries(STATUS_CONFIG).map(([status, config]) => {
+      const count = stats.statusCount[status] || 0;
+      const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
+      
+      return {
+        name: config.label,
+        value: count,
+        percentage: percentage,
+        color: config.color,
+        colorKey: config.color.replace('text-', ''),
+        icon: config.icon,
+      };
+    }).filter(item => item.value > 0);
+  }, [stats]);
+
   const criticalItems = useMemo(() => {
     return items
       .filter(item => item.status === 'maintenance' || item.status === 'inactive')
@@ -122,24 +208,160 @@ export default function CMDBDashboard() {
       .slice(0, 5);
   }, [items, connections]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+  // Render Status Overview berdasarkan chart type
+  const renderStatusOverview = () => {
+    if (chartType === 'progress') {
+      return (
+        <div className="space-y-4">
+          {Object.entries(STATUS_CONFIG).map(([status, config]) => {
+            const count = stats.statusCount[status] || 0;
+            const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
+            const Icon = config.icon;
+            
+            return (
+              <div key={status} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-4 h-4 ${config.color}`} />
+                    <span className="text-sm font-medium">{config.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">{count}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({percentage.toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+                <Progress value={percentage} className="h-2" />
+              </div>
+            );
+          })}
         </div>
-      </div>
-    );
-  }
+      );
+    }
+
+    if (chartType === 'pie') {
+      return (
+        <div className="flex flex-col items-center h-[300px]">
+          {chartData.length > 0 ? (
+            <>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => 
+                        `${name}: ${(percent * 100).toFixed(0)}%`
+                      }
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      nameKey="name"
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={CHART_COLORS[entry.colorKey] || "#8884d8"} 
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip total={stats.total} />} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              
+              {/* Legend */}
+              <div className="mt-4 grid grid-cols-2 gap-3 w-full">
+                {chartData.map((item) => {
+                  const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
+                  const color = CHART_COLORS[item.colorKey] || "#8884d8";
+                  
+                  return (
+                    <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="text-sm font-medium">{item.name}</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.value} ({percentage.toFixed(1)}%)
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <p>No data available for pie chart</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (chartType === 'bar') {
+      return (
+        <div className="h-[300px]">
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="hsl(var(--foreground))"
+                  fontSize={12}
+                />
+                <YAxis 
+                  stroke="hsl(var(--foreground))"
+                  fontSize={12}
+                />
+                <Tooltip content={<CustomTooltip total={stats.total} />} />
+                <Bar 
+                  dataKey="value" 
+                  radius={[4, 4, 0, 0]}
+                  fill="#8884d8"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={CHART_COLORS[entry.colorKey] || "#8884d8"} 
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <p>No data available for bar chart</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
-      {/* Header */}
+      {/* Header dengan indikator realtime */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">CMDB Dashboard</h1>
           <p className="text-gray-500 mt-1">Configuration Management Database Overview</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-xs text-green-600">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span>Live Updates</span>
+          </div>
         </div>
       </div>
 
@@ -205,38 +427,44 @@ export default function CMDBDashboard() {
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Status Breakdown */}
+        {/* Status Breakdown dengan Tab Chart */}
         <Card className="lg:col-span-2 hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Status Overview</CardTitle>
-            <CardDescription>Current status distribution of all items</CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Status Overview</CardTitle>
+                <CardDescription>Current status distribution of all items</CardDescription>
+              </div>
+              <div className="flex items-center gap-1">
+                <Tabs value={chartType} onValueChange={setChartType} className="w-auto">
+                  <TabsList className="grid w-[180px] grid-cols-3">
+                    <TabsTrigger value="progress" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 flex items-center justify-center">
+                          <div className="w-full h-1 bg-primary rounded"></div>
+                        </div>
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Chart</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {Object.entries(STATUS_CONFIG).map(([status, config]) => {
-                const count = stats.statusCount[status] || 0;
-                const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
-                const Icon = config.icon;
-                
-                return (
-                  <div key={status} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon className={`w-4 h-4 ${config.color}`} />
-                        <span className="text-sm font-medium">{config.label}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">{count}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({percentage.toFixed(0)}%)
-                        </span>
-                      </div>
-                    </div>
-                    <Progress value={percentage} className="h-2" />
-                  </div>
-                );
-              })}
-            </div>
+            {renderStatusOverview()}
           </CardContent>
         </Card>
 

@@ -185,7 +185,7 @@ function App() {
             }
           />
           <Route
-            path="/cmdb/dashboard"
+            path="/cmdb"
             element={
               isAuthenticated ? (
                 <Layout>
