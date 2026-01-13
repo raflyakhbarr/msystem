@@ -40,7 +40,16 @@ const CHART_COLORS = {
   'indigo-600': '#4f46e5',
   'pink-600': '#db2777',
   'teal-600': '#0d9488',
+  'orange-600': '#ea580c',
+  'cyan-600': '#0891b2',
+  'lime-600': '#65a30d',
 };
+
+// Warna untuk data chart dinamis
+const DYNAMIC_COLORS = [
+  '#2563eb', '#9333ea', '#4f46e5', '#db2777', '#0d9488',
+  '#ea580c', '#0891b2', '#65a30d', '#dc2626', '#ca8a04',
+];
 
 // Custom tooltip untuk chart
 const CustomTooltip = ({ active, payload, total }) => {
@@ -64,6 +73,7 @@ export default function CMDBDashboard() {
   const { items, groups, connections, groupConnections, loading, fetchAll } = useCMDB();
   const [selectedTab, setSelectedTab] = useState('type');
   const [chartType, setChartType] = useState('progress'); // 'progress', 'pie', 'bar'
+  const [detailChartType, setDetailChartType] = useState('pie'); // untuk tab detail
 
   useEffect(() => {
     const socket = io('http://localhost:5000', {
@@ -207,6 +217,104 @@ export default function CMDBDashboard() {
       .sort((a, b) => b.totalConnections - a.totalConnections)
       .slice(0, 5);
   }, [items, connections]);
+
+  // Fungsi helper untuk render chart dinamis
+  const renderDetailChart = (dataObj, title) => {
+    const chartData = Object.entries(dataObj)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: DYNAMIC_COLORS[index % DYNAMIC_COLORS.length],
+      }));
+
+    if (detailChartType === 'pie') {
+      return (
+        <div className="flex flex-col items-center">
+          <div className="h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => 
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                  nameKey="name"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip total={stats.total} />} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          
+          {/* Legend dengan detail */}
+          <div className="mt-6 grid grid-cols-2 gap-3 w-full">
+            {chartData.map((item) => {
+              const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
+              
+              return (
+                <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-sm font-medium">{item.name}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {item.value} ({percentage.toFixed(1)}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Bar chart
+    return (
+      <div className="h-96">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+            <XAxis 
+              dataKey="name" 
+              stroke="hsl(var(--foreground))"
+              fontSize={12}
+              angle={-45}
+              textAnchor="end"
+              height={100}
+            />
+            <YAxis 
+              stroke="hsl(var(--foreground))"
+              fontSize={12}
+            />
+            <Tooltip content={<CustomTooltip total={stats.total} />} />
+            <Bar 
+              dataKey="value" 
+              radius={[4, 4, 0, 0]}
+              fill="#8884d8"
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
 
   // Render Status Overview berdasarkan chart type
   const renderStatusOverview = () => {
@@ -562,32 +670,35 @@ export default function CMDBDashboard() {
         <TabsContent value="type" className="space-y-4">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Items by Type</CardTitle>
-              <CardDescription>Distribution across different types</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Items by Type</CardTitle>
+                  <CardDescription>Distribution across different types</CardDescription>
+                </div>
+                <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
+                  <TabsList className="grid w-[120px] grid-cols-2">
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.keys(stats.typeCount).length > 0 ? (
-                  Object.entries(stats.typeCount)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={type} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium capitalize">{type}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {count} ({percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
-                        </div>
-                      );
-                    })
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No type data available</p>
-                )}
-              </div>
+              {Object.keys(stats.typeCount).length > 0 ? (
+                renderDetailChart(stats.typeCount, 'Type')
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No type data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -595,32 +706,35 @@ export default function CMDBDashboard() {
         <TabsContent value="location" className="space-y-4">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Items by Location</CardTitle>
-              <CardDescription>Geographic distribution</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Items by Location</CardTitle>
+                  <CardDescription>Geographic distribution</CardDescription>
+                </div>
+                <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
+                  <TabsList className="grid w-[120px] grid-cols-2">
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.keys(stats.locationCount).length > 0 ? (
-                  Object.entries(stats.locationCount)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([location, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={location} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{location}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {count} ({percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
-                        </div>
-                      );
-                    })
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No location data available</p>
-                )}
-              </div>
+              {Object.keys(stats.locationCount).length > 0 ? (
+                renderDetailChart(stats.locationCount, 'Location')
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No location data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -628,32 +742,35 @@ export default function CMDBDashboard() {
         <TabsContent value="environment" className="space-y-4">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Items by Environment</CardTitle>
-              <CardDescription>Physical vs Virtual distribution</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Items by Environment</CardTitle>
+                  <CardDescription>Physical vs Virtual distribution</CardDescription>
+                </div>
+                <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
+                  <TabsList className="grid w-[120px] grid-cols-2">
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.keys(stats.envCount).length > 0 ? (
-                  Object.entries(stats.envCount)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([env, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={env} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium capitalize">{env}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {count} ({percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
-                        </div>
-                      );
-                    })
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No environment data available</p>
-                )}
-              </div>
+              {Object.keys(stats.envCount).length > 0 ? (
+                renderDetailChart(stats.envCount, 'Environment')
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No environment data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -661,39 +778,43 @@ export default function CMDBDashboard() {
         <TabsContent value="group" className="space-y-4">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Items by Group</CardTitle>
-              <CardDescription>Organization group distribution</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Items by Group</CardTitle>
+                  <CardDescription>Organization group distribution</CardDescription>
+                </div>
+                <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
+                  <TabsList className="grid w-[120px] grid-cols-2">
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.entries(stats.groupCount)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([groupId, count]) => {
-                    const group = groups.find(g => g.id === parseInt(groupId));
-                    const groupName = group?.name || 'No Group';
-                    const percentage = (count / stats.total) * 100;
-                    
-                    return (
-                      <div key={groupId} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {group && (
-                              <div 
-                                className="w-3 h-3 rounded-full border border-gray-300" 
-                                style={{ backgroundColor: group.color }}
-                              />
-                            )}
-                            <span className="text-sm font-medium">{groupName}</span>
-                          </div>
-                          <span className="text-sm text-muted-foreground">
-                            {count} ({percentage.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <Progress value={percentage} className="h-2" />
-                      </div>
-                    );
-                  })}
-              </div>
+              {Object.keys(stats.groupCount).length > 0 ? (
+                renderDetailChart(
+                  Object.fromEntries(
+                    Object.entries(stats.groupCount).map(([groupId, count]) => {
+                      const group = groups.find(g => g.id === parseInt(groupId));
+                      return [group?.name || 'No Group', count];
+                    })
+                  ),
+                  'Group'
+                )
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No group data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -701,32 +822,35 @@ export default function CMDBDashboard() {
         <TabsContent value="category" className="space-y-4">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Items by Category</CardTitle>
-              <CardDescription>Internal vs External distribution</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Items by Category</CardTitle>
+                  <CardDescription>Internal vs External distribution</CardDescription>
+                </div>
+                <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
+                  <TabsList className="grid w-[120px] grid-cols-2">
+                    <TabsTrigger value="pie" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <PieChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Pie</span>
+                      </div>
+                    </TabsTrigger>
+                    <TabsTrigger value="bar" className="h-8 px-2">
+                      <div className="flex items-center gap-1">
+                        <BarChartIcon className="w-3 h-3" />
+                        <span className="text-xs">Bar</span>
+                      </div>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.keys(stats.categoryCount).length > 0 ? (
-                  Object.entries(stats.categoryCount)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([category, count]) => {
-                      const percentage = (count / stats.total) * 100;
-                      return (
-                        <div key={category} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium capitalize">{category}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {count} ({percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
-                        </div>
-                      );
-                    })
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No category data available</p>
-                )}
-              </div>
+              {Object.keys(stats.categoryCount).length > 0 ? (
+                renderDetailChart(stats.categoryCount, 'Category')
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No category data available</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
