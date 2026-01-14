@@ -242,8 +242,8 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="w-[45%]">Header Name</TableHead>
-                              <TableHead className="w-[45%]">Header Value</TableHead>
+                              <TableHead className="w-[45%]">Header</TableHead>
+                              <TableHead className="w-[45%]">Value</TableHead>
                               <TableHead className="w-[10%]">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -292,7 +292,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                   </FieldContent>
                 </Field>
 
-                <Field>
+                {/* <Field>
                   <FieldLabel>Token</FieldLabel>
                   <FieldContent>
                     <Input
@@ -302,7 +302,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                       placeholder="Leave empty if not required"
                     />
                   </FieldContent>
-                </Field>
+                </Field> */}
               </>
             )}
           </div>
@@ -334,3 +334,18 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
 };
 
 export default EditModal;
+
+
+
+// {
+//             "id": 54,
+//             "nama": "TPS",
+//             "url": "tps.com",
+//             "destination": "/api/tps",
+//             "typeApi": "not_token",
+//             "status": true,
+//             "createdAt": "2025-12-15T06:56:57.695Z",
+//             "updatedAt": "2025-12-18T06:59:48.327Z",
+//             "headers": "{\"Accept\":\"application/json\"}",
+//             "token": null
+//         }

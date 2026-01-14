@@ -70,7 +70,7 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
               </div>
             </div>
 
-            <div className="col-span-2">
+            {/* <div className="col-span-2">
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Token</h4>
                {item.token ? (
                 <div className="rounded-md bg-muted/50 border border-border p-3 break-all">
@@ -79,7 +79,7 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
                ) : (
                  <p className="text-sm text-muted-foreground italic">No token available</p>
                )}
-            </div>
+            </div> */}
 
           </div>
         </div>
