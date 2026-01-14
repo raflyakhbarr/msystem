@@ -51,12 +51,11 @@ function SystemManagement() {
     setShowDetailsModal(false)
   }
 
-  const handleSubmit = async () => {
-    if (!formData) return
- 
+  const handleSubmit = async (data) => {
+    if (!data) return
+
     try {
-      const isEdit = !!formData.id
-      await saveSystemData(formData)
+      await saveSystemData(data)
       setShowModal(false)
       setFormData(null)
       refetch()
