@@ -81,7 +81,7 @@ export default function ConnectionModal({
 
             <TabsContent value="item" className="space-y-3 mt-4">
               {selectedItems.length > 0 && (
-                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500">
+                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500 dark:text-black">
                   <p className="font-semibold text-sm mb-2">Items Terpilih</p>
                   {selectedItems.map((item) => (
                     <div
@@ -134,7 +134,7 @@ export default function ConnectionModal({
 
             <TabsContent value="group" className="space-y-3 mt-4">
               {selectedGroupConnections.length > 0 && (
-                <div className="p-3 border rounded-lg bg-purple-50 border-purple-500">
+                <div className="p-3 border rounded-lg bg-purple-50 border-purple-500 dark:text-black">
                   <p className="font-semibold text-sm mb-2">Groups Terpilih</p>
                   {selectedGroupConnections.map((groupId) => {
                     const group = groups.find(g => g.id === groupId);

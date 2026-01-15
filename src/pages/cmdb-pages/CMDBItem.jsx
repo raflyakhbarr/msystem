@@ -401,7 +401,6 @@ export default function CMDBItem() {
         searchable: true,
         isEnum: true,
         enumOptions: [
-          // { value: '', label: 'All' },
           { value: 'null', label: 'No Group' },
           ...groups.map(g => ({ value: g.id.toString(), label: g.name }))
         ],
@@ -409,7 +408,7 @@ export default function CMDBItem() {
           const groupId = item.group_id;
           const group = groups.find(g => g.id === groupId);
           return group ? (
-            <span className="px-2 py-1 rounded text-xs" style={{
+            <span className="px-2 py-1 rounded text-xs text-black" style={{
               backgroundColor: group.color,
               border: '1px solid #6366f1'
             }}>

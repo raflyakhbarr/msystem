@@ -616,7 +616,7 @@ export default function CMDBDashboard() {
 
       {/* Highly Connected Items */}
       {highlyConnectedItems.length > 0 && (
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="hover:shadow-lg transition-shadow ">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-blue-600" />
@@ -636,14 +636,16 @@ export default function CMDBDashboard() {
                       <Network className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{item.name}</p>
-                      <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
-                        <span className="flex items-center gap-1">
-                          <span className="text-blue-600">→</span> {dependencies} dependencies
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="text-green-600">←</span> {dependents} dependents
-                        </span>
+                      <div className="dark:text-black">
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
+                          <span className="flex items-center gap-1">
+                            <span className="text-blue-600">→</span> {dependencies} dependencies
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="text-green-600">←</span> {dependents} dependents
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
