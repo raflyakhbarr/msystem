@@ -58,12 +58,36 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
     }
   }, [showModal, formData?.id]);
 
+  // Initialize ip_whitelist from existing data (simple string array)
+  useEffect(() => {
+    if (!showModal || !formData) {
+      return;
+    }
+
+    // If ip_whitelist is a string (from backend), parse it to array
+    if (typeof formData.ip_whitelist === 'string' && formData.ip_whitelist.trim()) {
+      try {
+        const parsed = JSON.parse(formData.ip_whitelist);
+        setFormData(prev => ({ ...prev, ip_whitelist: Array.isArray(parsed) ? parsed : [] }));
+      } catch (e) {
+        // If parsing fails, initialize with empty array
+        setFormData(prev => ({ ...prev, ip_whitelist: [] }));
+      }
+    } else if (!Array.isArray(formData.ip_whitelist)) {
+      // Initialize with empty array if no ip_whitelist exist
+      setFormData(prev => ({ ...prev, ip_whitelist: [] }));
+    }
+  }, [showModal, formData?.id]);
+
   if (!showModal || !formData) {
     return null;
   }
 
   // Ensure headers is an array (useEffect handles this, but render happens first)
   const headers = Array.isArray(formData.headers) ? formData.headers : [];
+
+  // Ensure ip_whitelist is an array
+  const ipWhitelist = Array.isArray(formData.ip_whitelist) ? formData.ip_whitelist : [];
 
   // Helper functions for header management
   const addHeaderRow = () => {
@@ -101,6 +125,30 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
     }));
   };
 
+  // Helper functions for ip_whitelist management (simple string array)
+  const addIpWhitelistRow = () => {
+    setFormData(prev => ({
+      ...prev,
+      ip_whitelist: [...(prev.ip_whitelist || []), '']
+    }));
+  };
+
+  const removeIpWhitelistRow = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      ip_whitelist: (prev.ip_whitelist || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateIpWhitelistValue = (index, value) => {
+    setFormData(prev => ({
+      ...prev,
+      ip_whitelist: (prev.ip_whitelist || []).map((ip, i) =>
+        i === index ? value : ip
+      )
+    }));
+  };
+
   const handleChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
@@ -125,10 +173,21 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
       ? JSON.stringify(headersObject)
       : '';
 
-    // Create data to submit with converted headers
+    // Convert ip_whitelist array to JSON string (filter out empty values)
+    const ipWhitelistArray = (Array.isArray(formData.ip_whitelist)
+      ? formData.ip_whitelist
+      : []
+    ).filter(ip => ip && ip.trim());
+
+    const ipWhitelistString = ipWhitelistArray.length > 0
+      ? JSON.stringify(ipWhitelistArray)
+      : '';
+
+    // Create data to submit with converted headers and ip_whitelist
     const dataToSubmit = {
       ...formData,
-      headers: headersString
+      headers: headersString,
+      ip_whitelist: ipWhitelistString
     };
 
     try {
@@ -221,90 +280,134 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
               </FieldContent>
             </Field>
 
-            {formData.typeApi !== 'not_token' && (
-              <>
-                <Field>
-                  <FieldLabel>Headers</FieldLabel>
-                  <FieldContent>
-                    <div className="space-y-3">
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        onClick={addHeaderRow}
-                        className="w-full sm:w-auto"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Header
-                      </Button>
+            <Field>
+              <FieldLabel>Headers</FieldLabel>
+              <FieldContent>
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={addHeaderRow}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Header
+                  </Button>
 
-                      {headers.length > 0 && (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[45%]">Header</TableHead>
-                              <TableHead className="w-[45%]">Value</TableHead>
-                              <TableHead className="w-[10%]">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {headers.map((header) => (
-                              <TableRow key={header.id}>
-                                <TableCell>
-                                  <Input
-                                    type="text"
-                                    value={header.key}
-                                    onChange={(e) => updateHeaderKey(header.id, e.target.value)}
-                                    placeholder="e.g., Accept"
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Input
-                                    type="text"
-                                    value={header.value}
-                                    onChange={(e) => updateHeaderValue(header.id, e.target.value)}
-                                    placeholder="e.g., application/json"
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => removeHeaderRow(header.id)}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
+                  {headers.length > 0 && (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[45%]">Header</TableHead>
+                          <TableHead className="w-[45%]">Value</TableHead>
+                          <TableHead className="w-[10%]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {headers.map((header) => (
+                          <TableRow key={header.id}>
+                            <TableCell>
+                              <Input
+                                type="text"
+                                value={header.key}
+                                onChange={(e) => updateHeaderKey(header.id, e.target.value)}
+                                placeholder="e.g., Accept"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="text"
+                                value={header.value}
+                                onChange={(e) => updateHeaderValue(header.id, e.target.value)}
+                                placeholder="e.g., application/json"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => removeHeaderRow(header.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
 
-                      {headers.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No headers added. Click "Add Header" to add custom headers.
-                        </p>
-                      )}
-                    </div>
-                  </FieldContent>
-                </Field>
+                  {headers.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No headers added. Click "Add Header" to add custom headers.
+                    </p>
+                  )}
+                </div>
+              </FieldContent>
+            </Field>
 
-                {/* <Field>
-                  <FieldLabel>Token</FieldLabel>
-                  <FieldContent>
-                    <Input
-                      type="text"
-                      value={formData.token}
-                      onChange={(e) => handleChange('token', e.target.value)}
-                      placeholder="Leave empty if not required"
-                    />
-                  </FieldContent>
-                </Field> */}
-              </>
-            )}
+            <Field>
+              <FieldLabel>IP Whitelist</FieldLabel>
+              <FieldContent>
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={addIpWhitelistRow}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add IP
+                  </Button>
+
+                  {ipWhitelist.length > 0 && (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[90%]">IP Address</TableHead>
+                          <TableHead className="w-[10%]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ipWhitelist.map((ip, index) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Input
+                                type="text"
+                                value={ip}
+                                onChange={(e) => updateIpWhitelistValue(index, e.target.value)}
+                                placeholder="e.g., 192.168.1.1"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => removeIpWhitelistRow(index)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+
+                  {ipWhitelist.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No IPs added. Click "Add IP" to add IPs to whitelist.
+                    </p>
+                  )}
+                </div>
+              </FieldContent>
+            </Field>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t border-border mt-4">

@@ -16,6 +16,7 @@ export type SystemItem = {
   updatedAt?: string;
   headers: string;
   token: string | null;
+  ip_whitelist?: string;
 };
 
 export const fetchAllSystems = async (): Promise<SystemItem[]> => {
@@ -45,7 +46,8 @@ export const saveSystemData = async (systemData: Partial<SystemItem>): Promise<S
       typeApi: systemData.typeApi,
       status: systemData.status,
       headers: systemData.headers,
-      token: systemData.token
+      token: systemData.token,
+      ip_whitelist: systemData.ip_whitelist
     };
     
     const response = await apiClient.post(SAVE_DATA_ENDPOINT, dataToSave);
