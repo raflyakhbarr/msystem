@@ -3,7 +3,7 @@ import { fetchAccounts, saveAccount } from '../api/accountApi';
 import type { AccountItem } from '../api/accountApi';
 import type { AccountFormData } from '../components/Account/EditModal';
 import { useApiData } from '../hooks/useApiData';
-import DataTable from '../components/common/DataTable';
+import DataTable, { type DataItem } from '../components/common/DataTable';
 import EditModal from '../components/Account/EditModal';
 import ActionsCell from '../components/Account/ActionsCell';
 import { useCrudForm } from '@/hooks/useCrudForm';
@@ -39,8 +39,8 @@ const Account = () => {
     errorMessagePrefix: 'Error saving account',
   });
 
-  const handleExport = (data: any[]) => {
-    const exportData = data.map((item: AccountItem) => ({
+  const handleExport = <T extends DataItem>(data: T[]) => {
+    const exportData = (data as unknown as AccountItem[]).map((item) => ({
       NIPP: item.nipp || '',
       Email: item.email || ''
     }));
@@ -69,9 +69,9 @@ const Account = () => {
       searchable: false,
       sortable: false,
       exportable: false,
-      render: (item: AccountItem) => (
+      render: (item: unknown) => (
         <ActionsCell
-          item={item}
+          item={item as AccountItem}
           onEdit={handleEditAccount}
         />
       )

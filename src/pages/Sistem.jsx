@@ -106,10 +106,7 @@ function SystemManagement() {
       sortable: true,
       exportable: true,
       isBoolean: true,
-      trueLabel: 'Active',
-      falseLabel: 'Inactive',
-      trueColor: 'bg-green-100 text-green-800',
-      falseColor: 'bg-red-100 text-red-800'
+      badgelabel: 'Active:Inactive'
     },
     {
       key: 'actions',

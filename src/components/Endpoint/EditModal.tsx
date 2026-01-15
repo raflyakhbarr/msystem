@@ -78,8 +78,10 @@ const EditModal = ({
                 <MenuGroupComboBox
                   value={
                     typeof formData?.group_menu === 'object' && formData.group_menu !== null && 'id' in formData.group_menu
-                      ? (formData.group_menu as any).id
-                      : formData?.group_menu
+                      ? (formData.group_menu as {id:number}).id
+                      :typeof formData?.group_menu === 'number'
+                      ? formData?.group_menu
+                      :undefined
                   }
                   onValueChange={(value) => setFormData({
                     ...formData,

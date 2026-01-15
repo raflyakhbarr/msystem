@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchAccGroup, saveAccGroupMenus } from '../api/settingmenu';
-import { fetchAccGroup as fetchAllAccGroups } from '../api/accgroupApi';
+import { fetchAccGroup as fetchAllAccGroups, type AccGroupItem } from '../api/accgroupApi';
 import { Layers, ArrowLeft, Save, Loader2,  Search, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,38 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Tree from 'rc-tree';
 import 'rc-tree/assets/index.css';
+import type { Key } from 'rc-tree/lib/interface';
+
+interface TreeNode {
+    key: string;
+    title: string;
+    type?: 'system' | 'group';
+    isLeaf?: boolean;
+    children?: TreeNode[];
+  }
+interface MenuSystem {
+    nama: string;
+    group_menu?: MenuGroup[];
+  }
+
+  interface MenuGroup {
+    nama: string;
+    menus?: MenuItem[];
+  }
+
+  interface MenuItem {
+    id: number | string;
+    nama: string;
+  }
+const getAllKeys = (data: TreeNode[]): Key[] => {
+    let keys: Key[] = [];
+    data.forEach((item: TreeNode) => {
+      keys.push(item.key);
+      if (item.children) keys = keys.concat(getAllKeys(item.children));
+    });
+    return keys;
+  };
+
 
 const SettingMenu = () => {
   const { accGroupId } = useParams();
@@ -21,16 +53,16 @@ const SettingMenu = () => {
   const [accGroupName, setAccGroupName] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  const [treeData, setTreeData] = useState<any[]>([]);
-  const [checkedKeys, setCheckedKeys] = useState<any[]>([]);
-  const [expandedKeysMap, setExpandedKeysMap] = useState<Record<string, any[]>>({});
+  const [treeData, setTreeData] = useState<TreeNode[]>([]);
+  const [checkedKeys, setCheckedKeys] = useState<Key[]>([]);
+  const [expandedKeysMap, setExpandedKeysMap] = useState<Record<string, Key[]>>({});
   const [autoExpandParentMap, setAutoExpandParentMap] = useState<Record<string, boolean>>({});
 
   const loadAccGroupData = useCallback(async () => {
     try {
       if (accGroupId) {
         const allGroups = await fetchAllAccGroups();
-        const targetGroup = allGroups.find((g: any) => g.id === parseInt(accGroupId) || g.codeGroup === accGroupId);
+        const targetGroup = allGroups.find((g: AccGroupItem ) => g.id === parseInt(accGroupId) || g.codeGroup === accGroupId);
         const groupName = targetGroup?.namaGroup || targetGroup?.nama || accGroupId;
         setAccGroupData({ codeGroup: accGroupId, nama: String(groupName) });
         setAccGroupName(String(groupName));
@@ -51,9 +83,9 @@ const SettingMenu = () => {
       if (data && data.checked) {
         setCheckedKeys(data.checked.map(String));
       }
-      const initialExpandedKeysMap: Record<string, any[]> = {};
+      const initialExpandedKeysMap: Record<string, Key[]> = {};
       const initialAutoExpandParentMap: Record<string, boolean> = {};
-      formattedTree.forEach((system: any) => {
+      formattedTree.forEach((system: TreeNode) => {
         initialExpandedKeysMap[system.key] = getAllKeys([system]);
         initialAutoExpandParentMap[system.key] = true;
       });
@@ -74,16 +106,16 @@ const SettingMenu = () => {
     }
   }, [accGroupId, loadAccGroupData, loadMenuData]);
 
-  const transformToTreeData = (systems: any[]) => {
-    return systems.map((system: any, sysIdx: number) => ({
+  const transformToTreeData = (systems: MenuSystem[]): TreeNode[] => {
+    return systems.map((system: MenuSystem, sysIdx: number) => ({
       key: `sys-${sysIdx}`,
       title: system.nama,
       type: 'system',
-      children: system.group_menu?.map((group: any, grpIdx: number) => ({
+      children: system.group_menu?.map((group: MenuGroup, grpIdx: number) => ({
         key: `grp-${sysIdx}-${grpIdx}`,
         title: group.nama,
         type: 'group',
-        children: group.menus?.map((menu: any) => ({
+        children: group.menus?.map((menu: MenuItem) => ({
           key: String(menu.id),
           title: menu.nama,
           isLeaf: true
@@ -92,19 +124,12 @@ const SettingMenu = () => {
     }));
   };
 
-  const getAllKeys = (data: any[]) => {
-    let keys: any[] = [];
-    data.forEach((item: any) => {
-      keys.push(item.key);
-      if (item.children) keys = keys.concat(getAllKeys(item.children));
-    });
-    return keys;
-  };
+  
 
-  const getDescendantKeys = (node: any) => {
-    let keys: any[] = [];
+  const getDescendantKeys = (node: TreeNode):Key[] => {
+    let keys: Key[] = [];
     if (node.children) {
-      node.children.forEach((child: any) => {
+      node.children.forEach((child: TreeNode) => {
         keys.push(child.key);
         keys = keys.concat(getDescendantKeys(child));
       });
@@ -112,24 +137,8 @@ const SettingMenu = () => {
     return keys;
   };
 
-  const onCheck = (checkedKeysValue: any, info: any) => {
-    const currentChecked = [...checkedKeys];
-    const { node, checked } = info;
-    const nodeKey = node.key;
-    
-    const descendants = getDescendantKeys(node);
-    const keysToToggle = [nodeKey, ...descendants];
-    
-    let newCheckedKeys;
-    if (checked) {
-      newCheckedKeys = Array.from(new Set([...currentChecked, ...keysToToggle]));
-    } else {
-      newCheckedKeys = currentChecked.filter(key => !keysToToggle.includes(key));
-    }
-    setCheckedKeys(newCheckedKeys);
-  };
 
-  const handleSystemCheck = (systemNode: any, isChecked: boolean) => {
+  const handleSystemCheck = (systemNode: TreeNode, isChecked: boolean) => {
     const descendants = getDescendantKeys(systemNode);
     const keysToToggle = [systemNode.key, ...descendants];
     
@@ -142,7 +151,7 @@ const SettingMenu = () => {
     setCheckedKeys(newCheckedKeys);
   };
 
-  const onExpand = (expandedKeysValue: any, systemKey: string) => {
+  const onExpand = (expandedKeysValue: Key[], systemKey: string) => {
     setExpandedKeysMap(prev => ({
       ...prev,
       [systemKey]: expandedKeysValue
@@ -153,12 +162,12 @@ const SettingMenu = () => {
     }));
   };
   
-  const handleTreeCheck = (checkedKeysFromTree: any, systemNode: any) => {
+  const handleTreeCheck = (checkedKeysFromTree: Key[] | { checked: Key[]; halfChecked: Key[] }, systemNode: TreeNode) => {
+    const keysArray = Array.isArray(checkedKeysFromTree)
+    ? checkedKeysFromTree.map(String) : checkedKeysFromTree.checked.map(String);
     const currentSystemKeys = getDescendantKeys(systemNode);
-
     const otherSystemKeys = checkedKeys.filter(key => !currentSystemKeys.includes(key));
-
-    const finalKeys = [...otherSystemKeys, ...checkedKeysFromTree];
+    const finalKeys = [...otherSystemKeys, ...keysArray];
     setCheckedKeys(finalKeys);
   };
 
@@ -185,16 +194,16 @@ const SettingMenu = () => {
     ? checkedKeys.filter(k => !k.toString().startsWith('sys-') && !k.toString().startsWith('grp-')).length
     : 0;
 
-  const filteredTreeData = useMemo(() => {
+  const filteredTreeData = useMemo<TreeNode[]>(() => {
     if (!searchTerm) return treeData;
     const lowerSearch = searchTerm.toLowerCase();
     
     return treeData.map(system => {
       const systemMatches = system.title.toLowerCase().includes(lowerSearch);
       
-      const filteredChildren = system.children?.map((group: any) => {
+      const filteredChildren = system.children?.map((group: TreeNode) => {
           const groupMatches = group.title.toLowerCase().includes(lowerSearch);
-          const filteredMenus = group.children?.filter((menu: any) =>
+          const filteredMenus = group.children?.filter((menu: TreeNode) =>
             menu.title.toLowerCase().includes(lowerSearch)
           );
           
@@ -208,7 +217,7 @@ const SettingMenu = () => {
         return { ...system, children: filteredChildren?.length ? filteredChildren : system.children };
       }
       return null;
-    }).filter(Boolean);
+    }).filter(Boolean) as TreeNode[];
   }, [treeData, searchTerm]);
 
   return (
@@ -270,7 +279,7 @@ const SettingMenu = () => {
                 </div>
             )}
 
-            {filteredTreeData.map((systemNode: any) => {
+            {filteredTreeData.map((systemNode: TreeNode) => {
                 const descendantKeys = getDescendantKeys(systemNode);
                 const allChecked = descendantKeys.length > 0 && descendantKeys.every(k => checkedKeys.includes(k));
                 const someChecked = descendantKeys.some(k => checkedKeys.includes(k));

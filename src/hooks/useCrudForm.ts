@@ -1,23 +1,23 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
-interface UseCrudFormOptions {
-  saveFunction: (data: any) => Promise<any>;
-  onSuccess?: (data: any) => void;
+interface UseCrudFormOptions<T extends Record<string, unknown>> {
+  saveFunction: (data: T) => Promise<unknown>;
+  onSuccess?: (data: unknown) => void;
   onError?: (error: Error) => void;
   successMessage?: string;
   errorMessagePrefix?: string;
   showToast?: boolean;
 }
 
-interface UseCrudFormReturn {
+interface UseCrudFormReturn<T extends Record<string, unknown>> {
   saving: boolean;
-  handleSave: (formData: any | null, idKey?: string) => Promise<void>;
+  handleSave: (formData: T | null, idKey?: string) => Promise<void>;
 }
 
-export function useCrudForm(
-  options: UseCrudFormOptions
-): UseCrudFormReturn {
+export function useCrudForm<T extends Record<string,unknown>>(
+  options: UseCrudFormOptions<T>
+): UseCrudFormReturn<T> {
   const [saving, setSaving] = useState(false);
 
   const {
@@ -29,7 +29,7 @@ export function useCrudForm(
     showToast = true,
   } = options;
 
-  const handleSave = useCallback(async (formData: any | null, idKey: string = 'id') => {
+  const handleSave = useCallback(async (formData: T | null, idKey: string = 'id') => {
     if (!formData) return;
 
     setSaving(true);

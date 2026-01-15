@@ -4,6 +4,7 @@ import type { WorkBook } from 'xlsx';
 import { Download, RefreshCw, Plus, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import {
   Table,
@@ -25,15 +26,14 @@ interface Column {
   isEnum?: boolean;
   enumOptions?: Array<{ value: string; label: string; color?: string }>;
   nested?: boolean;
-  trueLabel?: string;
-  falseLabel?: string;
+  badgelabel?: string;
   trueColor?: string;
   falseColor?: string;
-  render?: (item: any) => React.ReactNode;
+  render?: (item: unknown) => React.ReactNode;
 }
 
-interface DataItem {
-  [key: string]: any;
+export interface DataItem {
+  [key: string]: unknown;
   id?: string | number;
 }
 
@@ -52,7 +52,7 @@ interface DataTableProps {
   error?: string | null;
   onRefresh?: () => void;
   onAdd?: () => void;
-  onExport?: (data: DataItem[]) => any;
+  onExport?: (data: DataItem[]) => unknown;
   itemsPerPage?: number;
   showAddButton?: boolean;
   showExportButton?: boolean;
@@ -129,11 +129,11 @@ const DataTable = ({
       
       if (column.nested) {
         const keys = column.key.split('.');
-        itemValue = keys.reduce((obj, key) => obj?.[key], item);
+        itemValue = keys.reduce((obj:unknown, key:string) => (obj as Record<string, unknown>)?.[key], item as unknown);
       }
       
       if (column.isDate && itemValue) {
-        itemValue = new Date(itemValue).toLocaleDateString();
+        itemValue = new Date(itemValue as string | number | Date).toLocaleDateString();
       }
       
       if (column.isBoolean || typeof itemValue === 'boolean') {
@@ -166,18 +166,18 @@ const DataTable = ({
       const column = columns.find(col => col.key === sortOrder);
       if (column?.nested) {
         const keys = sortOrder.split('.');
-        aValue = keys.reduce((obj, key) => obj?.[key], a);
-        bValue = keys.reduce((obj, key) => obj?.[key], b);
+        aValue = keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], a as unknown);
+        bValue = keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], b as unknown);
       }
       
       if (column?.isDate) {
-        aValue = new Date(aValue || 0);
-        bValue = new Date(bValue || 0);
-        comparison = aValue.getTime() - bValue.getTime();
+        const dateA = new Date(aValue as string |number |Date || 0);
+        const dateB = new Date(bValue as string |number |Date || 0);
+        comparison = dateA.getTime() - dateB.getTime();
       } else {
-        aValue = (aValue || '').toString();
-        bValue = (bValue || '').toString();
-        comparison = aValue.localeCompare(bValue);
+        const strA = (aValue || '').toString();
+        const strB = (bValue || '').toString();
+        comparison = strA.localeCompare(strB);
       }
       
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -191,20 +191,20 @@ const DataTable = ({
 
   const exportToExcel = () => {
     try {
-      let exportData;
+      let exportData:unknown;
 
       if (onExport) {
         exportData = onExport(sortedData);
       } else {
         exportData = sortedData.map((item: DataItem) => {
-          const exportItem: Record<string, any> = {};
+          const exportItem: Record<string, unknown> = {};
           columns.forEach(column => {
             if (column.exportable !== false) {
               let value = item[column.key];
                
               if (column.nested) {
                 const keys = column.key.split('.');
-                value = keys.reduce((obj: any, key) => obj?.[key], item);
+                value = keys.reduce((obj: unknown, key) => (obj as Record<string, unknown>)?.[key], item);
               }
                  
               if (typeof value === 'boolean') {
@@ -212,7 +212,7 @@ const DataTable = ({
               }
                  
               if (column.isDate && value) {
-                value = new Date(value).toLocaleDateString();
+                value = new Date(value as string |number |Date).toLocaleDateString();
               }
                
               exportItem[column.label] = value || '';
@@ -222,7 +222,7 @@ const DataTable = ({
         });
       }
 
-      if (exportData && exportData.length > 0) {
+      if (exportData && Array.isArray(exportData) && exportData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb: WorkBook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, title || "Data");
@@ -236,7 +236,7 @@ const DataTable = ({
       console.error('Error exporting to Excel:', error);
       try {
         const simpleData = sortedData.map((item: DataItem) => {
-          const exportItem: Record<string, any> = {};
+          const exportItem: Record<string, unknown> = {};
           columns.forEach(column => {
             if (column.exportable !== false) {
               exportItem[column.label] = item[column.key] || '';
@@ -455,29 +455,34 @@ const DataTable = ({
                               const option = column.enumOptions?.find(opt => opt.value === item[column.key]);
                               return (
                                 <span className={`px-2 py-1 rounded text-xs ${option?.color || 'bg-gray-100 text-gray-800'}`}>
-                                  {option?.label || item[column.key]}
+                                  {option?.label || item[column.key] as string}
                                 </span>
                               );
                             })()
                           ) : column.isBoolean ? (
-                            <div className="flex items-center">
-                              {item[column.key] === true ? (
-                                <div title={column.trueLabel || 'Active'}>
-                                  <Circle className="h-5 w-5 text-green-500" fill="currentColor" />
-                                </div>
-                              ) : (
-                                <div title={column.falseLabel || 'Inactive'}>
-                                  <Circle className="h-5 w-5 text-red-500" fill="currentColor" />
-                                </div>
-                              )}
-                            </div>
+                              <div className="flex items-center">
+                                {(() => {
+                                  const value = item[column.key] === true;
+                                  const parts = (column.badgelabel || 'Active : Inactive').split(':').map(s => s.trim());
+                                  const labelText = value ? parts[0] : parts[1] || parts[0];
+                                  const badgeClass = value
+                                    ? column.trueColor || 'bg-green-500/10 text-green-700 dark:text-green-400'
+                                    : column.falseColor || 'bg-red-500/10 text-red-700 dark:text-red-400';
 
+                                  return (
+                                      <Badge className={badgeClass}>
+                                        <Circle className="h-2 w-2" fill="currentColor" />
+                                        {labelText}
+                                      </Badge>
+                                  );
+                                })()}
+                              </div>
                           ) : column.isDate ? (
-                            new Date(item[column.key]).toLocaleDateString()
+                            new Date(item[column.key] as string | number | Date).toLocaleDateString()
                           ) : column.nested ? (
                             (() => {
                               const keys = column.key.split('.');
-                              return keys.reduce((obj, key) => obj?.[key], item) || '';
+                              return keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], item as unknown) || '';
                             })()
                           ) : (
                             item[column.key] || ''

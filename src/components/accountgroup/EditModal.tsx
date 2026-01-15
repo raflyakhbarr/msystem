@@ -73,9 +73,9 @@ const EditModal = ({
  
     if (typeof formData.codeGroup === 'object') {
       if ('value' in formData.codeGroup) {
-        rawValue = (formData.codeGroup as any).value;
+        rawValue = (formData.codeGroup as unknown as { value: number }).value;
       } else if ('id' in formData.codeGroup) {
-        rawValue = (formData.codeGroup as any).id;
+        rawValue = (formData.codeGroup as unknown as { id: number }).id;
       }
     } else {
       rawValue = formData.codeGroup;

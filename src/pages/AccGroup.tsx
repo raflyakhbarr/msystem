@@ -4,9 +4,10 @@ import type { AccGroupItem } from '../api/accgroupApi';
 import type { AccGroupFormData } from '../components/accountgroup/EditModal';
 import { useApiData } from '../hooks/useApiData';
 import { useCrudForm } from '../hooks/useCrudForm';
-import DataTable from '../components/common/DataTable';
+import DataTable, { type DataItem } from '../components/common/DataTable';
 import EditModal from '../components/accountgroup/EditModal';
 import ActionsCell from '../components/accountgroup/ActionsCell';
+
 
 
 const AccGroup = () => {
@@ -44,8 +45,8 @@ const AccGroup = () => {
     showToast: false,  
   });
 
-  const handleExport = (data: any[]) => {
-    const exportData = data.map((item: AccGroupItem) => ({
+  const handleExport = <T extends DataItem>(data: T[]) => {
+    const exportData = (data as AccGroupItem[]).map((item) => ({
       'Group Name': item.namaGroup || '',
       'Group Code': typeof item.codeGroup === 'string' ? item.codeGroup : item.codeGroup?.nama || '',
       Status: item.status ? 'Active' : 'Inactive',
@@ -80,10 +81,7 @@ const AccGroup = () => {
       sortable: true,
       exportable: true,
       isBoolean: true,
-      trueLabel: 'Active',
-      falseLabel: 'Inactive',
-      trueColor: 'bg-green-500/10 text-green-700 dark:text-green-400',
-      falseColor: 'bg-red-500/10 text-red-700 dark:text-red-400'
+      badgelabel: 'Active : Inactive'
     },
     {
       key: 'actions',
@@ -91,7 +89,7 @@ const AccGroup = () => {
       searchable: false,
       sortable: false,
       exportable: false,
-      render: (item: AccGroupItem) => <ActionsCell item={item} onEdit={handleEditAccGroup} />
+      render: (item: unknown) => <ActionsCell item={item as AccGroupItem} onEdit={handleEditAccGroup} />
     }
   ], []);
 

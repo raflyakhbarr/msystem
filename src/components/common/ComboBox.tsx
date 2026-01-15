@@ -22,7 +22,7 @@ import {
 export interface ComboBoxOption {
   value: string | number;
   label: string;
-  [key: string]: any; 
+  [key: string]: unknown; 
 }
 
 interface ComboBoxProps {

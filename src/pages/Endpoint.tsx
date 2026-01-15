@@ -1,7 +1,7 @@
 import React, { useState, useEffect,useMemo } from 'react';
 import { fetchMenu, saveMenu } from '../api/menuApi';
 import type { MenuItem } from '../api/menuApi';
-import DataTable from '../components/common/DataTable';
+import DataTable, { type DataItem } from '../components/common/DataTable';
 import ActionsCell from '../components/Endpoint/ActionsCell';
 import EditModal from '../components/Endpoint/EditModal';
 import DetailsModal from '../components/Endpoint/DetailsModal';
@@ -75,7 +75,7 @@ const Endpoint = () => {
   };
 
   const { handleSave } = useCrudForm({
-    saveFunction: (data: any) => saveMenu(data as MenuItem),
+    saveFunction: (data: Partial<MenuItem>) => saveMenu(data as MenuItem),
     onSuccess: handleSuccess,
     successMessage: 'Endpoint',
     errorMessagePrefix: 'Error saving endpoint',
@@ -88,8 +88,8 @@ const Endpoint = () => {
     }
   };
 
-  const handleExport = (data: any[]) => {
-    return data.map(item => ({
+  const handleExport = <T extends DataItem>(data: T[]) => {
+    return (data as unknown as MenuItem[]).map(item => ({
       'System': typeof item.group_menu === 'object' && item.group_menu?.sistem?.nama || '-',
       Name: item.nama || '',
       Feature: item.fitur || '',
@@ -103,11 +103,12 @@ const Endpoint = () => {
 
   const columns = useMemo(() => [
     { key: 'system', label: 'Sistem', searchable: true, sortable: true,
-      render: (item: MenuItem) => {
-        if (item.group_menu && typeof item.group_menu === 'object') {
-            return item.group_menu.sistem?.nama || '-';
+      render: (item: unknown) => {
+        const menuItem = item as MenuItem
+        if (menuItem.group_menu && typeof menuItem.group_menu === 'object') {
+            return menuItem.group_menu.sistem?.nama || '-';
         }
-        return item.group_menu ?? '-';
+        return menuItem.group_menu ?? '-';
       }
     },
     { key: 'pathMenu', label: 'Endpoint', searchable: true, sortable: true },
@@ -117,8 +118,8 @@ const Endpoint = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: (item: MenuItem) => (
-        <ActionsCell item={item} onEdit={handleEditMenu} onViewDetails={handleViewDetails} />
+      render: (item: unknown) => (
+        <ActionsCell item={item as MenuItem} onEdit={handleEditMenu} onViewDetails={handleViewDetails} />
       ),
       searchable:false,
       sortable:false

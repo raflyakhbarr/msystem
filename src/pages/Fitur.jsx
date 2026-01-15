@@ -104,15 +104,12 @@ const Fitur = () => {
     },
     {
       key: 'status',
-      label: 'Status',
+      label: 'Is Active?',
       searchable: true,
       sortable: true,
       exportable: true,
       isBoolean: true,
-      trueLabel: 'Active',
-      falseLabel: 'Inactive',
-      trueColor: 'bg-green-500/10 text-green-700 dark:text-green-400',
-      falseColor: 'bg-red-500/10 text-red-700 dark:text-red-400'
+      badgelabel:'Active:Inactive'
     },
     
     {
