@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { WorkBook } from 'xlsx';
-import { Download, RefreshCw, Plus, Circle, MoveUp, MoveDown, MoveVertical } from "lucide-react";
+import { Download, RefreshCw, Plus, Circle, MoveUp, MoveDown, MoveVertical, Ban, CheckCircleIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -465,16 +465,27 @@ const DataTable = ({
                                   const value = item[column.key] === true;
                                   const parts = (column.badgelabel || 'Active : Inactive').split(':').map(s => s.trim());
                                   const labelText = value ? parts[0] : parts[1] || parts[0];
-                                  const badgeClass = value
-                                    ? column.trueColor || 'bg-green-500/10 text-green-700 dark:text-green-400'
-                                    : column.falseColor || 'bg-red-500/10 text-red-700 dark:text-red-400';
-
-                                  return (
-                                      <Badge className={badgeClass}>
-                                        <Circle className="h-2 w-2" fill="currentColor" />
+                                  if (value) {
+                                    return (
+                                      <Badge
+                                        variant='outline'
+                                        className='rounded-sm border-green-600 text-green-600 dark:border-green-400 dark:text-green-400 [a&]:hover:bg-green-600/10 [a&]:hover:text-green-600/90 dark:[a&]:hover:bg-green-400/10 dark:[a&]:hover:text-green-400/90'
+                                      >
+                                        <CheckCircleIcon className='size-3' />
                                         {labelText}
                                       </Badge>
-                                  );
+                                    );
+                                  } else {
+                                    return (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-destructive [a&]:hover:bg-destructive/10 [a&]:hover:text-destructive/90 border-destructive rounded-sm"     
+                                      >
+                                        <Ban className="size-3" />
+                                        {labelText}
+                                      </Badge>
+                                    );
+                                  }
                                 })()}
                               </div>
                           ) : column.isDate ? (
