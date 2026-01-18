@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FaEdit, FaTrash, FaLink } from 'react-icons/fa';
+import { Link, Pencil, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -122,7 +122,7 @@ export default function GroupModal({
                         className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                         title="Kelola Koneksi Group"
                       >
-                        <FaLink />
+                        <Link />
                       </Button>
                       <Button
                         type="button"
@@ -131,7 +131,7 @@ export default function GroupModal({
                         onClick={() => onEditGroup(group)}
                         className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
                       >
-                        <FaEdit />
+                        <Pencil />
                       </Button>
                       <Button
                         type="button"
@@ -140,7 +140,7 @@ export default function GroupModal({
                         onClick={() => setDeleteId(group.id)}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        <FaTrash />
+                        <Trash2 />
                       </Button>
                     </div>
                   </div>

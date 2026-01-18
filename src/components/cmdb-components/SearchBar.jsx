@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FaSearch, FaTimes, FaLayerGroup, FaSitemap } from 'react-icons/fa'; // Tambahkan FaLayerGroup dan FaSitemap
+import { Search, X, Layers, GitBranch } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
@@ -59,9 +59,9 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
   // UBAH INI - Return komponen React Icon
   const getNodeIcon = (node) => {
     if (node.type === 'group') {
-      return <FaLayerGroup className="text-purple-500" size={18} />;
+      return <Layers className="text-purple-500" size={18} />;
     }
-    return <FaSitemap className="text-blue-500" size={18} />;
+    return <GitBranch className="text-blue-500" size={18} />;
   };
 
   const getNodeTypeLabel = (node) => {
@@ -72,7 +72,7 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
   return (
     <div ref={searchRef} className="relative w-full max-w-md">
     <div className="relative">
-      <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={12} />
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={12} />
       <input
         type="text"
         value={searchValue}
@@ -86,7 +86,7 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
           onClick={handleClear}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >
-          <FaTimes size={12} />
+          <X size={12} />
         </button>
       )}
     </div>

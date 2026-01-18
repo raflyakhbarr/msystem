@@ -1,4 +1,4 @@
-import { FaEdit, FaTrash, FaLink, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { Pencil, Trash2, Link, Eye, EyeOff } from 'lucide-react';
 
 export default function NodeContextMenu({
   show,
@@ -51,7 +51,7 @@ export default function NodeContextMenu({
               onClick={() => handleAction(onManageGroupConnections)}
               className="w-full px-4 py-2 text-left hover:bg-purple-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
             >
-              <FaLink className="text-purple-600" />
+              <Link className="text-purple-600" />
               <span>Kelola Koneksi Group</span>
             </button>
           ) : (
@@ -59,43 +59,43 @@ export default function NodeContextMenu({
               onClick={() => handleAction(onManageConnections)}
               className="w-full px-4 py-2 text-left hover:bg-blue-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
             >
-              <FaLink className="text-blue-600" />
+              <Link className="text-blue-600" />
               <span>Kelola Koneksi</span>
             </button>
           )}
-          
+
           <button
             onClick={() => handleAction(onEdit)}
             className="w-full px-4 py-2 text-left hover:bg-yellow-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
           >
-            <FaEdit className="text-yellow-600" />
+            <Pencil className="text-yellow-600" />
             <span>Edit</span>
           </button>
-          
+
           <button
             onClick={() => handleAction(onToggleVisibility)}
             className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-700 transition-colors"
           >
             {isHidden ? (
               <>
-                <FaEye className="text-green-600" />
+                <Eye className="text-green-600" />
                 <span>Tampilkan</span>
               </>
             ) : (
               <>
-                <FaEyeSlash className="text-gray-600" />
+                <EyeOff className="text-gray-600" />
                 <span>Sembunyikan</span>
               </>
             )}
           </button>
-          
+
           <div className="my-1 border-t border-gray-200"></div>
-          
+
           <button
             onClick={() => handleAction(onDelete)}
             className="w-full px-4 py-2 text-left hover:bg-red-50 flex items-center gap-3 text-sm text-red-600 transition-colors"
           >
-            <FaTrash />
+            <Trash2 />
             <span>Hapus</span>
           </button>
         </div>

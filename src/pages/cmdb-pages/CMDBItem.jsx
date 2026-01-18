@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { FaEdit, FaTrash, FaLink, FaPlus } from 'react-icons/fa';
+import { Pencil, Trash2, Link, Plus } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
@@ -446,14 +446,14 @@ export default function CMDBItem() {
               className="p-2 text-blue-600 hover:bg-blue-50 rounded"
               title="Kelola Koneksi"
             >
-              <FaLink size={16} />
+              <Link size={16} />
             </button>
             <button
               onClick={() => handleEdit(item)}
               className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
               title="Edit"
             >
-              <FaEdit size={16} />
+              <Pencil size={16} />
             </button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -461,7 +461,7 @@ export default function CMDBItem() {
                   className="p-2 text-red-600 hover:bg-red-50 rounded"
                   title="Hapus"
                 >
-                  <FaTrash size={16} />
+                  <Trash2 size={16} />
                 </button>
               </AlertDialogTrigger>
 
@@ -505,7 +505,7 @@ export default function CMDBItem() {
           actionButtons={[
             {
               label: 'Item',
-              icon: <FaPlus />,
+              icon: <Plus />,
               className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
               onClick: () => {
                 resetForm();
@@ -514,7 +514,7 @@ export default function CMDBItem() {
             },
             {
               label: 'Group',
-              icon: <FaPlus />,
+              icon: <Plus />,
               className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
               onClick: () => {
                 setGroupFormData(INITIAL_GROUP_FORM);

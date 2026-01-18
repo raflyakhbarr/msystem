@@ -58,7 +58,7 @@ function Layout({ children }: { children: ReactNode }) {
       'setting-token': 'Setting Token'
     }
     
-    const filteredPathnames = pathnames.filter((name, index) => {
+    const filteredPathnames = pathnames.filter((_name, index) => {
       return !(pathnames[index - 1] === 'setting-menu' && pathnames[index - 2] === 'account-group') &&
              !(pathnames[index - 1] === 'setting-feature' && pathnames[index - 2] === 'account-group')
     })

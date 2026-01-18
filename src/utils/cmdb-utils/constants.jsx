@@ -1,7 +1,7 @@
-import { 
-  FaServer, FaDatabase, FaNetworkWired, FaDesktop, 
-  FaProjectDiagram, FaShieldAlt, FaWifi
-} from 'react-icons/fa';
+import {
+  Server, Database, Network, Monitor,
+  GitBranch, Shield, Wifi
+} from 'lucide-react';
 
 export const API_BASE_URL = 'http://localhost:5000';
 
@@ -18,13 +18,13 @@ export const NODE_TYPES = [
 export const getTypeIcon = (type) => {
   const props = { size: 14, className: 'inline mr-1' };
   switch (type) {
-    case 'server': return <FaServer {...props} />;
-    case 'database': return <FaDatabase {...props} />;
-    case 'switch': return <FaNetworkWired {...props} />;
-    case 'workstation': return <FaDesktop {...props} />;
-    case 'hub': return <FaProjectDiagram {...props} />;
-    case 'firewall': return <FaShieldAlt {...props} />;
-    case 'router': return <FaWifi {...props} />;
+    case 'server': return <Server {...props} />;
+    case 'database': return <Database {...props} />;
+    case 'switch': return <Network {...props} />;
+    case 'workstation': return <Monitor {...props} />;
+    case 'hub': return <GitBranch {...props} />;
+    case 'firewall': return <Shield {...props} />;
+    case 'router': return <Wifi {...props} />;
     default: return null;
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { fetchAccounts, saveAccount } from '../api/accountApi';
 import type { AccountItem } from '../api/accountApi';
 import type { AccountFormData } from '../components/Account/EditModal';

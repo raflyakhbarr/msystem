@@ -1,4 +1,3 @@
-import React from 'react';
 import {Edit, List} from 'lucide-react'
 
 import type { MenuItem } from '@/api/menuApi';

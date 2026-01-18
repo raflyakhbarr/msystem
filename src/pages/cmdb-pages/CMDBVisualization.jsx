@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/drawer";
 import 'reactflow/dist/style.css';
 import { io } from 'socket.io-client';
-import { FaSquare } from 'react-icons/fa';
+import { Square } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
@@ -49,7 +49,7 @@ import ExportModal from '@/components/cmdb-components/ExportModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { FaMousePointer, FaProjectDiagram, FaLink, FaEdit,FaTrash } from 'react-icons/fa';
+import { MousePointer2, GitBranch, Link, Pencil, Trash2 } from 'lucide-react';
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
@@ -831,14 +831,14 @@ export default function CMDBVisualization() {
               className="p-2 text-blue-600 hover:bg-blue-50 rounded"
               title="Kelola Koneksi"
             >
-              <FaLink size={16} />
+              <Link size={16} />
             </button>
             <button
               onClick={() => handleEditItem(item)}
               className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
               title="Edit"
             >
-              <FaEdit size={16} />
+              <Pencil size={16} />
             </button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -846,7 +846,7 @@ export default function CMDBVisualization() {
                   className="p-2 text-red-600 hover:bg-red-50 rounded"
                   title="Hapus"
                 >
-                  <FaTrash size={16} />
+                  <Trash2 size={16} />
                 </button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -1677,14 +1677,14 @@ export default function CMDBVisualization() {
           {/* Selection Mode Indicators */}
           {selectionMode === 'rectangle' && !isSelecting && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] px-4 text-white py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
-              <FaSquare />
+              <Square />
               <span>Click and drag to select multiple nodes</span>
             </div>
           )}
  
           {selectionMode === 'single' && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
-              <FaMousePointer />
+              <MousePointer2 />
               <span>Click nodes to select/deselect</span>
             </div>
           )}
@@ -1843,14 +1843,14 @@ export default function CMDBVisualization() {
       {/* Highlight Mode Indicators */}
       {highlightMode && !highlightedNodeId && (
         <div className="absolute top-30 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
-          <FaProjectDiagram />
+          <GitBranch />
           <span>Click node to highlight dependencies</span>
         </div>
       )}
 
       {highlightMode && highlightedNodeId && (
         <div className="absolute top-30 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] px-4 text-white py-2 rounded-lg shadow-lg z-50 flex items-center gap-3">
-          <FaProjectDiagram />
+          <GitBranch />
           <span>Selected node and highlighted dependencies</span>
           <button
             onClick={clearHighlight}

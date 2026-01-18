@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { fetchAccGroup, saveAccGroup } from '../api/accgroupApi';
 import type { AccGroupItem } from '../api/accgroupApi';
 import type { AccGroupFormData } from '../components/accountgroup/EditModal';

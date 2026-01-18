@@ -1,8 +1,8 @@
 import {
-  FaEye, FaSave, FaPlus, FaLayerGroup, FaMousePointer, FaSquare, 
-  FaProjectDiagram, FaDownload, FaHandPaper, FaUndo, FaRedo,
-  FaToggleOn, FaToggleOff, FaHighlighter, FaChevronDown, FaTable
-} from 'react-icons/fa';
+  Eye, Save, Plus, Layers, MousePointer2, Square,
+  GitBranch, Download, Hand, Undo2, Redo2,
+  ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -47,10 +47,10 @@ export default function VisualizationNavbar({
 }) {
   const getSelectionIcon = () => {
     switch (selectionMode) {
-      case 'freeroam': return <FaHandPaper size={14} />;
-      case 'single': return <FaMousePointer size={14} />;
-      case 'rectangle': return <FaSquare size={14} />;
-      default: return <FaMousePointer size={14} />;
+      case 'freeroam': return <Hand size={14} />;
+      case 'single': return <MousePointer2 size={14} />;
+      case 'rectangle': return <Square size={14} />;
+      default: return <MousePointer2 size={14} />;
     }
   };
 
@@ -81,7 +81,7 @@ export default function VisualizationNavbar({
                 size="sm"
                 title="Tambah Item Baru"
               >
-                <FaPlus />
+                <Plus />
                 <span className="hidden xl:inline ml-1">Item</span>
               </Button>
 
@@ -91,7 +91,7 @@ export default function VisualizationNavbar({
                 size="sm"
                 title="Kelola Groups"
               >
-                <FaLayerGroup />
+                <Layers />
                 <span className="hidden xl:inline ml-1">Groups</span>
               </Button>
 
@@ -101,7 +101,7 @@ export default function VisualizationNavbar({
                 variant="secondary"
                 size="sm"
               >
-                <FaDownload />
+                <Download />
                 <span className="hidden lg:inline ml-1">Export</span>
               </Button>
 
@@ -111,7 +111,7 @@ export default function VisualizationNavbar({
                 className="px-3 py-2 rounded-lg flex items-center gap-2 transition-colors"
                 title="Lihat Tabel"
               >
-                <FaTable size={16} />
+                <Table size={16} />
                 <span className="hidden md:inline">Tabel</span>
               </Button>
             </div>
@@ -128,7 +128,7 @@ export default function VisualizationNavbar({
                 title="Undo (Ctrl+Z)"
                 className="disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <FaUndo size={14} />
+                <Undo2 size={14} />
               </Button>
 
               <Button
@@ -139,7 +139,7 @@ export default function VisualizationNavbar({
                 title="Redo (Ctrl+Y)"
                 className="disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <FaRedo size={14} />
+                <Redo2 size={14} />
               </Button>
             </div>
 
@@ -154,7 +154,7 @@ export default function VisualizationNavbar({
                 title={isAutoSaveEnabled ? "Auto-save Aktif" : "Auto-save Nonaktif"}
                 className={isAutoSaveEnabled ? "bg-green-600 hover:bg-green-700 text-white" : ""}
               >
-                {isAutoSaveEnabled ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
+                {isAutoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                 <span className="hidden xl:inline ml-1">Auto</span>
               </Button>
 
@@ -166,7 +166,7 @@ export default function VisualizationNavbar({
                 className={!isSaving && !isAutoSaving ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
                 title="Simpan Posisi Manual (Ctrl+S)"
               >
-                <FaSave />
+                <Save />
                 <span className="hidden xl:inline ml-1">
                   {isSaving ? 'Saving...' : isAutoSaving ? 'Auto...' : 'Save'}
                 </span>
@@ -184,7 +184,7 @@ export default function VisualizationNavbar({
             {/* Drag Status */}
             {draggedNode && (
               <div className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20 animate-pulse">
-                <FaProjectDiagram className="animate-bounce" />
+                <GitBranch className="animate-bounce" />
                 <span className="font-medium hidden lg:inline">Dragging...</span>
               </div>
             )}
@@ -209,7 +209,7 @@ export default function VisualizationNavbar({
                 size="sm"
                 title="Panel Visibility"
               >
-                <FaEye size={14} />
+                <Eye size={14} />
                 <span className="hidden lg:inline ml-1">Visibility</span>
               </Button>
 
@@ -225,7 +225,7 @@ export default function VisualizationNavbar({
                 title="Mode Highlight Dependencies"
                 className={highlightMode ? "bg-orange-600 hover:bg-orange-700 text-white" : ""}
               >
-                <FaHighlighter size={14} />
+                <Highlighter size={14} />
                 <span className="hidden lg:inline ml-1">Highlight</span>
               </Button>
             </div>
@@ -238,7 +238,7 @@ export default function VisualizationNavbar({
                 <Button variant="outline" size="sm" className="gap-1.5">
                   {getSelectionIcon()}
                   <span className="hidden sm:inline">{getSelectionLabel()}</span>
-                  <FaChevronDown size={10} />
+                  <ChevronDown size={10} />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -246,7 +246,7 @@ export default function VisualizationNavbar({
                   onClick={() => onSetSelectionMode('freeroam')}
                   className={selectionMode === 'freeroam' ? 'bg-accent' : ''}
                 >
-                  <FaHandPaper className="mr-2" size={14} />
+                  <Hand className="mr-2" size={14} />
                   <div className="flex flex-col">
                     <span>Free Roam</span>
                     <span className="text-xs text-muted-foreground">Geser canvas bebas</span>
@@ -256,7 +256,7 @@ export default function VisualizationNavbar({
                   onClick={() => onSetSelectionMode('single')}
                   className={selectionMode === 'single' ? 'bg-accent' : ''}
                 >
-                  <FaMousePointer className="mr-2" size={14} />
+                  <MousePointer2 className="mr-2" size={14} />
                   <div className="flex flex-col">
                     <span>Single Select</span>
                     <span className="text-xs text-muted-foreground">Pilih satu node</span>
@@ -266,7 +266,7 @@ export default function VisualizationNavbar({
                   onClick={() => onSetSelectionMode('rectangle')}
                   className={selectionMode === 'rectangle' ? 'bg-accent' : ''}
                 >
-                  <FaSquare className="mr-2" size={14} />
+                  <Square className="mr-2" size={14} />
                   <div className="flex flex-col">
                     <span>Rectangle Select</span>
                     <span className="text-xs text-muted-foreground">Pilih area kotak</span>
@@ -293,7 +293,7 @@ export default function VisualizationNavbar({
                   className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium flex items-center gap-2 text-sm transition-colors shadow-sm"
                   title="Tampilkan Hanya yang Dipilih"
                 >
-                  <FaEye size={14} />
+                  <Eye size={14} />
                   <span className="hidden lg:inline">Tampilkan Pilihan</span>
                 </button>
               </>
@@ -306,7 +306,7 @@ export default function VisualizationNavbar({
                 className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg font-medium flex items-center gap-2 text-sm transition-colors shadow-sm"
                 title="Tampilkan Semua Node"
               >
-                <FaEye size={14} />
+                <Eye size={14} />
                 <span className="hidden lg:inline">Tampilkan Semua</span>
                 <span className="bg-accent/80 px-1.5 py-0.5 rounded text-xs">
                   {hiddenNodes.size}

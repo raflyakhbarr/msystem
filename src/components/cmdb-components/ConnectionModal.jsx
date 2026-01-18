@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { FaTimes } from 'react-icons/fa';
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
 import {
   Dialog,

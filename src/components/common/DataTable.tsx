@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
-import type { WorkBook } from 'xlsx';
-import { Download, RefreshCw, Plus, Circle, MoveUp, MoveDown, MoveVertical, Ban, CheckCircleIcon } from "lucide-react";
+import { Download, RefreshCw, Plus, MoveUp, MoveDown, MoveVertical, Ban, CheckCircleIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -189,8 +187,11 @@ const DataTable = ({
   const currentItems = sortedData.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
+      // Dynamically import xlsx only when needed
+      const XLSX = await import('xlsx');
+
       let exportData:unknown;
 
       if (onExport) {
@@ -201,20 +202,20 @@ const DataTable = ({
           columns.forEach(column => {
             if (column.exportable !== false) {
               let value = item[column.key];
-               
+
               if (column.nested) {
                 const keys = column.key.split('.');
                 value = keys.reduce((obj: unknown, key) => (obj as Record<string, unknown>)?.[key], item);
               }
-                 
+
               if (typeof value === 'boolean') {
                 value = value ? 'Yes' : 'No';
               }
-                 
+
               if (column.isDate && value) {
                 value = new Date(value as string |number |Date).toLocaleDateString();
               }
-               
+
               exportItem[column.label] = value || '';
             }
           });
@@ -224,7 +225,7 @@ const DataTable = ({
 
       if (exportData && Array.isArray(exportData) && exportData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb: WorkBook = XLSX.utils.book_new();
+        const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, title || "Data");
 
         const today = new Date().toLocaleDateString().replace(/\//g, '-');
@@ -235,6 +236,9 @@ const DataTable = ({
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       try {
+        // Dynamically import xlsx in fallback as well
+        const XLSX = await import('xlsx');
+
         const simpleData = sortedData.map((item: DataItem) => {
           const exportItem: Record<string, unknown> = {};
           columns.forEach(column => {
@@ -244,11 +248,11 @@ const DataTable = ({
           });
           return exportItem;
         });
-        
+
         const ws = XLSX.utils.json_to_sheet(simpleData);
-        const wb: WorkBook = XLSX.utils.book_new();
+        const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, title || "Data");
-        
+
         const fileName = `${(title || 'data')}.xlsx`;
         XLSX.writeFile(wb, fileName);
       } catch (fallbackError) {
@@ -276,7 +280,7 @@ const DataTable = ({
             <Table>
               <TableHeader className="bg-card-dark sticky top-0 z-10 border-b border-border shadow-sm">
                 <TableRow>
-                  {columns.map((column, index) => (
+                  {columns.map((_column, index) => (
                     <TableHead key={index} className="px-6 py-3 text-left">
                       <Skeleton className="h-4 w-24 mb-2" />
                       <Skeleton className="h-8 w-full" />
@@ -287,7 +291,7 @@ const DataTable = ({
               <TableBody className="divide-y divide-border">
                 {Array.from({ length: itemsPerPage }).map((_, rowIndex) => (
                   <TableRow key={rowIndex}>
-                    {columns.map((column, colIndex) => (
+                    {columns.map((_column, colIndex) => (
                       <TableCell key={colIndex} className="px-6 py-4">
                         <Skeleton className="h-4 w-full max-w-50" />
                       </TableCell>

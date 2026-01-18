@@ -1,4 +1,4 @@
-import { FaTimes, FaImage, FaPlus } from 'react-icons/fa';
+import { X, Image, Plus } from 'lucide-react';
 import { NODE_TYPES, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import {
   Dialog,
@@ -193,10 +193,10 @@ export default function ItemFormModal({
 
             <div className="md:col-span-2 space-y-2">
               <Label className="flex items-center gap-2">
-                <FaImage />
+                <Image />
                 Gambar (Maks. 10)
               </Label>
-              
+
               <input
                 type="file"
                 accept="image/*"
@@ -205,12 +205,12 @@ export default function ItemFormModal({
                 className="hidden"
                 id="image-upload"
               />
-              
+
               <label
                 htmlFor="image-upload"
                 className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-secondary border-2 border-dashed rounded-md hover:bg-secondary/80 transition-colors"
               >
-                <FaPlus />
+                <Plus />
                 Pilih Gambar
               </label>
 
@@ -232,7 +232,7 @@ export default function ItemFormModal({
                           onClick={() => onRemoveExistingImage(imgPath)}
                           className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <FaTimes size={12} />
+                          <X size={12} />
                         </Button>
                       </div>
                     ))}
@@ -258,7 +258,7 @@ export default function ItemFormModal({
                           onClick={() => onRemoveNewImage(index)}
                           className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <FaTimes size={12} />
+                          <X size={12} />
                         </Button>
                       </div>
                     ))}

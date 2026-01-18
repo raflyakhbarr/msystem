@@ -5,17 +5,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { BiInfoCircle } from "react-icons/bi";
-import { 
-  FaServer, 
-  FaDatabase, 
-  FaNetworkWired as FaSwitch,
-  FaDesktop as FaWorkstation,
-  FaProjectDiagram as FaHub,
-  FaShieldAlt as FaFirewall,
-  FaWifi as FaRouter,
-  FaExclamationTriangle
-} from 'react-icons/fa';
+import {
+  Info,
+  Server,
+  Database,
+  Network,
+  Monitor,
+  GitBranch,
+  Shield,
+  Wifi,
+  AlertTriangle
+} from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -26,14 +26,14 @@ export default function CustomNode({ data, id }) {
     const iconProps = { size: 20, className: 'text-foreground' };
 
     switch (type) {
-        case 'server': return <FaServer {...iconProps} />;
-        case 'database': return <FaDatabase {...iconProps} />;
-        case 'switch': return <FaSwitch {...iconProps} />;
-        case 'workstation': return <FaWorkstation {...iconProps} />;
-        case 'hub': return <FaHub {...iconProps} />;
-        case 'firewall': return <FaFirewall {...iconProps} />;
-        case 'router': return <FaRouter {...iconProps} />;
-        default: return <FaServer {...iconProps} />;
+        case 'server': return <Server {...iconProps} />;
+        case 'database': return <Database {...iconProps} />;
+        case 'switch': return <Network {...iconProps} />;
+        case 'workstation': return <Monitor {...iconProps} />;
+        case 'hub': return <GitBranch {...iconProps} />;
+        case 'firewall': return <Shield {...iconProps} />;
+        case 'router': return <Wifi {...iconProps} />;
+        default: return <Server {...iconProps} />;
     }
   };
 
@@ -93,7 +93,7 @@ export default function CustomNode({ data, id }) {
           <Popover>
             <PopoverTrigger asChild>
               <button className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200">
-                <BiInfoCircle className="w-3 h-3" />
+                <Info className="w-3 h-3" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-80 max-h-[80vh] overflow-y-auto" align="start" side="right">

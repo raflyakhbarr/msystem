@@ -1,3 +1,4 @@
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, } from 'recharts'      
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -307,7 +308,7 @@ function Dashboard() {
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 dark:bg-primary/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 dark:from-blue-500/10 dark:via-transparent dark:to-purple-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-200 h-200 bg-linear-to-br from-blue-500/5 via-transparent to-purple-500/5 dark:from-blue-500/10 dark:via-transparent dark:to-purple-500/10 rounded-full blur-3xl" />
       </div>
 
       {/* Welcome Section */}
@@ -316,7 +317,7 @@ function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                <h1 className="text-3xl font-bold tracking-tight bg-linear-to-r from-foreground to-foreground/70 bg-clip-text">
                   Dashboard
                 </h1>
               </div>
@@ -423,7 +424,7 @@ function Dashboard() {
                     key={index}
                     className={`overflow-hidden border-2 ${stat.borderColor} hover:shadow-lg hover:shadow-${stat.glow} transition-all duration-300 hover:-translate-y-1 group relative`}
                   >
-                    <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+                    <div className={`absolute inset-0 bg-linear-to-br ${stat.color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                     <CardContent className="p-6 relative">
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
@@ -432,7 +433,7 @@ function Dashboard() {
                             <AnimatedCounter value={stat.value} />
                           </p>
                         </div>
-                        <div className={`rounded-xl p-3 bg-gradient-to-br ${stat.color} shadow-lg shadow-${stat.glow} group-hover:scale-110 transition-transform duration-300`}>
+                        <div className={`rounded-xl p-3 bg-linear-to-br ${stat.color} shadow-lg shadow-${stat.glow} group-hover:scale-110 transition-transform duration-300`}>
                           <stat.icon className="h-5 w-5 text-white" />
                         </div>
                       </div>
@@ -442,15 +443,41 @@ function Dashboard() {
               )}
             </div>
           </div>
+          {/* Charts */}
+          {/* Analytics Section */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="col-span-2">
+                <CardHeader>
+                  <CardTitle>System Overview</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={[
+                      { name: 'Systems', value: stats.systems, fill: '#3b82f6' },
+                      { name: 'Endpoints', value: stats.endpoints, fill: '#10b981' },
+                      { name: 'Groups', value: stats.endpointGroups, fill: '#22c55e' },
+                      { name: 'Accounts', value: stats.accounts, fill: '#a855f7' },
+                      { name: 'Features', value: stats.features, fill: '#f97316' }
+                    ]}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
 
           {/* Quick Links by Category */}
           <div className="space-y-8">
             {/* Management Section */}
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-1 w-8 bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 rounded-full" />
+                <div className="h-1 w-8 bg-linear-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 rounded-full" />
                 <h2 className="text-xl font-semibold">Management</h2>
-                <div className="flex-1 h-px bg-gradient-to-r from-blue-500/20 to-transparent dark:from-blue-400/30 dark:to-transparent" />
+                <div className="flex-1 h-px bg-linear-to-r from-blue-500/20 to-transparent dark:from-blue-400/30 dark:to-transparent" />
               </div>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {quickLinks.management.map((link, index) => (
@@ -484,9 +511,9 @@ function Dashboard() {
             {/* Configuration Section */}
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-1 w-8 bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-400 dark:to-emerald-500 rounded-full" />
+                <div className="h-1 w-8 bg-linear-to-r from-emerald-500 to-emerald-600 dark:from-emerald-400 dark:to-emerald-500 rounded-full" />
                 <h2 className="text-xl font-semibold">Configuration</h2>
-                <div className="flex-1 h-px bg-gradient-to-r from-emerald-500/20 to-transparent dark:from-emerald-400/30 dark:to-transparent" />
+                <div className="flex-1 h-px bg-linear-to-r from-emerald-500/20 to-transparent dark:from-emerald-400/30 dark:to-transparent" />
               </div>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {quickLinks.configuration.map((link, index) => (
@@ -520,9 +547,9 @@ function Dashboard() {
             {/* CMDB Section */}
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-1 w-8 bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-400 dark:to-teal-500 rounded-full" />
+                <div className="h-1 w-8 bg-linear-to-r from-teal-500 to-teal-600 dark:from-teal-400 dark:to-teal-500 rounded-full" />
                 <h2 className="text-xl font-semibold">CMDB</h2>
-                <div className="flex-1 h-px bg-gradient-to-r from-teal-500/20 to-transparent dark:from-teal-400/30 dark:to-transparent" />
+                <div className="flex-1 h-px bg-linear-to-r from-teal-500/20 to-transparent dark:from-teal-400/30 dark:to-transparent" />
               </div>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {quickLinks.cmdb.map((link, index) => (
@@ -556,9 +583,9 @@ function Dashboard() {
             {/* System Section */}
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-400">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-1 w-8 bg-gradient-to-r from-gray-500 to-gray-600 dark:from-gray-400 dark:to-gray-500 rounded-full" />
+                <div className="h-1 w-8 bg-linear-to-r from-gray-500 to-gray-600 dark:from-gray-400 dark:to-gray-500 rounded-full" />
                 <h2 className="text-xl font-semibold">System</h2>
-                <div className="flex-1 h-px bg-gradient-to-r from-gray-500/20 to-transparent dark:from-gray-400/30 dark:to-transparent" />
+                <div className="flex-1 h-px bg-linear-to-r from-gray-500/20 to-transparent dark:from-gray-400/30 dark:to-transparent" />
               </div>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {quickLinks.system.map((link, index) => (
