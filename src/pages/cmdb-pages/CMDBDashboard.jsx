@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { io } from 'socket.io-client';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -29,7 +30,6 @@ const STATUS_CONFIG = {
   decommissioned: { label: 'Decommissioned', color: 'text-red-600', bgColor: 'bg-red-50', icon: AlertTriangle },
 };
 
-// Warna untuk chart (konversi dari tailwind colors ke hex)
 const CHART_COLORS = {
   'green-600': '#16a34a',
   'gray-600': '#4b5563', 
@@ -45,13 +45,106 @@ const CHART_COLORS = {
   'lime-600': '#65a30d',
 };
 
-// Warna untuk data chart dinamis
 const DYNAMIC_COLORS = [
   '#2563eb', '#9333ea', '#4f46e5', '#db2777', '#0d9488',
   '#ea580c', '#0891b2', '#65a30d', '#dc2626', '#ca8a04',
 ];
 
-// Custom tooltip untuk chart
+const StatCardSkeleton = () => (
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="h-4 w-4 rounded" />
+    </CardHeader>
+    <CardContent>
+      <Skeleton className="h-8 w-16 mb-2" />
+      <Skeleton className="h-2 w-full mb-1" />
+      <Skeleton className="h-3 w-32" />
+    </CardContent>
+  </Card>
+);
+
+const ChartSkeleton = () => (
+  <div className="space-y-4">
+    {[1, 2, 3, 4].map((i) => (
+      <div key={i} className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <Skeleton className="h-2 w-full" />
+      </div>
+    ))}
+  </div>
+);
+
+const AlertItemSkeleton = () => (
+  <div className="space-y-3">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="p-3 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-2 w-2 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <Skeleton className="h-5 w-16 rounded-full" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ConnectionItemSkeleton = () => (
+  <div className="space-y-3">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+        </div>
+        <Skeleton className="h-6 w-12 rounded-full" />
+      </div>
+    ))}
+  </div>
+);
+
+const DetailChartSkeleton = () => (
+  <div className="space-y-4">
+    <Skeleton className="h-80 w-full rounded-lg" />
+    <div className="grid grid-cols-2 gap-3">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-3 w-3 rounded-full" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+          <Skeleton className="h-4 w-16" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ActivityItemSkeleton = () => (
+  <div className="space-y-3">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+        <Skeleton className="h-6 w-16 rounded-full" />
+      </div>
+    ))}
+  </div>
+);
+
 const CustomTooltip = ({ active, payload, total }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -72,8 +165,8 @@ const CustomTooltip = ({ active, payload, total }) => {
 export default function CMDBDashboard() {
   const { items, groups, connections, groupConnections, loading, fetchAll } = useCMDB();
   const [selectedTab, setSelectedTab] = useState('type');
-  const [chartType, setChartType] = useState('progress'); // 'progress', 'pie', 'bar'
-  const [detailChartType, setDetailChartType] = useState('pie'); // untuk tab detail
+  const [chartType, setChartType] = useState('progress');
+  const [detailChartType, setDetailChartType] = useState('pie');
 
   useEffect(() => {
     const socket = io('http://localhost:5000', {
@@ -168,7 +261,6 @@ export default function CMDBDashboard() {
     };
   }, [items, connections, groupConnections]);
   
-  // Data untuk chart
   const chartData = useMemo(() => {
     return Object.entries(STATUS_CONFIG).map(([status, config]) => {
       const count = stats.statusCount[status] || 0;
@@ -218,7 +310,6 @@ export default function CMDBDashboard() {
       .slice(0, 5);
   }, [items, connections]);
 
-  // Fungsi helper untuk render chart dinamis
   const renderDetailChart = (dataObj, title) => {
     const chartData = Object.entries(dataObj)
       .sort(([, a], [, b]) => b - a)
@@ -257,7 +348,6 @@ export default function CMDBDashboard() {
             </ResponsiveContainer>
           </div>
           
-          {/* Legend dengan detail */}
           <div className="mt-6 grid grid-cols-2 gap-3 w-full">
             {chartData.map((item) => {
               const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
@@ -282,7 +372,6 @@ export default function CMDBDashboard() {
       );
     }
 
-    // Bar chart
     return (
       <div className="h-96">
         <ResponsiveContainer width="100%" height="100%">
@@ -316,7 +405,6 @@ export default function CMDBDashboard() {
     );
   };
 
-  // Render Status Overview berdasarkan chart type
   const renderStatusOverview = () => {
     if (chartType === 'progress') {
       return (
@@ -382,7 +470,6 @@ export default function CMDBDashboard() {
                 </ResponsiveContainer>
               </div>
               
-              {/* Legend */}
               <div className="mt-4 grid grid-cols-2 gap-3 w-full">
                 {chartData.map((item) => {
                   const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
@@ -456,6 +543,99 @@ export default function CMDBDashboard() {
 
     return null;
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6 overflow-y-auto h-full">
+        {/* Header Skeleton */}
+        <div className="flex justify-between items-center">
+          <div>
+            <Skeleton className="h-9 w-64 mb-2" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-5 w-24" />
+        </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+
+        {/* Main Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Status Overview Skeleton */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <Skeleton className="h-6 w-32 mb-2" />
+                  <Skeleton className="h-4 w-64" />
+                </div>
+                <Skeleton className="h-9 w-[180px]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ChartSkeleton />
+            </CardContent>
+          </Card>
+
+          {/* Critical Alerts Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-28 mb-2" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent>
+              <AlertItemSkeleton />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Highly Connected Items Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-80" />
+          </CardHeader>
+          <CardContent>
+            <ConnectionItemSkeleton />
+          </CardContent>
+        </Card>
+
+        {/* Detailed Analytics Skeleton */}
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full" />
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <Skeleton className="h-6 w-32 mb-2" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+                <Skeleton className="h-9 w-[120px]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <DetailChartSkeleton />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </CardHeader>
+          <CardContent>
+            <ActivityItemSkeleton />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
