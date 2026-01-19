@@ -11,14 +11,14 @@ import {
   Eye,
   Zap,
   PieChart as PieChartIcon,
-  BarChart as BarChartIcon
+  BarChart as BarChartIcon,
+  Check
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { io } from 'socket.io-client';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -50,101 +50,6 @@ const DYNAMIC_COLORS = [
   '#ea580c', '#0891b2', '#65a30d', '#dc2626', '#ca8a04',
 ];
 
-const StatCardSkeleton = () => (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-4 w-4 rounded" />
-    </CardHeader>
-    <CardContent>
-      <Skeleton className="h-8 w-16 mb-2" />
-      <Skeleton className="h-2 w-full mb-1" />
-      <Skeleton className="h-3 w-32" />
-    </CardContent>
-  </Card>
-);
-
-const ChartSkeleton = () => (
-  <div className="space-y-4">
-    {[1, 2, 3, 4].map((i) => (
-      <div key={i} className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-16" />
-        </div>
-        <Skeleton className="h-2 w-full" />
-      </div>
-    ))}
-  </div>
-);
-
-const AlertItemSkeleton = () => (
-  <div className="space-y-3">
-    {[1, 2, 3].map((i) => (
-      <div key={i} className="p-3 bg-gray-50 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-2 w-2 rounded-full" />
-            <Skeleton className="h-4 w-32" />
-          </div>
-          <Skeleton className="h-5 w-16 rounded-full" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const ConnectionItemSkeleton = () => (
-  <div className="space-y-3">
-    {[1, 2, 3, 4, 5].map((i) => (
-      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-        </div>
-        <Skeleton className="h-6 w-12 rounded-full" />
-      </div>
-    ))}
-  </div>
-);
-
-const DetailChartSkeleton = () => (
-  <div className="space-y-4">
-    <Skeleton className="h-80 w-full rounded-lg" />
-    <div className="grid grid-cols-2 gap-3">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-3 w-3 rounded-full" />
-            <Skeleton className="h-4 w-20" />
-          </div>
-          <Skeleton className="h-4 w-16" />
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-const ActivityItemSkeleton = () => (
-  <div className="space-y-3">
-    {[1, 2, 3, 4, 5].map((i) => (
-      <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-8 w-8 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-24" />
-          </div>
-        </div>
-        <Skeleton className="h-6 w-16 rounded-full" />
-      </div>
-    ))}
-  </div>
-);
-
 const CustomTooltip = ({ active, payload, total }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -163,7 +68,7 @@ const CustomTooltip = ({ active, payload, total }) => {
 };
 
 export default function CMDBDashboard() {
-  const { items, groups, connections, groupConnections, loading, fetchAll } = useCMDB();
+  const { items, groups, connections, groupConnections, fetchAll } = useCMDB();
   const [selectedTab, setSelectedTab] = useState('type');
   const [chartType, setChartType] = useState('progress');
   const [detailChartType, setDetailChartType] = useState('pie');
@@ -544,99 +449,6 @@ export default function CMDBDashboard() {
     return null;
   };
 
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6 overflow-y-auto h-full">
-        {/* Header Skeleton */}
-        <div className="flex justify-between items-center">
-          <div>
-            <Skeleton className="h-9 w-64 mb-2" />
-            <Skeleton className="h-4 w-80" />
-          </div>
-          <Skeleton className="h-5 w-24" />
-        </div>
-
-        {/* Stats Cards Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <StatCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Main Content Skeleton */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Status Overview Skeleton */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <Skeleton className="h-6 w-32 mb-2" />
-                  <Skeleton className="h-4 w-64" />
-                </div>
-                <Skeleton className="h-9 w-[180px]" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ChartSkeleton />
-            </CardContent>
-          </Card>
-
-          {/* Critical Alerts Skeleton */}
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-28 mb-2" />
-              <Skeleton className="h-4 w-48" />
-            </CardHeader>
-            <CardContent>
-              <AlertItemSkeleton />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Highly Connected Items Skeleton */}
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
-          </CardHeader>
-          <CardContent>
-            <ConnectionItemSkeleton />
-          </CardContent>
-        </Card>
-
-        {/* Detailed Analytics Skeleton */}
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-full" />
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <Skeleton className="h-6 w-32 mb-2" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <Skeleton className="h-9 w-[120px]" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <DetailChartSkeleton />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity Skeleton */}
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32 mb-2" />
-            <Skeleton className="h-4 w-48" />
-          </CardHeader>
-          <CardContent>
-            <ActivityItemSkeleton />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
       {/* Header dengan indikator realtime */}
@@ -786,7 +598,7 @@ export default function CMDBDashboard() {
                 })
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  ✓ No critical alerts
+                  <Check className="inline-block" /> No critical alerts
                 </p>
               )}
             </div>
