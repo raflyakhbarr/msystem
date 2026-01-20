@@ -11,7 +11,8 @@ import {
   Eye,
   Zap,
   PieChart as PieChartIcon,
-  BarChart as BarChartIcon
+  BarChart as BarChartIcon,
+  Check
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -29,7 +30,6 @@ const STATUS_CONFIG = {
   decommissioned: { label: 'Decommissioned', color: 'text-red-600', bgColor: 'bg-red-50', icon: AlertTriangle },
 };
 
-// Warna untuk chart (konversi dari tailwind colors ke hex)
 const CHART_COLORS = {
   'green-600': '#16a34a',
   'gray-600': '#4b5563', 
@@ -45,13 +45,11 @@ const CHART_COLORS = {
   'lime-600': '#65a30d',
 };
 
-// Warna untuk data chart dinamis
 const DYNAMIC_COLORS = [
   '#2563eb', '#9333ea', '#4f46e5', '#db2777', '#0d9488',
   '#ea580c', '#0891b2', '#65a30d', '#dc2626', '#ca8a04',
 ];
 
-// Custom tooltip untuk chart
 const CustomTooltip = ({ active, payload, total }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -70,10 +68,10 @@ const CustomTooltip = ({ active, payload, total }) => {
 };
 
 export default function CMDBDashboard() {
-  const { items, groups, connections, groupConnections, loading, fetchAll } = useCMDB();
+  const { items, groups, connections, groupConnections, fetchAll } = useCMDB();
   const [selectedTab, setSelectedTab] = useState('type');
-  const [chartType, setChartType] = useState('progress'); // 'progress', 'pie', 'bar'
-  const [detailChartType, setDetailChartType] = useState('pie'); // untuk tab detail
+  const [chartType, setChartType] = useState('progress');
+  const [detailChartType, setDetailChartType] = useState('pie');
 
   useEffect(() => {
     const socket = io('http://localhost:5000', {
@@ -168,7 +166,6 @@ export default function CMDBDashboard() {
     };
   }, [items, connections, groupConnections]);
   
-  // Data untuk chart
   const chartData = useMemo(() => {
     return Object.entries(STATUS_CONFIG).map(([status, config]) => {
       const count = stats.statusCount[status] || 0;
@@ -218,7 +215,6 @@ export default function CMDBDashboard() {
       .slice(0, 5);
   }, [items, connections]);
 
-  // Fungsi helper untuk render chart dinamis
   const renderDetailChart = (dataObj, title) => {
     const chartData = Object.entries(dataObj)
       .sort(([, a], [, b]) => b - a)
@@ -257,7 +253,6 @@ export default function CMDBDashboard() {
             </ResponsiveContainer>
           </div>
           
-          {/* Legend dengan detail */}
           <div className="mt-6 grid grid-cols-2 gap-3 w-full">
             {chartData.map((item) => {
               const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
@@ -282,7 +277,6 @@ export default function CMDBDashboard() {
       );
     }
 
-    // Bar chart
     return (
       <div className="h-96">
         <ResponsiveContainer width="100%" height="100%">
@@ -316,7 +310,6 @@ export default function CMDBDashboard() {
     );
   };
 
-  // Render Status Overview berdasarkan chart type
   const renderStatusOverview = () => {
     if (chartType === 'progress') {
       return (
@@ -382,7 +375,6 @@ export default function CMDBDashboard() {
                 </ResponsiveContainer>
               </div>
               
-              {/* Legend */}
               <div className="mt-4 grid grid-cols-2 gap-3 w-full">
                 {chartData.map((item) => {
                   const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
@@ -606,7 +598,7 @@ export default function CMDBDashboard() {
                 })
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  ✓ No critical alerts
+                  <Check className="inline-block" /> No critical alerts
                 </p>
               )}
             </div>

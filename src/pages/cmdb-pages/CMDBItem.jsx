@@ -9,6 +9,7 @@ import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import DataTable from '../../components/common/DataTable';
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -21,6 +22,54 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 
+const TableRowSkeleton = () => (
+  <tr className="border-b">
+    <td className="p-3"><Skeleton className="h-4 w-32" /></td>
+    <td className="p-3"><Skeleton className="h-6 w-20 rounded-full" /></td>
+    <td className="p-3"><Skeleton className="h-4 w-24" /></td>
+    <td className="p-3"><Skeleton className="h-6 w-16 rounded" /></td>
+    <td className="p-3">
+      <div className="space-y-1">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="h-3 w-28" />
+      </div>
+    </td>
+    <td className="p-3">
+      <div className="flex gap-2">
+        <Skeleton className="h-8 w-8 rounded" />
+        <Skeleton className="h-8 w-8 rounded" />
+        <Skeleton className="h-8 w-8 rounded" />
+      </div>
+    </td>
+  </tr>
+);
+
+const FormSkeleton = () => (
+  <div className="space-y-4">
+    <div>
+      <Skeleton className="h-4 w-16 mb-2" />
+      <Skeleton className="h-10 w-full rounded" />
+    </div>
+    <div>
+      <Skeleton className="h-4 w-16 mb-2" />
+      <Skeleton className="h-10 w-full rounded" />
+    </div>
+    <div>
+      <Skeleton className="h-4 w-24 mb-2" />
+      <Skeleton className="h-24 w-full rounded" />
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <Skeleton className="h-4 w-16 mb-2" />
+        <Skeleton className="h-10 w-full rounded" />
+      </div>
+      <div>
+        <Skeleton className="h-4 w-16 mb-2" />
+        <Skeleton className="h-10 w-full rounded" />
+      </div>
+    </div>
+  </div>
+);
 
 export default function CMDBItem() {
   const {
@@ -33,6 +82,7 @@ export default function CMDBItem() {
     fetchGroups,
     deleteItem,
     deleteGroup,
+    loading,
   } = useCMDB();
 
   const {
@@ -51,6 +101,7 @@ export default function CMDBItem() {
   const [currentId, setCurrentId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Connection modal state
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -77,6 +128,7 @@ export default function CMDBItem() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
     const formDataToSend = new FormData();
     Object.keys(formData).forEach(key => {
@@ -111,6 +163,8 @@ export default function CMDBItem() {
     } catch (err) {
       console.error(err);
       alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -138,7 +192,6 @@ export default function CMDBItem() {
       alert('Gagal menghapus: ' + result.error);
     }
   };
-
 
   const resetForm = () => {
     setFormData(INITIAL_ITEM_FORM);
@@ -234,6 +287,7 @@ export default function CMDBItem() {
 
   const handleGroupSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       if (editGroupMode) {
         await api.put(`/groups/${currentGroupId}`, groupFormData);
@@ -246,6 +300,8 @@ export default function CMDBItem() {
       setEditGroupMode(false);
     } catch (err) {
       alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -496,121 +552,125 @@ export default function CMDBItem() {
   );
 
   return (
-      <div>
-        
-        <DataTable
-          data={items}
-          columns={columns}
-          title="Items"
-          actionButtons={[
-            {
-              label: 'Item',
-              icon: <Plus />,
-              className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
-              onClick: () => {
-                resetForm();
-                setShowModal(true);
-              }
-            },
-            {
-              label: 'Group',
-              icon: <Plus />,
-              className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
-              onClick: () => {
-                setGroupFormData(INITIAL_GROUP_FORM);
-                setEditGroupMode(false);
-                setShowGroupModal(true);
-              }
+    <div>
+      <DataTable
+        data={items}
+        columns={columns}
+        title="Items"
+        loading={loading}
+        skeletonComponent={<TableRowSkeleton />}
+        actionButtons={[
+          {
+            label: 'Item',
+            icon: <Plus />,
+            className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
+            onClick: () => {
+              resetForm();
+              setShowModal(true);
             }
-          ]}
-          onExport={(data) => {
-            return data.map(item => {
-              const group = groups.find(g => g.id === item.group_id);
-              return {
-                'Nama': item.name || '',
-                'Type': item.type || '',
-                'Status': item.status || '',
-                'IP': item.ip || '',
-                'Category': item.category || '',
-                'Location': item.location || '',
-                'Group': group ? group.name : '-',
-                'Environment Type': item.env_type || '',
-                'Description': item.description || '',
-              };
-            });
-          }}
-          itemsPerPage={10}
-          showAddButton={false}
-          showExportButton={true}
-          showRefreshButton={true}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-          maxHeight="max-h-[500px]"
-        />
+          },
+          {
+            label: 'Group',
+            icon: <Plus />,
+            className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
+            onClick: () => {
+              setGroupFormData(INITIAL_GROUP_FORM);
+              setEditGroupMode(false);
+              setShowGroupModal(true);
+            }
+          }
+        ]}
+        onExport={(data) => {
+          return data.map(item => {
+            const group = groups.find(g => g.id === item.group_id);
+            return {
+              'Nama': item.name || '',
+              'Type': item.type || '',
+              'Status': item.status || '',
+              'IP': item.ip || '',
+              'Category': item.category || '',
+              'Location': item.location || '',
+              'Group': group ? group.name : '-',
+              'Environment Type': item.env_type || '',
+              'Description': item.description || '',
+            };
+          });
+        }}
+        itemsPerPage={10}
+        showAddButton={false}
+        showExportButton={true}
+        showRefreshButton={true}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        maxHeight="max-h-[500px]"
+      />
 
-        <ItemFormModal
-          show={showModal}
-          editMode={editMode}
-          formData={formData}
-          groups={groups}
-          selectedFiles={selectedFiles}
-          imagePreviews={imagePreviews}
-          existingImages={existingImages}
-          onClose={() => {
-            setShowModal(false);
-            setTimeout(() => resetForm(), 200);
-          }}
-          onSubmit={handleSubmit}
-          onInputChange={handleInputChange}
-          onFileSelect={handleFileSelect}
-          onRemoveNewImage={handleRemoveNewImage}
-          onRemoveExistingImage={(imgPath) => handleRemoveExistingImage(imgPath, currentId)}
-        />
+      <ItemFormModal
+        show={showModal}
+        editMode={editMode}
+        formData={formData}
+        groups={groups}
+        selectedFiles={selectedFiles}
+        imagePreviews={imagePreviews}
+        existingImages={existingImages}
+        isSubmitting={isSubmitting}
+        skeletonComponent={<FormSkeleton />}
+        onClose={() => {
+          setShowModal(false);
+          setTimeout(() => resetForm(), 200);
+        }}
+        onSubmit={handleSubmit}
+        onInputChange={handleInputChange}
+        onFileSelect={handleFileSelect}
+        onRemoveNewImage={handleRemoveNewImage}
+        onRemoveExistingImage={(imgPath) => handleRemoveExistingImage(imgPath, currentId)}
+      />
 
-        <ConnectionModal
-          show={showConnectionModal}
-          selectedItem={selectedItemForConnection}
-          items={items}
-          groups={groups}
-          selectedConnections={selectedConnections}
-          selectedGroupConnections={selectedGroupConnections}
-          onClose={() => setShowConnectionModal(false)}
-          onSave={handleSaveConnections}
-          onToggleConnection={handleToggleConnection}
-          onToggleGroupConnection={handleToggleGroupConnection}
-        />
+      <ConnectionModal
+        show={showConnectionModal}
+        selectedItem={selectedItemForConnection}
+        items={items}
+        groups={groups}
+        selectedConnections={selectedConnections}
+        selectedGroupConnections={selectedGroupConnections}
+        onClose={() => setShowConnectionModal(false)}
+        onSave={handleSaveConnections}
+        onToggleConnection={handleToggleConnection}
+        onToggleGroupConnection={handleToggleGroupConnection}
+      />
 
-        <GroupModal
-          show={showGroupModal}
-          editMode={editGroupMode}
-          formData={groupFormData}
-          groups={groups}
-          onClose={() => {
-            setShowGroupModal(false);
-            setGroupFormData(INITIAL_GROUP_FORM);
-            setEditGroupMode(false);
-          }}
-          onSubmit={handleGroupSubmit}
-          onInputChange={handleGroupInputChange}
-          onEditGroup={handleEditGroup}
-          onDeleteGroup={handleDeleteGroup}
-          onOpenGroupConnection={handleOpenGroupConnectionModal}
-        />
+      <GroupModal
+        show={showGroupModal}
+        editMode={editGroupMode}
+        formData={groupFormData}
+        groups={groups}
+        isSubmitting={isSubmitting}
+        onClose={() => {
+          setShowGroupModal(false);
+          setGroupFormData(INITIAL_GROUP_FORM);
+          setEditGroupMode(false);
+        }}
+        onSubmit={handleGroupSubmit}
+        onInputChange={handleGroupInputChange}
+        onEditGroup={handleEditGroup}
+        onDeleteGroup={handleDeleteGroup}
+        onOpenGroupConnection={handleOpenGroupConnectionModal}
+      />
 
-        <GroupConnectionModal
-          show={showGroupConnectionModal}
-          selectedGroup={selectedGroupForConnection}
-          groups={groups}
-          items={items}
-          selectedConnections={selectedGroupToGroupConnections}
-          selectedGroupConnections={selectedGroupToGroupConnections}
-          selectedItemConnections={selectedGroupToItemConnections}
-          onClose={() => setShowGroupConnectionModal(false)}
-          onSave={handleSaveGroupConnections}
-          onToggleConnection={handleToggleGroupToGroupConnection}
-          onToggleGroupConnection={handleToggleGroupToGroupConnection}
-          onToggleItemConnection={handleToggleGroupToItemConnection}
-        />
-      </div>
+      <GroupConnectionModal
+        show={showGroupConnectionModal}
+        selectedGroup={selectedGroupForConnection}
+        groups={groups}
+        items={items}
+        selectedConnections={selectedGroupToGroupConnections}
+        selectedGroupConnections={selectedGroupToGroupConnections}
+        selectedItemConnections={selectedGroupToItemConnections}
+        onClose={() => setShowGroupConnectionModal(false)}
+        onSave={handleSaveGroupConnections}
+        onToggleConnection={handleToggleGroupToGroupConnection}
+        onToggleGroupConnection={handleToggleGroupToGroupConnection}
+        onToggleItemConnection={handleToggleGroupToItemConnection}
+      />
+    </div>
   );
 }
