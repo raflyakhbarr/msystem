@@ -1,0 +1,45 @@
+/* Swiper navigation button styles */
+.swiper-button-prev,
+.swiper-button-next {
+  color: white !important;
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  transition: background-color 0.3s ease !important;
+}
+
+.swiper-button-prev:hover,
+.swiper-button-next:hover {
+  background-color: rgba(0, 0, 0, 0.85) !important;
+}
+
+.swiper-button-prev::after,
+.swiper-button-next::after {
+  font-size: 22px !important;
+  font-weight: bold !important;
+}
+
+.swiper-button-prev {
+  left: 16px !important;
+}
+
+.swiper-button-next {
+  right: 16px !important;
+}
+
+/* Swiper container and slides */
+.swiper,
+.swiper-slide {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.swiper-slide {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}

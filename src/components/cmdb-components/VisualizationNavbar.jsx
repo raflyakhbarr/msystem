@@ -71,7 +71,7 @@ export default function VisualizationNavbar({
           {/* Left Side - Actions */}
           <div className="flex items-center gap-2">
             <SidebarTrigger className="ml-2 transition-all" />
-            <div className="h-8 w-px bg-gradient-to-b from-transparent via-gray-300 to-transparent"></div>
+            <div className="h-8 w-px bg-linear-to-b from-transparent via-gray-300 to-transparent"></div>
             
             {/* Add Item & Groups */}
             <div className="flex items-center gap-1">

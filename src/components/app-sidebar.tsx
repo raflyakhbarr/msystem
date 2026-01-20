@@ -1,6 +1,6 @@
 "use client"
 import * as React from "react"
-import {  Command, Server, Link, Users, SquareStack, User, Braces, LayoutDashboard, GitFork,} from "lucide-react"
+import {  Command, Server, Link, Users, SquareStack, User, Braces, LayoutDashboard, GitFork, BookOpen} from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,} from "@/components/ui/sidebar"
@@ -93,6 +93,24 @@ const navMainItems = [
       },
     ],
   },
+  {
+    title: "Banner",
+    url: "#",
+    icon:BookOpen,
+    isActive: true,
+    items: [
+      {
+        title: "Banner Setting",
+        url: "/banner/setting",
+        isActive:false,
+      },
+      {
+        title: "Banner Preview",
+        url:"/banner/preview",
+        isActive:false,
+      }
+    ]
+  }
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

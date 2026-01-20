@@ -25,8 +25,7 @@ interface Column {
   enumOptions?: Array<{ value: string; label: string; color?: string }>;
   nested?: boolean;
   badgelabel?: string;
-  trueColor?: string;
-  falseColor?: string;
+  colorlabel?: string
   render?: (item: unknown) => React.ReactNode;
 }
 
