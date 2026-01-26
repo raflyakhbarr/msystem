@@ -1,15 +1,18 @@
 import { useState, useMemo } from 'react';
-import { Pencil, Trash2, Link, Plus } from 'lucide-react';
+import { Pencil, Trash2, Link, Plus, Layers, Eye } from 'lucide-react'; 
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
+import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace'; 
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
 import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
+import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitcher'; 
 import DataTable from '../../components/common/DataTable';
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from 'sonner'; 
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -72,6 +75,21 @@ const FormSkeleton = () => (
 );
 
 export default function CMDBItem() {
+  // WORKSPACE HOOK
+  const {
+    workspaces,
+    currentWorkspace,
+    viewAllMode,
+    switchWorkspace,
+    toggleViewAll,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
+    setDefaultWorkspace,
+    duplicateWorkspace,
+  } = useWorkspace();
+
+  // CMDB HOOK
   const {
     items,
     connections,
@@ -83,7 +101,7 @@ export default function CMDBItem() {
     deleteItem,
     deleteGroup,
     loading,
-  } = useCMDB();
+  } = useCMDB(currentWorkspace?.id, viewAllMode);
 
   const {
     selectedFiles,
@@ -128,6 +146,19 @@ export default function CMDBItem() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // VALIDASI WORKSPACE
+    if (!currentWorkspace && !viewAllMode) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
+    // Tidak bisa create/edit di view all mode
+    if (viewAllMode) {
+      toast.error('Tidak dapat menambah/edit item di mode View All. Pilih workspace tertentu.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const formDataToSend = new FormData();
@@ -136,6 +167,8 @@ export default function CMDBItem() {
         formDataToSend.append(key, formData[key]);
       }
     });
+
+    formDataToSend.append('workspace_id', currentWorkspace.id);
 
     if (editMode) {
       formDataToSend.append('existingImages', JSON.stringify(existingImages));
@@ -150,10 +183,12 @@ export default function CMDBItem() {
         await api.put(`/cmdb/${currentId}`, formDataToSend, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
+        toast.success('Item berhasil diperbarui');
       } else {
         await api.post('/cmdb', formDataToSend, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
+        toast.success('Item berhasil ditambahkan');
       }
       fetchItems();
       fetchConnections();
@@ -162,7 +197,7 @@ export default function CMDBItem() {
       setShowModal(false);
     } catch (err) {
       console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsSubmitting(false);
     }
@@ -188,8 +223,10 @@ export default function CMDBItem() {
 
   const handleDelete = async (id) => {
     const result = await deleteItem(id);
-    if (!result.success) {
-      alert('Gagal menghapus: ' + result.error);
+    if (result.success) {
+      toast.success('Item berhasil dihapus');
+    } else {
+      toast.error('Gagal menghapus: ' + result.error);
     }
   };
 
@@ -234,6 +271,17 @@ export default function CMDBItem() {
   };
 
   const handleSaveConnections = async () => {
+    // VALIDASI WORKSPACE
+    if (!currentWorkspace && !viewAllMode) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
+    if (viewAllMode) {
+      toast.error('Tidak dapat mengelola koneksi di mode View All. Pilih workspace tertentu.');
+      return;
+    }
+
     try {
       const currentItemConns = connections
         .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
@@ -245,7 +293,8 @@ export default function CMDBItem() {
       for (const targetId of itemsToAdd) {
         await api.post('/cmdb/connections', {
           source_id: selectedItemForConnection.id,
-          target_id: targetId
+          target_id: targetId,
+          workspace_id: currentWorkspace.id
         });
       }
 
@@ -263,7 +312,8 @@ export default function CMDBItem() {
       for (const groupId of groupsToAdd) {
         await api.post('/cmdb/connections/to-group', {
           source_id: selectedItemForConnection.id,
-          target_group_id: groupId
+          target_group_id: groupId,
+          workspace_id: currentWorkspace.id 
         });
       }
 
@@ -273,9 +323,10 @@ export default function CMDBItem() {
 
       fetchConnections();
       setShowConnectionModal(false);
+      toast.success('Koneksi berhasil disimpan');
     } catch (err) {
       console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -287,19 +338,36 @@ export default function CMDBItem() {
 
   const handleGroupSubmit = async (e) => {
     e.preventDefault();
+
+    // VALIDASI WORKSPACE
+    if (!currentWorkspace && !viewAllMode) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
+    if (viewAllMode) {
+      toast.error('Tidak dapat menambah/edit group di mode View All. Pilih workspace tertentu.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (editGroupMode) {
         await api.put(`/groups/${currentGroupId}`, groupFormData);
+        toast.success('Group berhasil diperbarui');
       } else {
-        await api.post('/groups', groupFormData);
+        await api.post('/groups', {
+          ...groupFormData,
+          workspace_id: currentWorkspace.id
+        });
+        toast.success('Group berhasil ditambahkan');
       }
       fetchGroups();
       setShowGroupModal(false);
       setGroupFormData(INITIAL_GROUP_FORM);
       setEditGroupMode(false);
     } catch (err) {
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsSubmitting(false);
     }
@@ -313,8 +381,10 @@ export default function CMDBItem() {
         fetchConnections(),
         fetchGroups(),
       ]);
+      toast.success('Data berhasil di-refresh');
     } catch (error) {
       console.error('Gagal refresh data:', error);
+      toast.error('Gagal refresh data');
     } finally {
       setRefreshing(false);
     }
@@ -332,10 +402,11 @@ export default function CMDBItem() {
   };
 
   const handleDeleteGroup = async (id) => {
-    if (!window.confirm('Hapus group ini? Items di dalamnya tidak akan dihapus.')) return;
     const result = await deleteGroup(id);
-    if (!result.success) {
-      alert('Gagal menghapus: ' + result.error);
+    if (result.success) {
+      toast.success('Group berhasil dihapus');
+    } else {
+      toast.error('Gagal menghapus: ' + result.error);
     }
   };
 
@@ -372,6 +443,17 @@ export default function CMDBItem() {
   };
 
   const handleSaveGroupConnections = async () => {
+    // VALIDASI WORKSPACE
+    if (!currentWorkspace && !viewAllMode) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
+    if (viewAllMode) {
+      toast.error('Tidak dapat mengelola koneksi di mode View All. Pilih workspace tertentu.');
+      return;
+    }
+
     try {
       const currentGroupConns = groupConnections
         .filter(conn => conn.source_id === selectedGroupForConnection.id)
@@ -383,7 +465,8 @@ export default function CMDBItem() {
       for (const targetId of groupsToAdd) {
         await api.post('/groups/connections', {
           source_id: selectedGroupForConnection.id,
-          target_id: targetId
+          target_id: targetId,
+          workspace_id: currentWorkspace.id 
         });
       }
 
@@ -401,7 +484,8 @@ export default function CMDBItem() {
       for (const targetId of itemsToAdd) {
         await api.post('/cmdb/connections/from-group', {
           source_group_id: selectedGroupForConnection.id,
-          target_id: targetId
+          target_id: targetId,
+          workspace_id: currentWorkspace.id // TAMBAHKAN
         });
       }
 
@@ -411,9 +495,10 @@ export default function CMDBItem() {
 
       fetchConnections();
       setShowGroupConnectionModal(false);
+      toast.success('Koneksi group berhasil disimpan');
     } catch (err) {
       console.error(err);
-      alert('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -475,6 +560,27 @@ export default function CMDBItem() {
           );
         },
       },
+      // TAMBAHKAN KOLOM WORKSPACE di View All Mode
+      ...(viewAllMode ? [{
+        key: 'workspace_id',
+        label: 'Workspace',
+        sortable: true,
+        searchable: true,
+        isEnum: true,
+        enumOptions: [
+          ...workspaces.map(w => ({ value: w.id.toString(), label: w.name }))
+        ],
+        render: (item) => {
+          const workspace = workspaces.find(w => w.id === item.workspace_id);
+          return workspace ? (
+            <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-800 border border-purple-300">
+              {workspace.name}
+            </span>
+          ) : (
+            <span className="text-gray-400 text-xs">-</span>
+          );
+        },
+      }] : []),
       {
         key: 'connections',
         label: 'Koneksi',
@@ -548,11 +654,69 @@ export default function CMDBItem() {
         ),
       },
     ],
-    [connections, groups]
+    [connections, groups, viewAllMode, workspaces] // TAMBAHKAN viewAllMode, workspaces
   );
 
   return (
-    <div>
+    <div className="space-y-4">
+      {/* WORKSPACE SWITCHER SECTION */}
+      <div className="flex items-center justify-between p-4 bg-card border rounded-lg shadow-sm">
+        <div className="flex items-center gap-3">
+          <Layers className="text-primary" size={24} />
+          <div>
+            <h2 className="font-semibold text-lg">Current Workspace</h2>
+            <p className="text-sm text-muted-foreground">
+              {viewAllMode 
+                ? 'Viewing all workspaces (read-only)' 
+                : currentWorkspace 
+                  ? `Working in: ${currentWorkspace.name}` 
+                  : 'No workspace selected'}
+            </p>
+          </div>
+        </div>
+        <div className="w-64">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            currentWorkspace={currentWorkspace}
+            viewAllMode={viewAllMode} // TAMBAHKAN
+            onSwitch={switchWorkspace}
+            onCreate={createWorkspace}
+            onUpdate={updateWorkspace}
+            onDelete={deleteWorkspace}
+            onDuplicate={duplicateWorkspace}
+            onSetDefault={setDefaultWorkspace}
+            onToggleViewAll={toggleViewAll} // TAMBAHKAN
+          />
+        </div>
+      </div>
+
+      {/* NO WORKSPACE WARNING */}
+      {!currentWorkspace && !viewAllMode && (
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-800">
+            <Layers size={20} />
+            <div>
+              <p className="font-medium">Pilih atau Buat Workspace</p>
+              <p className="text-sm">Anda perlu memilih workspace untuk mengelola items dan groups</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW ALL MODE INFO */}
+      {viewAllMode && (
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="flex items-center gap-2 text-purple-800">
+            <Eye size={20} />
+            <div>
+              <p className="font-medium">Mode View All Workspaces</p>
+              <p className="text-sm">Anda sedang melihat data dari semua workspace. Pilih workspace tertentu untuk menambah atau mengedit data.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DATA TABLE */}
       <DataTable
         data={items}
         columns={columns}
@@ -565,19 +729,29 @@ export default function CMDBItem() {
             icon: <Plus />,
             className: 'bg-primary hover:bg-primary/90 text-primary-foreground flex items-center space-x-2',
             onClick: () => {
+              if (!currentWorkspace || viewAllMode) {
+                toast.error(viewAllMode ? 'Pilih workspace tertentu untuk menambah item' : 'Pilih workspace terlebih dahulu');
+                return;
+              }
               resetForm();
               setShowModal(true);
-            }
+            },
+            disabled: !currentWorkspace || viewAllMode
           },
           {
             label: 'Group',
             icon: <Plus />,
             className: 'bg-white hover:bg-gray-100 text-black border border-gray-300 flex items-center space-x-2',
             onClick: () => {
+              if (!currentWorkspace || viewAllMode) {
+                toast.error(viewAllMode ? 'Pilih workspace tertentu untuk menambah group' : 'Pilih workspace terlebih dahulu');
+                return;
+              }
               setGroupFormData(INITIAL_GROUP_FORM);
               setEditGroupMode(false);
               setShowGroupModal(true);
-            }
+            },
+            disabled: !currentWorkspace || viewAllMode
           }
         ]}
         onExport={(data) => {
@@ -605,6 +779,7 @@ export default function CMDBItem() {
         maxHeight="max-h-[500px]"
       />
 
+      {/* MODALS */}
       <ItemFormModal
         show={showModal}
         editMode={editMode}
@@ -613,6 +788,7 @@ export default function CMDBItem() {
         selectedFiles={selectedFiles}
         imagePreviews={imagePreviews}
         existingImages={existingImages}
+        currentWorkspace={currentWorkspace} // TAMBAHKAN
         isSubmitting={isSubmitting}
         skeletonComponent={<FormSkeleton />}
         onClose={() => {
@@ -644,6 +820,7 @@ export default function CMDBItem() {
         editMode={editGroupMode}
         formData={groupFormData}
         groups={groups}
+        currentWorkspace={currentWorkspace} 
         isSubmitting={isSubmitting}
         onClose={() => {
           setShowGroupModal(false);

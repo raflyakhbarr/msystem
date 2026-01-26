@@ -26,6 +26,7 @@ export default function ItemFormModal({
   selectedFiles,
   imagePreviews,
   existingImages,
+  currentWorkspace, // TAMBAHKAN PROP
   onClose,
   onSubmit,
   onInputChange,
@@ -43,8 +44,13 @@ export default function ItemFormModal({
     <Dialog open={show} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {editMode ? 'Edit Item' : 'Tambah Item Baru'}
+          <DialogTitle className="flex items-center justify-between">
+            <span>{editMode ? 'Edit Item' : 'Tambah Item Baru'}</span>
+            {currentWorkspace && (
+              <span className="text-sm font-normal text-muted-foreground">
+                Workspace: {currentWorkspace.name}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
         

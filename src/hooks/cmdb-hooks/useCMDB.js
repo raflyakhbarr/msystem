@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 
-export const useCMDB = () => {
+export const useCMDB = (workspaceId, viewAllMode = false) => {
   const [items, setItems] = useState([]);
   const [connections, setConnections] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -11,41 +11,46 @@ export const useCMDB = () => {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/cmdb');
+      // Jika viewAllMode, ambil semua data tanpa filter workspace
+      const url = viewAllMode ? '/cmdb' : `/cmdb?workspace_id=${workspaceId}`;
+      const res = await api.get(url);
       setItems(res.data);
     } catch (err) {
       console.error('Failed to fetch items:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId, viewAllMode]);
 
   const fetchConnections = useCallback(async () => {
     try {
-      const res = await api.get('/cmdb/connections');
+      const url = viewAllMode ? '/cmdb/connections' : `/cmdb/connections?workspace_id=${workspaceId}`;
+      const res = await api.get(url);
       setConnections(res.data);
     } catch (err) {
       console.error('Failed to fetch connections:', err);
     }
-  }, []);
+  }, [workspaceId, viewAllMode]);
 
   const fetchGroups = useCallback(async () => {
     try {
-      const res = await api.get('/groups');
+      const url = viewAllMode ? '/groups' : `/groups?workspace_id=${workspaceId}`;
+      const res = await api.get(url);
       setGroups(res.data);
     } catch (err) {
       console.error('Failed to fetch groups:', err);
     }
-  }, []);
+  }, [workspaceId, viewAllMode]);
 
   const fetchGroupConnections = useCallback(async () => {
     try {
-      const res = await api.get('/groups/connections');
+      const url = viewAllMode ? '/groups/connections' : `/groups/connections?workspace_id=${workspaceId}`;
+      const res = await api.get(url);
       setGroupConnections(res.data);
     } catch (err) {
       console.error('Failed to fetch group connections:', err);
     }
-  }, []);
+  }, [workspaceId, viewAllMode]);
 
   const fetchAll = useCallback(async () => {
     await Promise.all([
@@ -57,8 +62,17 @@ export const useCMDB = () => {
   }, [fetchItems, fetchConnections, fetchGroups, fetchGroupConnections]);
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    // Fetch data jika viewAllMode aktif ATAU ada workspaceId
+    if (viewAllMode || workspaceId) {
+      fetchAll();
+    } else {
+      // Reset data jika tidak ada workspace dan viewAllMode off
+      setItems([]);
+      setConnections([]);
+      setGroups([]);
+      setGroupConnections([]);
+    }
+  }, [workspaceId, viewAllMode, fetchAll]);
 
   const deleteItem = async (id) => {
     try {

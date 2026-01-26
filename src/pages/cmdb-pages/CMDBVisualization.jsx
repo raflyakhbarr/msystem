@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
+  MiniMap,
   useNodesState,
   useEdgesState,
   reconnectEdge,
@@ -54,6 +55,8 @@ import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
 import DataTable from '@/components/common/DataTable';
+import { useWorkspace } from '@/hooks/cmdb-hooks/useWorkspace';
+import WorkspaceSwitcher from '@/components/cmdb-components/WorkspaceSwitcher';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -147,7 +150,23 @@ export default function CMDBVisualization() {
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
 
-  const { items, connections, groups, groupConnections, fetchAll } = useCMDB();
+  const [showMiniMap, setShowMiniMap] = useState(() => {
+    const saved = localStorage.getItem('cmdb-minimap-enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const {
+    workspaces,
+    currentWorkspace,
+    switchWorkspace,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
+    setDefaultWorkspace,
+    duplicateWorkspace,
+  } = useWorkspace();
+
+  const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
   
   const [showExportModal, setShowExportModal] = useState(false);
@@ -463,6 +482,10 @@ export default function CMDBVisualization() {
     };
   }, [fetchAll]);
 
+  useEffect(() => {
+    localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));
+  }, [showMiniMap]);
+
   const handleOpenAddItem = useCallback(() => {
     setItemFormData(INITIAL_ITEM_FORM);
     setEditItemMode(false);
@@ -492,6 +515,11 @@ export default function CMDBVisualization() {
   const handleItemSubmit = useCallback(async (e) => {
     e.preventDefault();
 
+    if (!currentWorkspace) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
     const initialPosition = !itemFormData.group_id ? getViewportCenter() : null;
     const formDataToSend = new FormData();
     
@@ -500,6 +528,8 @@ export default function CMDBVisualization() {
         formDataToSend.append(key, itemFormData[key]);
       }
     });
+
+    formDataToSend.append('workspace_id', currentWorkspace.id);
 
     if (initialPosition && !editItemMode) {
       formDataToSend.append('position', JSON.stringify(initialPosition));
@@ -538,7 +568,7 @@ export default function CMDBVisualization() {
       console.error(err);
       toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-  }, [itemFormData, getViewportCenter, editItemMode, existingImages, selectedFiles, currentItemId, resetImages, fetchAll]);
+  }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, existingImages, selectedFiles, currentItemId, resetImages, fetchAll]);
 
   const handleOpenManageGroups = useCallback(() => {
     setGroupFormData(INITIAL_GROUP_FORM);
@@ -560,6 +590,10 @@ export default function CMDBVisualization() {
 
   const handleGroupSubmit = useCallback(async (e) => {
     e.preventDefault();
+    if (!currentWorkspace) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
     try {
       if (editGroupMode) {
         await api.put(`/groups/${currentGroupId}`, groupFormData);
@@ -567,7 +601,8 @@ export default function CMDBVisualization() {
         const initialPosition = getViewportCenter();
         await api.post('/groups', {
           ...groupFormData,
-          position: initialPosition
+          position: initialPosition,
+          workspace_id: currentWorkspace.id
         });
       }
       await fetchAll();
@@ -577,7 +612,7 @@ export default function CMDBVisualization() {
     } catch (err) {
       toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-  }, [editGroupMode, currentGroupId, groupFormData, getViewportCenter, fetchAll]);
+  }, [editGroupMode, currentGroupId, groupFormData, currentWorkspace, getViewportCenter, fetchAll]);
 
   const handleDeleteGroup = async (id) => {
     try {
@@ -605,52 +640,54 @@ export default function CMDBVisualization() {
   }, [connections]);
 
   const handleSaveConnections = useCallback(async () => {
-    if (!selectedItemForConnection) return;
-    
-    try {
-      const currentItemConns = connections
-        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
-        .map(conn => conn.target_id);
+  if (!selectedItemForConnection || !currentWorkspace) return;
+  
+  try {
+    const currentItemConns = connections
+      .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
+      .map(conn => conn.target_id);
 
-      const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
-      const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
+    const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
+    const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
 
-      for (const targetId of itemsToAdd) {
-        await api.post('/cmdb/connections', {
-          source_id: selectedItemForConnection.id,
-          target_id: targetId
-        });
-      }
-
-      for (const targetId of itemsToRemove) {
-        await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${targetId}`);
-      }
-
-      const currentGroupConns = connections
-        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id)
-        .map(conn => conn.target_group_id);
-
-      const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
-      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
-
-      for (const groupId of groupsToAdd) {
-        await api.post('/cmdb/connections/to-group', {
-          source_id: selectedItemForConnection.id,
-          target_group_id: groupId
-        });
-      }
-
-      for (const groupId of groupsToRemove) {
-        await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
-      }
-
-      await fetchAll();
-      setShowConnectionModal(false);
-    } catch (err) {
-      console.error(err);
-      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    for (const targetId of itemsToAdd) {
+      await api.post('/cmdb/connections', {
+        source_id: selectedItemForConnection.id,
+        target_id: targetId,
+        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+      });
     }
-  }, [connections, selectedItemForConnection, selectedConnections, selectedGroupConnections, fetchAll]);
+
+    for (const targetId of itemsToRemove) {
+      await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${targetId}`);
+    }
+
+    const currentGroupConns = connections
+      .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id)
+      .map(conn => conn.target_group_id);
+
+    const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
+    const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
+
+    for (const groupId of groupsToAdd) {
+      await api.post('/cmdb/connections/to-group', {
+        source_id: selectedItemForConnection.id,
+        target_group_id: groupId,
+        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+      });
+    }
+
+    for (const groupId of groupsToRemove) {
+      await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
+    }
+
+    await fetchAll();
+    setShowConnectionModal(false);
+  } catch (err) {
+    console.error(err);
+    toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+  }
+}, [connections, selectedItemForConnection, selectedConnections, selectedGroupConnections, currentWorkspace, fetchAll]);
 
   const handleToggleConnection = (targetId) => {
     setSelectedConnections(prev => 
@@ -701,50 +738,54 @@ export default function CMDBVisualization() {
   };
 
   const handleSaveGroupConnections = async () => {
-    try {
-      const currentGroupConns = groupConnections
-        .filter(conn => conn.source_id === selectedGroupForConnection.id)
-        .map(conn => conn.target_id);
+  if (!currentWorkspace) return;
+  
+  try {
+    const currentGroupConns = groupConnections
+      .filter(conn => conn.source_id === selectedGroupForConnection.id)
+      .map(conn => conn.target_id);
 
-      const groupsToAdd = selectedGroupToGroupConnections.filter(id => !currentGroupConns.includes(id));
-      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupToGroupConnections.includes(id));
+    const groupsToAdd = selectedGroupToGroupConnections.filter(id => !currentGroupConns.includes(id));
+    const groupsToRemove = currentGroupConns.filter(id => !selectedGroupToGroupConnections.includes(id));
 
-      for (const targetId of groupsToAdd) {
-        await api.post('/groups/connections', {
-          source_id: selectedGroupForConnection.id,
-          target_id: targetId
-        });
-      }
-
-      for (const targetId of groupsToRemove) {
-        await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
-      }
-
-      const currentItemConns = connections
-        .filter(conn => conn.source_group_id === selectedGroupForConnection.id)
-        .map(conn => conn.target_id);
-
-      const itemsToAdd = selectedGroupToItemConnections.filter(id => !currentItemConns.includes(id));
-      const itemsToRemove = currentItemConns.filter(id => !selectedGroupToItemConnections.includes(id));
-
-      for (const targetId of itemsToAdd) {
-        await api.post('/cmdb/connections/from-group', {
-          source_group_id: selectedGroupForConnection.id,
-          target_id: targetId
-        });
-      }
-
-      for (const targetId of itemsToRemove) {
-        await api.delete(`/cmdb/connections/from-group/${selectedGroupForConnection.id}/${targetId}`);
-      }
-
-      await fetchAll();
-      setShowGroupConnectionModal(false);
-    } catch (err) {
-      console.error(err);
-      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    for (const targetId of groupsToAdd) {
+      await api.post('/groups/connections', {
+        source_id: selectedGroupForConnection.id,
+        target_id: targetId,
+        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+      });
     }
-  };
+
+    for (const targetId of groupsToRemove) {
+      await api.delete(`/groups/connections/${selectedGroupForConnection.id}/${targetId}`);
+    }
+
+    const currentItemConns = connections
+      .filter(conn => conn.source_group_id === selectedGroupForConnection.id)
+      .map(conn => conn.target_id);
+
+    const itemsToAdd = selectedGroupToItemConnections.filter(id => !currentItemConns.includes(id));
+    const itemsToRemove = currentItemConns.filter(id => !selectedGroupToItemConnections.includes(id));
+
+    for (const targetId of itemsToAdd) {
+      await api.post('/cmdb/connections/from-group', {
+        source_group_id: selectedGroupForConnection.id,
+        target_id: targetId,
+        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+      });
+    }
+
+    for (const targetId of itemsToRemove) {
+      await api.delete(`/cmdb/connections/from-group/${selectedGroupForConnection.id}/${targetId}`);
+    }
+
+    await fetchAll();
+    setShowGroupConnectionModal(false);
+  } catch (err) {
+    console.error(err);
+    toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+  }
+};
 
   const getConnectionInfo = useCallback((itemId) => {
     const asSource = connections.filter(c => c.source_id === itemId).length;
@@ -1417,6 +1458,17 @@ export default function CMDBVisualization() {
         onOpenExportModal={() => setShowExportModal(true)}
         showTableDrawer={showTableDrawer}
         onToggleTableDrawer={toggleTableDrawer}
+        workspaces={workspaces}
+        currentWorkspace={currentWorkspace}
+        onSwitchWorkspace={switchWorkspace}
+        onCreateWorkspace={createWorkspace}
+        onUpdateWorkspace={updateWorkspace}
+        onDeleteWorkspace={deleteWorkspace}
+        onDuplicateWorkspace={duplicateWorkspace}
+        onSetDefaultWorkspace={setDefaultWorkspace}
+        hideViewAllOption={true}
+        showMiniMap={showMiniMap}
+        onToggleMiniMap={() => setShowMiniMap(prev => !prev)}
       />
 
       {/* Rest of your JSX remains mostly the same, but uses processedNodes and processedEdges */}
@@ -1606,6 +1658,29 @@ export default function CMDBVisualization() {
           >
             <Background />
             <Controls />
+              {showMiniMap && (
+                <MiniMap
+                  pannable zoomable
+                  nodeStrokeColor={(node) => {
+                    if (node.type === 'group') return '#8b5cf6';
+                    return '#3b82f6';
+                  }}
+                  nodeColor={(node) => {
+                    if (node.type === 'group') {
+                      return node.data?.color || '#e0e7ff';
+                    }
+                    return '#dbeafe';
+                  }}
+                  nodeBorderRadius={8}
+                  maskColor="rgba(0, 0, 0, 0.1)"
+                  style={{
+                    backgroundColor: '#f9fafb',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                  position="bottom-right"
+                />
+              )}
           </ReactFlow>
 
           {/* Context Menu */}
@@ -1745,6 +1820,7 @@ export default function CMDBVisualization() {
         selectedFiles={selectedFiles}
         imagePreviews={imagePreviews}
         existingImages={existingImages}
+        currentWorkspace={currentWorkspace}
         onClose={() => {
           setShowItemModal(false);
           setItemFormData(INITIAL_ITEM_FORM);
@@ -1779,6 +1855,7 @@ export default function CMDBVisualization() {
         editMode={editGroupMode}
         formData={groupFormData}
         groups={groups}
+        currentWorkspace={currentWorkspace}
         onClose={() => {
           setShowGroupModal(false);
           setGroupFormData(INITIAL_GROUP_FORM);

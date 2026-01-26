@@ -26,6 +26,7 @@ export default function GroupModal({
   editMode,
   formData,
   groups,
+  currentWorkspace, // TAMBAHKAN PROP
   onClose,
   onSubmit,
   onInputChange,
@@ -42,8 +43,13 @@ export default function GroupModal({
       <Dialog open={show} onOpenChange={onClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto z-50">
           <DialogHeader>
-            <DialogTitle>
-              {editMode ? 'Edit Group' : 'Tambah Group'}
+            <DialogTitle className="flex items-center justify-between">
+              <span>{editMode ? 'Edit Group' : 'Tambah Group'}</span>
+              {currentWorkspace && (
+                <span className="text-sm font-normal text-muted-foreground">
+                  Workspace: {currentWorkspace.name}
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -97,7 +103,7 @@ export default function GroupModal({
 
           {!editMode && groups.length > 0 && (
             <div className="border-t pt-6 mt-6">
-              <h3 className="font-semibold mb-3">Daftar Group:</h3>
+              <h3 className="font-semibold mb-3">Daftar Group di Workspace Ini:</h3>
               <div className="space-y-2">
                 {groups.map((group) => (
                   <div

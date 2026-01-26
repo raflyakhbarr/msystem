@@ -1,7 +1,8 @@
 import {
   Eye, Save, Plus, Layers, MousePointer2, Square,
   GitBranch, Download, Hand, Undo2, Redo2,
-  ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table
+  ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table,
+  Map // TAMBAHKAN IMPORT INI
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '../ui/sidebar';
 import SearchBar from './SearchBar';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 export default function VisualizationNavbar({
   draggedNode,
@@ -44,6 +46,19 @@ export default function VisualizationNavbar({
   onOpenExportModal,
   showTableDrawer,
   onToggleTableDrawer,
+  showMiniMap,
+  onToggleMiniMap,
+  workspaces,
+  currentWorkspace,
+  onSwitchWorkspace,
+  onCreateWorkspace,
+  onUpdateWorkspace,
+  onDeleteWorkspace,
+  onDuplicateWorkspace,
+  onSetDefaultWorkspace,
+  hideViewAllOption = false,
+  viewAllMode = false,
+  onToggleViewAll,
 }) {
   const getSelectionIcon = () => {
     switch (selectionMode) {
@@ -71,7 +86,27 @@ export default function VisualizationNavbar({
           {/* Left Side - Actions */}
           <div className="flex items-center gap-2">
             <SidebarTrigger className="ml-2 transition-all" />
+
             <div className="h-8 w-px bg-linear-to-b from-transparent via-gray-300 to-transparent"></div>
+            
+            {/* WORKSPACE SWITCHER */}
+            <div className="w-56">
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                currentWorkspace={currentWorkspace}
+                viewAllMode={viewAllMode}
+                onSwitch={onSwitchWorkspace}
+                onCreate={onCreateWorkspace}
+                onUpdate={onUpdateWorkspace}
+                onDelete={onDeleteWorkspace}
+                onDuplicate={onDuplicateWorkspace}
+                onSetDefault={onSetDefaultWorkspace}
+                onToggleViewAll={onToggleViewAll}
+                hideViewAllOption={hideViewAllOption}
+              />
+            </div>
+
+            <div className="h-8 w-px bg-border"></div>
             
             {/* Add Item & Groups */}
             <div className="flex items-center gap-1">
@@ -80,6 +115,7 @@ export default function VisualizationNavbar({
                 variant="default"
                 size="sm"
                 title="Tambah Item Baru"
+                disabled={!currentWorkspace || viewAllMode}
               >
                 <Plus />
                 <span className="hidden xl:inline ml-1">Item</span>
@@ -90,6 +126,7 @@ export default function VisualizationNavbar({
                 variant="secondary"
                 size="sm"
                 title="Kelola Groups"
+                disabled={!currentWorkspace || viewAllMode}
               >
                 <Layers />
                 <span className="hidden xl:inline ml-1">Groups</span>
@@ -100,6 +137,7 @@ export default function VisualizationNavbar({
                 title="Ekspor sebagai Gambar atau PDF"
                 variant="secondary"
                 size="sm"
+                disabled={!currentWorkspace}
               >
                 <Download />
                 <span className="hidden lg:inline ml-1">Export</span>
@@ -110,6 +148,7 @@ export default function VisualizationNavbar({
                 variant={showTableDrawer ? "default" : "secondary"}
                 className="px-3 py-2 rounded-lg flex items-center gap-2 transition-colors"
                 title="Lihat Tabel"
+                disabled={!currentWorkspace}
               >
                 <Table size={16} />
                 <span className="hidden md:inline">Tabel</span>
@@ -122,7 +161,7 @@ export default function VisualizationNavbar({
             <div className="flex items-center gap-1">
               <Button
                 onClick={onUndo}
-                disabled={!canUndo}
+                disabled={!canUndo || !currentWorkspace}
                 variant="ghost"
                 size="sm"
                 title="Undo (Ctrl+Z)"
@@ -133,7 +172,7 @@ export default function VisualizationNavbar({
 
               <Button
                 onClick={onRedo}
-                disabled={!canRedo}
+                disabled={!canRedo || !currentWorkspace}
                 variant="ghost"
                 size="sm"
                 title="Redo (Ctrl+Y)"
@@ -153,6 +192,7 @@ export default function VisualizationNavbar({
                 size="sm"
                 title={isAutoSaveEnabled ? "Auto-save Aktif" : "Auto-save Nonaktif"}
                 className={isAutoSaveEnabled ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                disabled={!currentWorkspace || viewAllMode}
               >
                 {isAutoSaveEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                 <span className="hidden xl:inline ml-1">Auto</span>
@@ -160,10 +200,10 @@ export default function VisualizationNavbar({
 
               <Button
                 onClick={onSavePositions}
-                disabled={isSaving || isAutoSaving}
+                disabled={isSaving || isAutoSaving || !currentWorkspace || viewAllMode}
                 variant="ghost"
                 size="sm"
-                className={!isSaving && !isAutoSaving ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                className={!isSaving && !isAutoSaving && currentWorkspace && !viewAllMode ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
                 title="Simpan Posisi Manual (Ctrl+S)"
               >
                 <Save />
@@ -208,6 +248,7 @@ export default function VisualizationNavbar({
                 variant={showVisibilityPanel ? "default" : "ghost"}
                 size="sm"
                 title="Panel Visibility"
+                disabled={!currentWorkspace}
               >
                 <Eye size={14} />
                 <span className="hidden lg:inline ml-1">Visibility</span>
@@ -224,9 +265,22 @@ export default function VisualizationNavbar({
                 size="sm"
                 title="Mode Highlight Dependencies"
                 className={highlightMode ? "bg-orange-600 hover:bg-orange-700 text-white" : ""}
+                disabled={!currentWorkspace}
               >
                 <Highlighter size={14} />
                 <span className="hidden lg:inline ml-1">Highlight</span>
+              </Button>
+
+              {/* MINIMAP TOGGLE BUTTON */}
+              <Button
+                onClick={onToggleMiniMap}
+                variant={showMiniMap ? "default" : "ghost"}
+                size="sm"
+                title={showMiniMap ? "Sembunyikan MiniMap" : "Tampilkan MiniMap"}
+                disabled={!currentWorkspace}
+              >
+                <Map size={14} />
+                <span className="hidden lg:inline ml-1">MiniMap</span>
               </Button>
             </div>
 
@@ -235,7 +289,12 @@ export default function VisualizationNavbar({
             {/* Selection Mode Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1.5"
+                  disabled={!currentWorkspace}
+                >
                   {getSelectionIcon()}
                   <span className="hidden sm:inline">{getSelectionLabel()}</span>
                   <ChevronDown size={10} />
@@ -313,6 +372,30 @@ export default function VisualizationNavbar({
                 </span>
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* View All Mode Warning */}
+      {viewAllMode && (
+        <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-purple-50 border-b border-purple-200 shadow-lg z-50">
+          <div className="flex items-center justify-center gap-2 text-purple-800">
+            <Layers size={16} />
+            <span className="text-sm font-medium">
+              View All Mode: Tidak dapat menambah atau mengedit item
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* No Workspace Warning */}
+      {!currentWorkspace && !viewAllMode && (
+        <div className="absolute left-0 right-0 top-full mt-2 px-4 py-2 bg-yellow-50 border-b border-yellow-200 shadow-lg z-50">
+          <div className="flex items-center justify-center gap-2 text-yellow-800">
+            <Layers size={16} />
+            <span className="text-sm font-medium">
+              Pilih atau buat workspace
+            </span>
           </div>
         </div>
       )}
