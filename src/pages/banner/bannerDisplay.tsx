@@ -2,15 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Autoplay, EffectFade, Keyboard } from 'swiper/modules';
+import type { Swiper as SwiperType } from 'swiper';
+import { Navigation, EffectFade, Keyboard } from 'swiper/modules';
 import type { BannerItem } from './bannerSetting';
 import './bannerDisplay.css';
 
 // TypeScript declarations for YouTube IFrame API
 declare global {
   interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: () => void;
+    YT?: {
+      Player: unknown;
+    };
+    onYouTubeIframeAPIReady?: () => void;
   }
 }
 
@@ -18,19 +21,17 @@ interface YouTubePlayerProps {
   videoId: string;
   index: number;
   onVideoEnd: () => void;
-  instanceId: string;
   isActive: boolean;
 }
 
 // --- COMPONENT: YouTubePlayer ---
-const YouTubePlayer: React.FC<YouTubePlayerProps> = ({ 
-  videoId, 
-  index, 
-  onVideoEnd, 
-  instanceId,
-  isActive 
+const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
+  videoId,
+  index,
+  onVideoEnd,
+  isActive
 }) => {
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<unknown>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isReadyRef = useRef(false);
   const onVideoEndRef = useRef(onVideoEnd);
@@ -88,16 +89,18 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             playsinline: 1,
           },
           events: {
-            onReady: (event: any) => {
+            onReady: (event: unknown) => {
               isReadyRef.current = true;
               if (isActive) {
                 // Also rewind here just in case
-                event.target.seekTo(0, true);
-                event.target.playVideo();
+                const player = event as { target: { seekTo: (time: number) => void; playVideo: () => void } };
+                player.target.seekTo(0, true);
+                player.target.playVideo();
               }
             },
-            onStateChange: (event: any) => {
-              if (event.data === 0) { // ENDED
+            onStateChange: (event: unknown) => {
+              const stateEvent = event as { data: number };
+              if (stateEvent.data === 0) { // ENDED
                 onVideoEndRef.current?.();
               }
             },
@@ -119,11 +122,13 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             if (typeof playerRef.current.destroy === 'function') {
                 playerRef.current.destroy();
             }
-        } catch(e) {}
+        } catch {
+            // Ignore error during cleanup
+        }
         playerRef.current = null;
       }
     };
-  }, [videoId]); 
+  }, [videoId, isActive]); 
 
   return (
     <div className="relative w-full h-full">
@@ -139,32 +144,65 @@ const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
 // --- COMPONENT: BannerDisplay ---
 const BannerDisplay = () => {
-  const [bannerItems, setBannerItems] = useState<BannerItem[]>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const swiperRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const uniqueKeysRef = useRef<Map<string, string>>(new Map());
-
-  // Load items
-  useEffect(() => {
+  const [bannerItems] = useState<BannerItem[]>(() => {
     const saved = localStorage.getItem('bannerItems');
     if (saved) {
       try {
-        const items = JSON.parse(saved);
-        if (items.length > 0) {
-          items.forEach((item: BannerItem) => {
-            if (!uniqueKeysRef.current.has(item.id)) {
-              uniqueKeysRef.current.set(item.id, `${item.id}-${Date.now()}`);
-            }
-          });
-          setBannerItems(items);
-        }
+        const items = JSON.parse(saved) as BannerItem[];
+        return items.length > 0 ? items : [];
       } catch (e) {
         console.error('Failed to parse saved banner items', e);
+        return [];
       }
     }
-  }, []);
+    return [];
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const swiperRef = useRef<{ swiper: SwiperType } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Custom timer for non-YouTube slides
+  useEffect(() => {
+    if (bannerItems.length === 0) return;
+
+    const currentItem = bannerItems[currentIndex];
+
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // For YouTube videos, let onVideoEnd handle the timing
+    if (currentItem?.type === 'youtube') {
+      return;
+    }
+
+    // For non-YouTube slides, set timer based on duration
+    const duration = currentItem?.duration;
+    timerRef.current = setTimeout(() => {
+      if (swiperRef.current?.swiper) {
+        const swiper = swiperRef.current.swiper;
+        const isLastSlide = swiper.activeIndex === bannerItems.length - 1;
+
+        if (isLastSlide) {
+          swiper.slideTo(0);
+        } else {
+          swiper.slideNext();
+        }
+      }
+    }, duration * 1000);
+
+    // Cleanup on unmount or when slide changes
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [currentIndex, bannerItems]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -176,35 +214,19 @@ const BannerDisplay = () => {
     }
   };
 
-  const handleSlideChange = (swiper: any) => {
+  const handleSlideChange = (swiper: SwiperType) => {
     const index = swiper.activeIndex;
     setCurrentIndex(index);
-
-    const item = bannerItems[index];
-    
-    if (item?.type === 'youtube') {
-      swiper.autoplay.stop();
-    } else {
-      swiper.autoplay.start();
-    }
   };
 
   const handleVideoEnd = () => {
     if (swiperRef.current?.swiper) {
       const swiper = swiperRef.current.swiper;
-      swiper.autoplay.stop(); // Ensure it doesn't fight us
       if (swiper.activeIndex === bannerItems.length - 1) {
         swiper.slideTo(0);
       } else {
         swiper.slideNext();
       }
-
-      setTimeout(() => {
-        const nextIndex = swiper.activeIndex;
-        if (bannerItems[nextIndex]?.type !== 'youtube') {
-            swiper.autoplay.start();
-        }
-      }, 500);
     }
   };
 
@@ -221,29 +243,29 @@ const BannerDisplay = () => {
           />
         );
 
-      case 'youtube':
+      case 'youtube': {
         const videoIdMatch = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([^?&/]+)/);
         const videoId = videoIdMatch?.[1]?.trim();
         if (!videoId) return <div className="text-white">Invalid Video</div>;
-        
+
         return (
           <YouTubePlayer
             videoId={videoId}
             index={index}
             onVideoEnd={handleVideoEnd}
-            instanceId={`${item.id}-${index}`}
-            isActive={isActive} 
+            isActive={isActive}
           />
         );
+      }
 
-      case 'gdrive':
+      case 'gdrive': {
         const fileId = item.url.match(/\/d\/([^/]+)/)?.[1];
         if (!fileId) return <div className="text-white flex items-center justify-center h-full">Invalid Drive URL</div>;
         const directImageUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w3840`;
-        
+
         return (
-          <img 
-            src={directImageUrl} 
+          <img
+            src={directImageUrl}
             alt={item.title || 'Google Drive Image'}
             className="w-full h-full object-contain bg-black"
             onError={(e) => {
@@ -252,8 +274,10 @@ const BannerDisplay = () => {
             }}
           />
         );
+      }
 
       case 'iframe':
+        // Handle blob URL atau URL biasa langsung dengan src
         return (
             <div className="w-screen h-screen relative">
               <iframe
@@ -286,12 +310,6 @@ const BannerDisplay = () => {
     );
   }
 
-  const getAutoplayDelay = () => {
-    const nonYouTubeItems = bannerItems.filter(item => item.type !== 'youtube');
-    if (nonYouTubeItems.length === 0) return 10000;
-    return Math.min(...nonYouTubeItems.map(item => item.duration * 1000));
-  };
-
   return (
     <div
       ref={containerRef}
@@ -299,22 +317,21 @@ const BannerDisplay = () => {
     >
       <Swiper
         ref={swiperRef}
-        modules={[Navigation, Autoplay, EffectFade, Keyboard]}
-        autoplay={{
-          delay: getAutoplayDelay(),
-          disableOnInteraction: false,
-          pauseOnMouseEnter: false, 
-          stopOnLastSlide: false
-        }}
+        modules={[Navigation, EffectFade, Keyboard]}
         effect="fade"
         fadeEffect={{ crossFade: true }}
         speed={500}
         loop={false}
+        allowTouchMove={false}
         className="w-full h-full"
         onSlideChange={handleSlideChange}
+        keyboard={{
+          enabled: true,
+          onlyInViewport: true,
+        }}
       >
         {bannerItems.map((item, index) => (
-          <SwiperSlide key={`${item.id}-${index}`} className="w-full h-full">
+          <SwiperSlide key={item.id} className="w-full h-full">
             {renderContent(item, index)}
           </SwiperSlide>
         ))}

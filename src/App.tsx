@@ -224,13 +224,7 @@ function App() {
           />
           <Route
             path="banner/display"
-            element={
-              isAuthenticated ? (
-                <BannerDisplay/>
-              ) : (
-                <Navigate to="/login"/>
-              )
-            }
+            element={<BannerDisplay/>}
           />
           <Route
             path="banner/setting"

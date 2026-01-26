@@ -7,26 +7,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-
-interface FiturItem {
-  id?: number;
-  menu: string;
-  route: string;
-  urutan: string;
-  idSistem: number | { id: number; nama: string };
-  icon: string;
-  showFiture: string;
-  status: boolean;
-  createdBy?: string | null;
-  updatedBy?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface SystemItem {
-  id: number;
-  nama: string;
-}
+import { type SystemItem } from '@/api/SystemApi';
+import { type FiturItem } from '@/api/fiturApi';
 
 interface DetailsModalProps {
   showModal: boolean;

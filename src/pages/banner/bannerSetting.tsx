@@ -1,24 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { BannerForm } from './BannerForm';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Plus, Trash2, MoveUp, MoveDown, Upload, ExternalLink, Youtube, Globe, Image as ImageIcon, HardDrive, Pencil, FileImage } from 'lucide-react';
+import {  Dialog,  DialogContent,  DialogDescription,  DialogHeader,  DialogTitle,  DialogTrigger,} from '@/components/ui/dialog';
+import { Plus, Trash2, MoveUp, MoveDown, Youtube, Globe, Image as ImageIcon, HardDrive, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export type BannerItemType = 'image' | 'youtube' | 'iframe' | 'gdrive';
@@ -29,13 +13,25 @@ export interface BannerItem {
   id: string;
   type: BannerItemType;
   url: string;
-  duration: number; // in seconds
+  duration: number;
   title?: string;
-  imageSource?: ImageSourceType; // For image type: url, gdrive, or upload
+  imageSource?: ImageSourceType;
 }
 
 const BannerSetting = () => {
-  const [bannerItems, setBannerItems] = useState<BannerItem[]>([]);
+  const [bannerItems, setBannerItems] = useState<BannerItem[]>(() => {
+    const saved = localStorage.getItem('bannerItems');
+    if (saved) {
+      try {
+        const items = JSON.parse(saved);
+        return items.filter((item: BannerItem) => item.url);
+      } catch (e) {
+        console.error('Failed to parse saved banner items', e);
+        return [];
+      }
+    }
+    return [];
+  });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [contentCategory, setContentCategory] = useState<ContentCategory>('image');
   const [imageSource, setImageSource] = useState<ImageSourceType>('url');
@@ -60,21 +56,8 @@ const BannerSetting = () => {
   });
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  // Load from localStorage on mount
+  // Cleanup blob URLs on unmount
   useEffect(() => {
-    const saved = localStorage.getItem('bannerItems');
-    if (saved) {
-      try {
-        const items = JSON.parse(saved);
-        // Filter out items with empty URLs (these were blob URLs that couldn't be persisted)
-        const validItems = items.filter((item: BannerItem) => item.url);
-        setBannerItems(validItems);
-      } catch (e) {
-        console.error('Failed to parse saved banner items', e);
-      }
-    }
-
-    // Cleanup: Revoke all blob URLs on unmount
     return () => {
       bannerItems.forEach(item => {
         if (item.url?.startsWith('blob:')) {
@@ -82,15 +65,13 @@ const BannerSetting = () => {
         }
       });
     };
-  }, []);
+  }, [bannerItems]);
 
-  // Save to localStorage whenever bannerItems changes
-  // Note: Blob URLs are not saved as they won't work after page reload
   useEffect(() => {
     if (bannerItems.length > 0) {
+      // Jangan simpan blob URL ke localStorage karena temporary
       const itemsToSave = bannerItems.map(item => ({
         ...item,
-        // Keep blob URLs in memory but filter them out for localStorage
         url: item.url.startsWith('blob:') ? '' : item.url,
       }));
       localStorage.setItem('bannerItems', JSON.stringify(itemsToSave));
@@ -98,19 +79,16 @@ const BannerSetting = () => {
   }, [bannerItems]);
 
   const handleAddItem = () => {
-    // For HTML file upload, check if file is selected
     if (contentCategory === 'html' && !htmlFile && !newItem.url) {
       alert('Silakan pilih file HTML atau masukkan URL');
       return;
     }
 
-    // For other types, check URL
     if (contentCategory !== 'html' && !newItem.url) {
       alert('Silakan masukkan URL');
       return;
     }
 
-    // Map category and source to legacy type
     let itemType: BannerItemType;
     let finalUrl = newItem.url!;
 
@@ -118,12 +96,11 @@ const BannerSetting = () => {
       itemType = 'youtube';
     } else if (contentCategory === 'html') {
       itemType = 'iframe';
-      // If file is selected, create blob URL
       if (htmlFile) {
+        // Gunakan blob URL (tidak persist setelah refresh)
         finalUrl = URL.createObjectURL(htmlFile);
       }
     } else {
-      // Image category
       if (imageSource === 'gdrive') {
         itemType = 'gdrive';
       } else if (imageSource === 'upload') {
@@ -155,7 +132,6 @@ const BannerSetting = () => {
 
   const handleDeleteItem = (id: string) => {
     const itemToDelete = bannerItems.find(item => item.id === id);
-    // Revoke blob URL if it's a local file
     if (itemToDelete?.url.startsWith('blob:')) {
       URL.revokeObjectURL(itemToDelete.url);
     }
@@ -182,14 +158,12 @@ const BannerSetting = () => {
     setEditingItem(item);
     setEditHtmlFile(null);
 
-    // Determine category from existing type
     if (item.type === 'youtube') {
       setEditContentCategory('video');
     } else if (item.type === 'iframe') {
       setEditContentCategory('html');
     } else {
       setEditContentCategory('image');
-      // Set image source based on type
       if (item.type === 'gdrive') {
         setEditImageSource('gdrive');
       } else if (item.imageSource === 'upload') {
@@ -203,19 +177,16 @@ const BannerSetting = () => {
   };
 
   const handleSaveEdit = () => {
-    // For HTML file upload, check if file is selected
     if (editContentCategory === 'html' && !editHtmlFile && !editingItem.url) {
       alert('Silakan pilih file HTML atau masukkan URL');
       return;
     }
 
-    // For other types, check URL
     if (editContentCategory !== 'html' && !editingItem.url) {
       alert('Silakan masukkan URL');
       return;
     }
 
-    // Map category and source to legacy type
     let itemType: BannerItemType;
     let finalUrl = editingItem.url!;
 
@@ -223,16 +194,16 @@ const BannerSetting = () => {
       itemType = 'youtube';
     } else if (editContentCategory === 'html') {
       itemType = 'iframe';
-      // If new file is selected, create blob URL and revoke old one
       if (editHtmlFile) {
+        // Revoke old blob URL jika ada
         const oldItem = bannerItems[editingIndex!];
         if (oldItem?.url.startsWith('blob:')) {
           URL.revokeObjectURL(oldItem.url);
         }
+        // Gunakan blob URL baru (tidak persist setelah refresh)
         finalUrl = URL.createObjectURL(editHtmlFile);
       }
     } else {
-      // Image category
       if (editImageSource === 'gdrive') {
         itemType = 'gdrive';
       } else if (editImageSource === 'upload') {
@@ -286,7 +257,7 @@ const BannerSetting = () => {
             <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">Image</div>
           </div>
         );
-      case 'youtube':
+      case 'youtube': {
         const videoId = item.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^/?&]+)/)?.[1];
         return (
           <div className={previewClass}>
@@ -308,7 +279,8 @@ const BannerSetting = () => {
             )}
           </div>
         );
-      case 'gdrive':
+      }
+      case 'gdrive': {
         const fileId = item.url.match(/\/d\/([^/]+)/)?.[1] || item.url.match(/id=([^/&]+)/)?.[1];
         if (fileId) {
           // Use iframe preview like bannerDisplay does, since GDrive only works in iframes
@@ -336,18 +308,21 @@ const BannerSetting = () => {
             <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">GDrive</div>
           </div>
         );
-      case 'iframe':
-        const hostname = item.url ? new URL(item.url).hostname.replace('www.', '') : 'Website';
+      }
+      case 'iframe': {
+        const isBlobHtml = item.url?.startsWith('blob:');
+        const hostname = !isBlobHtml && item.url ? new URL(item.url).hostname.replace('www.', '') : 'HTML Content';
         return (
           <div className={previewClass}>
             <div className="text-center">
               <Globe className="size-12 text-green-500 mx-auto mb-2" />
-              <div className="text-sm font-medium truncate px-4">{hostname}</div>
-              <div className="text-xs text-muted-foreground mt-1">Embedded website</div>
+              <div className="text-sm font-medium truncate px-4">{isBlobHtml ? 'HTML File (uploaded)' : hostname}</div>
+              <div className="text-xs text-muted-foreground mt-1">{isBlobHtml ? 'Tidak persist setelah refresh' : 'Embedded website'}</div>
             </div>
             <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">HTML</div>
           </div>
         );
+      }
     }
   };
 
@@ -371,157 +346,20 @@ const BannerSetting = () => {
                 Tambah item baru ke rotasi tampilan banner
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Judul (opsional)</Label>
-                <Input
-                  placeholder="Item Banner Saya"
-                  value={newItem.title}
-                  onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
-                />
-              </div>
-
-              {/* Main Category Selection */}
-              <div className="space-y-2">
-                <Label>Tipe Konten</Label>
-                <Select
-                  value={contentCategory}
-                  onValueChange={(value: ContentCategory) => setContentCategory(value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="image">Gambar</SelectItem>
-                    <SelectItem value="video">Video (YouTube)</SelectItem>
-                    <SelectItem value="html">HTML / Website</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Image Source Selection */}
-              {contentCategory === 'image' && (
-                <div className="space-y-2">
-                  <Label>Sumber Gambar</Label>
-                  <Select
-                    value={imageSource}
-                    onValueChange={(value: ImageSourceType) => setImageSource(value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="url">URL</SelectItem>
-                      <SelectItem value="gdrive">Google Drive</SelectItem>
-                      <SelectItem value="upload">Unggah File</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* URL Input */}
-              <div className="space-y-2">
-                {contentCategory === 'html' ? (
-                  <>
-                    <Label>File HTML atau URL Website</Label>
-                    <div className="space-y-2">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload className="size-4 mr-2" />
-                        {htmlFile ? htmlFile.name : 'Pilih File HTML'}
-                      </Button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".html,.htm"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setHtmlFile(file);
-                            setNewItem({ ...newItem, url: '' });
-                          }
-                        }}
-                      />
-                      <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t"></div>
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-background px-2 text-muted-foreground">atau</span>
-                        </div>
-                      </div>
-                      <Input
-                        placeholder="https://example.com"
-                        value={newItem.url}
-                        onChange={(e) => {
-                          setNewItem({ ...newItem, url: e.target.value });
-                          if (e.target.value) {
-                            setHtmlFile(null);
-                          }
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Upload file HTML lokal atau tempel URL website untuk di-embed
-                        {(htmlFile || editHtmlFile) && <span className="text-amber-600 block mt-1">⚠️ File upload tidak akan tersimpan setelah refresh halaman</span>}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Label>
-                      {contentCategory === 'video' ? 'URL YouTube' :
-                       imageSource === 'gdrive' ? 'URL Google Drive' :
-                       (imageSource as ImageSourceType) === 'upload' ? 'File (Segera Hadir)' : 'URL Gambar'}
-                    </Label>
-                    {contentCategory === 'image' && (imageSource as ImageSourceType) === 'upload' ? (
-                      <Button variant="outline" className="w-full" disabled>
-                        <Upload className="size-4 mr-2" />
-                        Pilih File (Segera Hadir)
-                      </Button>
-                    ) : (
-                      <Input
-                        placeholder={
-                          contentCategory === 'video' ? 'https://youtube.com/watch?v=...' :
-                          imageSource === 'gdrive' ? 'https://drive.google.com/file/d/.../view' :
-                          'https://example.com/image.jpg'
-                        }
-                        value={newItem.url}
-                        onChange={(e) => setNewItem({ ...newItem, url: e.target.value })}
-                        disabled={contentCategory === 'image' && (imageSource as ImageSourceType) === 'upload'}
-                      />
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {contentCategory === 'video' ? 'Tempel URL video YouTube' :
-                       imageSource === 'gdrive' ? 'Tempel tautan berbagi Google Drive' :
-                       (imageSource as ImageSourceType) === 'upload' ? 'Fitur upload file segera hadir' :
-                       'Tempel URL gambar langsung'}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* Duration for images and html only */}
-              {contentCategory !== 'video' && (
-                <div className="space-y-2">
-                  <Label>Durasi (detik)</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={newItem.duration}
-                    onChange={(e) => setNewItem({ ...newItem, duration: parseInt(e.target.value) || 10 })}
-                  />
-                  <p className="text-xs text-muted-foreground">Berapa lama konten ditampilkan</p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Batal</Button>
-              <Button onClick={handleAddItem}>Tambah Item</Button>
-            </DialogFooter>
+            <BannerForm
+              mode="add"
+              data={newItem}
+              category={contentCategory}
+              imageSource={imageSource}
+              htmlFile={htmlFile}
+              onDataChange={setNewItem}
+              onCategoryChange={setContentCategory}
+              onImageSourceChange={setImageSource}
+              onHtmlFileChange={setHtmlFile}
+              onSubmit={handleAddItem}
+              onCancel={() => setIsAddDialogOpen(false)}
+              fileInputRef={fileInputRef}
+            />
           </DialogContent>
         </Dialog>
 
@@ -534,157 +372,20 @@ const BannerSetting = () => {
                 Edit item banner yang dipilih
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Judul (opsional)</Label>
-                <Input
-                  placeholder="Item Banner Saya"
-                  value={editingItem.title}
-                  onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
-                />
-              </div>
-
-              {/* Main Category Selection */}
-              <div className="space-y-2">
-                <Label>Tipe Konten</Label>
-                <Select
-                  value={editContentCategory}
-                  onValueChange={(value: ContentCategory) => setEditContentCategory(value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="image">Gambar</SelectItem>
-                    <SelectItem value="video">Video (YouTube)</SelectItem>
-                    <SelectItem value="html">HTML / Website</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Image Source Selection */}
-              {editContentCategory === 'image' && (
-                <div className="space-y-2">
-                  <Label>Sumber Gambar</Label>
-                  <Select
-                    value={editImageSource}
-                    onValueChange={(value: ImageSourceType) => setEditImageSource(value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="url">URL</SelectItem>
-                      <SelectItem value="gdrive">Google Drive</SelectItem>
-                      <SelectItem value="upload">Unggah File</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* URL Input */}
-              <div className="space-y-2">
-                {editContentCategory === 'html' ? (
-                  <>
-                    <Label>File HTML atau URL Website</Label>
-                    <div className="space-y-2">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => editFileInputRef.current?.click()}
-                      >
-                        <Upload className="size-4 mr-2" />
-                        {editHtmlFile ? editHtmlFile.name : 'Pilih File HTML'}
-                      </Button>
-                      <input
-                        ref={editFileInputRef}
-                        type="file"
-                        accept=".html,.htm"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setEditHtmlFile(file);
-                            setEditingItem({ ...editingItem, url: '' });
-                          }
-                        }}
-                      />
-                      <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t"></div>
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-background px-2 text-muted-foreground">atau</span>
-                        </div>
-                      </div>
-                      <Input
-                        placeholder="https://example.com"
-                        value={editingItem.url}
-                        onChange={(e) => {
-                          setEditingItem({ ...editingItem, url: e.target.value });
-                          if (e.target.value) {
-                            setEditHtmlFile(null);
-                          }
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Upload file HTML lokal atau tempel URL website untuk di-embed
-                        {(htmlFile || editHtmlFile) && <span className="text-amber-600 block mt-1">⚠️ File upload tidak akan tersimpan setelah refresh halaman</span>}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Label>
-                      {editContentCategory === 'video' ? 'URL YouTube' :
-                       editImageSource === 'gdrive' ? 'URL Google Drive' :
-                       (editImageSource as ImageSourceType) === 'upload' ? 'File (Segera Hadir)' : 'URL Gambar'}
-                    </Label>
-                    {editContentCategory === 'image' && (editImageSource as ImageSourceType) === 'upload' ? (
-                      <Button variant="outline" className="w-full" disabled>
-                        <Upload className="size-4 mr-2" />
-                        Pilih File (Segera Hadir)
-                      </Button>
-                    ) : (
-                      <Input
-                        placeholder={
-                          editContentCategory === 'video' ? 'https://youtube.com/watch?v=...' :
-                          editImageSource === 'gdrive' ? 'https://drive.google.com/file/d/.../view' :
-                          'https://example.com/image.jpg'
-                        }
-                        value={editingItem.url}
-                        onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
-                        disabled={editContentCategory === 'image' && (editImageSource as ImageSourceType) === 'upload'}
-                      />
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {editContentCategory === 'video' ? 'Tempel URL video YouTube' :
-                       editImageSource === 'gdrive' ? 'Tempel tautan berbagi Google Drive' :
-                       (editImageSource as ImageSourceType) === 'upload' ? 'Fitur upload file segera hadir' :
-                       'Tempel URL gambar langsung'}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* Duration for images and html only */}
-              {editContentCategory !== 'video' && (
-                <div className="space-y-2">
-                  <Label>Durasi (detik)</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={editingItem.duration}
-                    onChange={(e) => setEditingItem({ ...editingItem, duration: parseInt(e.target.value) || 10 })}
-                  />
-                  <p className="text-xs text-muted-foreground">Berapa lama konten ditampilkan</p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Batal</Button>
-              <Button onClick={handleSaveEdit}>Simpan Perubahan</Button>
-            </DialogFooter>
+            <BannerForm
+              mode="edit"
+              data={editingItem}
+              category={editContentCategory}
+              imageSource={editImageSource}
+              htmlFile={editHtmlFile}
+              onDataChange={setEditingItem}
+              onCategoryChange={setEditContentCategory}
+              onImageSourceChange={setEditImageSource}
+              onHtmlFileChange={setEditHtmlFile}
+              onSubmit={handleSaveEdit}
+              onCancel={() => setIsEditDialogOpen(false)}
+              fileInputRef={editFileInputRef}
+            />
           </DialogContent>
         </Dialog>
       </div>

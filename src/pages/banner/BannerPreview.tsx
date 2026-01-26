@@ -1,32 +1,30 @@
-import  { useState, useEffect, useRef } from 'react';
+import  { useState, useRef } from 'react';
 import { Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { BannerItem } from './bannerSetting';
 import { Swiper, SwiperSlide } from 'swiper/react';
+import type { Swiper as SwiperType } from 'swiper';
 import { Navigation, Autoplay, EffectFade, Keyboard } from 'swiper/modules';
 import './bannerDisplay.css';
 
 const BannerPreview = () => {
-  const [bannerItems, setBannerItems] = useState<BannerItem[]>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const swiperRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Load banner items from localStorage
-  useEffect(() => {
+  const [bannerItems] = useState<BannerItem[]>(() => {
     const saved = localStorage.getItem('bannerItems');
     if (saved) {
       try {
-        const items = JSON.parse(saved);
-        if (items.length > 0) {
-          setBannerItems(items);
-        }
+        const items = JSON.parse(saved) as BannerItem[];
+        return items.length > 0 ? items : [];
       } catch (e) {
         console.error('Failed to parse saved banner items', e);
+        return [];
       }
     }
-  }, []);
+    return [];
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const swiperRef = useRef<SwiperType | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -38,7 +36,7 @@ const BannerPreview = () => {
     }
   };
 
-  const handleSlideChange = (swiper: any) => {
+  const handleSlideChange = (swiper: SwiperType) => {
     setCurrentIndex(swiper.realIndex);
 
     // Pause autoplay when on YouTube slide to let video play
@@ -61,7 +59,7 @@ const BannerPreview = () => {
           />
         );
 
-      case 'youtube':
+      case 'youtube': {
         const videoId = item.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/)?.[1];
         if (!videoId) {
           return (
@@ -83,8 +81,9 @@ const BannerPreview = () => {
             style={{ width: '100%', height: '100%', border: 'none' }}
           />
         );
+      }
 
-      case 'gdrive':
+      case 'gdrive': {
         // Extract file ID from Google Drive URL
         const fileId = item.url.match(/\/d\/([^/]+)/)?.[1];
         if (!fileId) {
@@ -102,6 +101,7 @@ const BannerPreview = () => {
             allow="autoplay"
           />
         );
+      }
 
       case 'iframe':
         return (

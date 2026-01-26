@@ -1,21 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { fetchFitur, saveFitur } from '../api/fiturApi';
-import { fetchAllSystems } from '../api/SystemApi';
-import { useApiData } from '../hooks/useApiData';
-import { useCrudForm } from '../hooks/useCrudForm';
-import DataTable from '../components/common/DataTable';
-import ActionsCell from '../components/Fitur/ActionsCell';
-import EditModal from '../components/Fitur/EditModal';
+import { fetchFitur, saveFitur, type FiturItem } from '../api/fiturApi.ts';
+import { fetchAllSystems, type SystemItem } from '../api/SystemApi.ts';
+import { useApiData } from '../hooks/useApiData.ts';
+import { useCrudForm } from '../hooks/useCrudForm.ts';
+import DataTable, {type DataItem} from '../components/common/DataTable.tsx';
+import ActionsCell from '../components/Fitur/ActionsCell.jsx';
+import EditModal from '../components/Fitur/EditModal.jsx';
 import DetailsModal from '../components/Fitur/DetailsModal.tsx';
-import { toast } from 'sonner';
 
 const Fitur = () => {
   const { data: fiturs, loading, error, refetch } = useApiData(fetchFitur);
   const { data: systems } = useApiData(fetchAllSystems);
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [formData, setFormData] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [formData, setFormData] = useState<FiturItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FiturItem | null>(null);
 
 
   const handleAddNew = () => {
@@ -26,17 +25,17 @@ const Fitur = () => {
       icon: '',
       showFiture: '',
       status: true,
-      idSistem: ''
+      idSistem: 0
     });
     setShowModal(true);
   };
 
-  const handleEditFitur = (fitur) => {
+  const handleEditFitur = (fitur: FiturItem) => {
     setFormData(fitur);
     setShowModal(true);
   };
 
-  const handleViewFitur = (fitur) => {
+  const handleViewFitur = (fitur: FiturItem) => {
     setSelectedItem(fitur);
     setShowDetailsModal(true);
   };
@@ -47,7 +46,7 @@ const Fitur = () => {
     refetch();
   };
 
-  const { saving, handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm<FiturItem>({
     saveFunction: saveFitur,
     onSuccess: handleSuccess,
     successMessage: 'Fitur',
@@ -57,11 +56,11 @@ const Fitur = () => {
 
   const handleSubmitForm = async () => {
     if (formData) {
-      await handleSave(formData, 'id');
+      await handleSave(formData as FiturItem, 'id');
     }
   };
 
-  const handleExport = (data) => {
+  const handleExport = (data: DataItem[]) => {
     return data.map(item => ({
       Menu: item.menu || '',
       Route: item.route || '',
@@ -71,7 +70,7 @@ const Fitur = () => {
       Status: item.status ? 'Active' : 'Inactive',
       'System ID': item.idSistem || '',
       'Created By': item.createdBy || '',
-      'Created At': item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''
+      'Created At': item.createdAt ? new Date(item.createdAt as string).toLocaleDateString() : ''
     }));
   };
 
@@ -81,12 +80,13 @@ const Fitur = () => {
       label: 'System',
       searchable: true,
       sortable: true,
-      render: (item) => {
-        if (item.idSistem && typeof item.idSistem === 'object') {
-            return item.idSistem.nama; 
+      render: (item : unknown): React.ReactNode => {
+        const fitur = item as FiturItem
+        if (fitur.idSistem && typeof fitur.idSistem === 'object') {
+            return (fitur.idSistem as SystemItem).nama;
         }
-        const system = systems.find(s => s.id === item.idSistem);
-        return system ? system.nama : item.idSistem; 
+        const system = systems?.find(s => s.id && String(s.id) === String(fitur.idSistem));
+        return system ? system.nama : '-';
       }
     },
     { key: 'menu', label: 'Modul', searchable: true, sortable: true },
@@ -96,11 +96,10 @@ const Fitur = () => {
       label: 'Icon',
       searchable: true,
       sortable: true,
-      render: (item) => (
-        <span className="text-sm text-foreground">
-          {item.icon || '-'}
-        </span>
-      )
+      render: (item : unknown) =>{ 
+        const fitur = item as FiturItem
+      return <span className="text-sm text-foreground">{fitur.icon || '-'}</span>
+    }
     },
     {
       key: 'status',
@@ -116,16 +115,16 @@ const Fitur = () => {
       key: 'actions',
       label: 'Actions',
       searchable: false,
-      render: (item) => (
+      render: (item : unknown) => (
         <ActionsCell item={item} onEdit={handleEditFitur} onView={handleViewFitur} />
       )
     }
-  ], []);
+  ], [systems]);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={fiturs || []}
+        data={(fiturs as unknown) as DataItem[] || []}
         columns={columns}
         title="Fitur Management"
         loading={loading}

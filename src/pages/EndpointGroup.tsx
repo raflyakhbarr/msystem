@@ -1,18 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { fetchMenuGroup, saveMenuGroup } from '../api/menugroupApi';
+import { useState, useMemo } from 'react';
+import { fetchMenuGroup, saveMenuGroup, type MenuGroupItem } from '../api/menugroupApi';
 import { useApiData } from '../hooks/useApiData';
 import { useCrudForm } from '../hooks/useCrudForm';
-import DataTable from '../components/common/DataTable';
+import DataTable, {type DataItem} from '../components/common/DataTable';
 import EditModal from '../components/menugroup/EditModal';
 import DetailsModal from '../components/menugroup/DetailsModal';
 import ActionsCell from '../components/menugroup/ActionsCell';
 
+
 const EndpointGroupManagement = () => {
   const { data: menuGroups, loading, error, refetch } = useApiData(fetchMenuGroup);
   const [showModal, setShowModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [editingMenuGroup, setEditingMenuGroup] = useState(null);
-  const [detailsMenuGroup, setDetailsMenuGroup] = useState(null);
+  const [editingMenuGroup, setEditingMenuGroup] = useState<MenuGroupItem | null>(null);
+  const [detailsMenuGroup, setDetailsMenuGroup] = useState<MenuGroupItem |null>(null);
 
   const handleAddNew = () => {
     const newMenuGroup = {
@@ -20,24 +20,22 @@ const EndpointGroupManagement = () => {
       idSistem: '',
       status: true,
       isAdministrator: false
-    };
+    } as MenuGroupItem;
     setEditingMenuGroup(newMenuGroup);
     setShowModal(true);
   };
 
-  const handleEditMenuGroup = (menuGroup) => {
+  const handleEditMenuGroup = (menuGroup : MenuGroupItem) => {
     setEditingMenuGroup(menuGroup);
     setShowModal(true);
   };
 
-  const handleShowDetails = (menuGroup) => {
+  const handleShowDetails = (menuGroup : MenuGroupItem) => {
     setDetailsMenuGroup(menuGroup);
-    setShowDetailsModal(true);
   };
 
   const handleCloseDetails = () => {
     setDetailsMenuGroup(null);
-    setShowDetailsModal(false);
   };
 
   const handleCloseModal = () => {
@@ -50,7 +48,7 @@ const EndpointGroupManagement = () => {
     handleCloseModal();
   };
 
-  const { handleSave } = useCrudForm({
+  const { handleSave } = useCrudForm<MenuGroupItem>({
     saveFunction: saveMenuGroup,
     onSuccess: handleSuccess,
     successMessage: 'Menu group',
@@ -58,14 +56,14 @@ const EndpointGroupManagement = () => {
     showToast: false,
   });
 
-  const handleExport = (data) => {
+  const handleExport = (data : DataItem[]) => {
     const exportData = data.map(item => ({
-      'Endpoint Group': item.nama,
-      'System': item.sistem?.nama || '-',
+      'Endpoint Group': (item as MenuGroupItem).nama || '',
+      'System': (item as MenuGroupItem).sistem?.nama || '-',
       Status: item.status ? 'Active' : 'Inactive',
       'Administrator': item.isAdministrator ? 'Yes' : 'No',
       'Created By': item.createdBy || '',
-      'Created At': item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''
+      'Created At': item.createdAt ? new Date(item.createdAt as string).toLocaleDateString() : ''
     }));
 
     return exportData;
@@ -85,7 +83,10 @@ const EndpointGroupManagement = () => {
       searchable: true,
       sortable: true,
       exportable: true,
-      render: (item) => item.sistem?.nama || '-'
+      render: (item : unknown) => {
+        const menuGroup = item as MenuGroupItem;
+        return menuGroup.sistem?.nama || '-';
+      }
     },
     {
       key: 'status',
@@ -102,14 +103,14 @@ const EndpointGroupManagement = () => {
       searchable: false,
       sortable: false,
       exportable: false,
-      render: (item) => <ActionsCell item={item} onEdit={handleEditMenuGroup} onShowDetails={handleShowDetails} />
+      render: (item : unknown) => <ActionsCell item={item as MenuGroupItem} onEdit={handleEditMenuGroup} onShowDetails={handleShowDetails} />
     }
   ], []);
 
   return (
     <div className="h-full flex flex-col">
       <DataTable
-        data={menuGroups || []}
+        data={(menuGroups as unknown) as DataItem[] || []}
         columns={columns}
         title="Endpoint Group"
         loading={loading}

@@ -2,7 +2,7 @@ import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContaine
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, Server, Link as LinkIcon, SquareStack, GitFork, Settings, Database, Layers, ArrowRight, Search, Clock, TrendingUp } from "lucide-react"
+import { Users, Server, Link as LinkIcon, SquareStack, GitFork, Settings, Database, LayoutList, Layers, ArrowRight, Search, Clock, TrendingUp } from "lucide-react"
 import { fetchAllSystems } from "@/api/SystemApi"
 import { fetchMenu } from "@/api/menuApi"
 import { fetchMenuGroup } from "@/api/menugroupApi"
@@ -258,6 +258,16 @@ function Dashboard() {
       }
     ],
     cmdb: [
+      {
+        title: "CMDB Dashboard",
+        description: "Configuration items",
+        icon: LayoutList,
+        route: "/cmdb",
+        color: "text-blue-600 dark:text-blue-400",
+        borderColor: "border-blue-200 dark:border-border",
+        hoverBorder: "hover:blue-cyan-500 dark:hover:border-primary/50",
+        glow: "shadow-cyan-500/20"
+      },
       {
         title: "CMDB Items",
         description: "Configuration items",
