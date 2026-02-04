@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -13,8 +8,16 @@ import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
 import SystemComboBox from '../ComboBox/SystemComboBox';
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import type { MenuGroupItem } from '@/types';
 
-const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
+
+interface EditModalProps {
+  editingMenuGroup: MenuGroupItem | null;
+  onSave: (data: MenuGroupItem | null) => void;
+  onCancel: (data: MenuGroupItem | null) => void;
+}
+
+const EditModal = ({ editingMenuGroup, onSave, onCancel }:EditModalProps) => {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = React.useState({
     nama: editingMenuGroup?.nama || '',
@@ -32,14 +35,14 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
     });
   }, [editingMenuGroup]);
 
-  const handleChange = (field, value) => {
+  const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     const dataToSave = {
@@ -52,7 +55,8 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
       await onSave(dataToSave);
       toast.success(editingMenuGroup?.id ? 'Menu group updated successfully!' : 'Menu group created successfully!');
     } catch (err) {
-      toast.error(err?.message || 'Failed to save menu group');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save menu group';
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -67,7 +71,7 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
         isAdministrator: false
       });
     }
-    onCancel();
+    onCancel(editingMenuGroup);
   };
 
   return (
@@ -96,8 +100,8 @@ const EditModal = ({ editingMenuGroup, onSave, onCancel }) => {
               <FieldLabel>System</FieldLabel>
               <FieldContent className="overflow-visible">
                 <SystemComboBox
-                  value={formData.idSistem || undefined}
-                  onValueChange={(value) => handleChange('idSistem', value)}
+                  value={formData.idSistem ? Number(formData.idSistem) : undefined}
+                  onValueChange={(value) => handleChange('idSistem', String(value))}
                   placeholder="Select system..."
                   className="w-full"
                 />

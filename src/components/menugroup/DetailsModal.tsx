@@ -1,9 +1,16 @@
-import React from 'react';
 import { formatDate } from '@/utils/formatDate';
 import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import type { MenuGroupItem } from '@/types';
 
-const DetailsModal = ({ detailsMenuGroup, onClose }) => {
+
+interface DetailsModalProps{
+  detailsMenuGroup: MenuGroupItem | null;
+  onClose: (show:boolean) => void;
+
+}
+
+const DetailsModal = ({ detailsMenuGroup, onClose }: DetailsModalProps) => {
   if (!detailsMenuGroup) {
     return null;
   }
