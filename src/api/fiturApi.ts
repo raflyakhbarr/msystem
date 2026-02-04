@@ -1,26 +1,10 @@
 import apiClient from './axiosConfig';
-import type { ApiResponse } from './types';
+import type { FiturItem,ApiResponse } from '@/types';
 
 const ENDPOINT_FITUR = import.meta.env.VITE_API_FITUR;
 const ENDPOINT_FITUR_SAVE = import.meta.env.VITE_API_FITUR_SAVE;
 
-export interface FiturItem {
-    id?: number;
-    nama?: string;
-    code?: string;
-    menu: string;
-    route: string;
-    urutan: string;
-    idSistem: number | { id: number; nama: string };
-    icon: string;
-    showFiture: string;
-    status: boolean;
-    createdBy?: string | null;
-    updatedBy?: string | null;
-    createdAt?: string;
-    updatedAt?: string;
-    [key: string]: unknown;
-  }
+
 
 export const fetchFitur = async (): Promise<FiturItem[]> => {
   try {

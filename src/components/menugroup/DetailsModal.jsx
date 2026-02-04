@@ -1,11 +1,6 @@
 import React from 'react';
 import { formatDate } from '@/utils/formatDate';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 
 const DetailsModal = ({ detailsMenuGroup, onClose }) => {

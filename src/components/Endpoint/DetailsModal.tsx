@@ -1,10 +1,6 @@
-import type { MenuItem } from '@/api/menuApi';
+import type { MenuItem } from '@/types';
 import { formatDate } from '@/utils/formatDate';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 

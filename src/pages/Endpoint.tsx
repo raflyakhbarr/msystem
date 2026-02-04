@@ -1,11 +1,12 @@
 import { useState, useEffect,useMemo } from 'react';
 import { fetchMenu, saveMenu } from '../api/menuApi';
-import type { MenuItem } from '../api/menuApi';
-import DataTable, { type DataItem } from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable';
 import ActionsCell from '../components/Endpoint/ActionsCell';
 import EditModal from '../components/Endpoint/EditModal';
 import DetailsModal from '../components/Endpoint/DetailsModal';
 import { useCrudForm } from '@/hooks/useCrudForm';
+import type { DataItem, MenuItem } from '@/types';
+
 
 const Endpoint = () => {
   const [menus, setMenus] = useState<MenuItem[]>([]);

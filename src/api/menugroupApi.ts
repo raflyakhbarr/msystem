@@ -1,5 +1,5 @@
 import apiClient from './axiosConfig';
-import type { ApiResponse } from './types';
+import type { MenuGroupItem , ApiResponse } from '@/types';
 
 const ENDPOINT_LIST = import.meta.env.VITE_API_MENU_GROUP;
 
@@ -7,22 +7,6 @@ const ENDPOINT_SELECT = import.meta.env.VITE_API_MENU_GROUP_CB;
 
 const ENDPOINT_SAVE = import.meta.env.VITE_API_MENU_GROUP_SAVE;
 
-export type MenuGroupItem = {
-  id?: number;
-  nama: string;
-  idSistem?: string;
-  status?: boolean;
-  isAdministrator?: boolean;
-  sistem?: {
-    nama: string;
-  };
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  updatedBy?: string;
-  value?: string;
-  label?: string;
-};
 
 export const fetchMenuGroup = async (): Promise<MenuGroupItem[]> => {
   try {

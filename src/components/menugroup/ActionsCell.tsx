@@ -1,7 +1,14 @@
-import React from 'react';
-import {Edit, List, Settings} from 'lucide-react';
+import {Edit, List} from 'lucide-react'
+import type { MenuGroupItem } from '@/types';
 
-const ActionsCell = ({ item, onEdit, onShowDetails, onSettingToken }) => {
+
+interface ActionsCellProps{
+  item: MenuGroupItem;
+  onEdit: (item: MenuGroupItem) => void;
+  onShowDetails: (item: MenuGroupItem) => void;
+}
+
+const ActionsCell = ({ item, onEdit, onShowDetails }: ActionsCellProps) => {
   return (
     <div className="flex space-x-2">
       <button
@@ -15,10 +22,6 @@ const ActionsCell = ({ item, onEdit, onShowDetails, onSettingToken }) => {
         onClick={() => onShowDetails(item)}
       >
         <List className="h-4 w-4" />
-      </button>
-      <button className='text-orange-600 hover:text-orange-900'
-        onClick={()=> onSettingToken(item)}>
-          <Settings className="h-4 w-4"/>
       </button>
     </div>
   );

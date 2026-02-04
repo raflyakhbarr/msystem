@@ -1,30 +1,9 @@
 import apiClient from './axiosConfig';
-import type { ApiResponse } from './types';
+import type { MenuItem, ApiResponse } from '@/types';
 
 const ENDPOINT_MENU = import.meta.env.VITE_API_MENU;
 const ENDPOINT_MENU_SAVE = import.meta.env.VITE_API_MENU_SAVE;
 
-export type MenuItem = {
-  id?: number;
-  isSidebar: boolean;
-  nama: string;
-  fitur: string;
-  pathMenu: string;
-  noMenu?: number;
-  group_menu?: {
-    id?: number;
-    nama: string;
-    sistem?: {
-      id?: number;
-      nama: string;
-    };
-  } | number;  // Can be object (from API) or ID (for saving)
-  baseurl?: string;
-  createdBy?: string | null;
-  updatedBy?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-};
 
 export const fetchMenu = async (): Promise<MenuItem[]> => {
   try {

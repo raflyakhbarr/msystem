@@ -93,24 +93,7 @@ const navMainItems = [
       },
     ],
   },
-  {
-    title: "Banner",
-    url: "#",
-    icon:BookOpen,
-    isActive: true,
-    items: [
-      {
-        title: "Banner Setting",
-        url: "/banner/setting",
-        isActive:false,
-      },
-      {
-        title: "Banner Preview",
-        url:"/banner/preview",
-        isActive:false,
-      }
-    ]
-  }
+  
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

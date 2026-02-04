@@ -1,7 +1,8 @@
 import React from 'react';
-import { ComboBox, type ComboBoxOption } from '@/components/common/ComboBox';
+import { ComboBox } from '@/components/common/ComboBox';
 import { useApiData } from '@/hooks/useApiData';
 import { fetchMenuGroupSelect } from '@/api/menugroupApi';
+import type { ComboBoxOption } from '@/types';
 
 interface MenuGroupComboBoxProps {
   value?: number;

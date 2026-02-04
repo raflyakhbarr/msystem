@@ -1,7 +1,7 @@
 import React from 'react';
 import {Edit, RefreshCcw} from 'lucide-react'
 import { toast } from 'sonner';
-import type { AccountItem } from '@/api/accountApi';
+import type { AccountItem } from '@/types';
 
 interface ActionsCellProps {
   item: AccountItem;

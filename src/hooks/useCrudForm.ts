@@ -1,19 +1,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import type {UseCrudFormOptions, UseCrudFormReturn} from "@/types"
 
-interface UseCrudFormOptions<T extends Record<string, unknown>> {
-  saveFunction: (data: T) => Promise<unknown>;
-  onSuccess?: (data: unknown) => void;
-  onError?: (error: Error) => void;
-  successMessage?: string;
-  errorMessagePrefix?: string;
-  showToast?: boolean;
-}
-
-interface UseCrudFormReturn<T extends Record<string, unknown>> {
-  saving: boolean;
-  handleSave: (formData: T | null, idKey?: string) => Promise<void>;
-}
 
 export function useCrudForm<T extends Record<string,unknown>>(
   options: UseCrudFormOptions<T>

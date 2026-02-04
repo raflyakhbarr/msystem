@@ -1,22 +1,9 @@
 import apiClient from './axiosConfig';
+import type { AccountItem , ApiResponse } from '@/types';
 
 const ENDPOINT_ACC = import.meta.env.VITE_API_ACC_ENDPOINT;
 const ENDPOINT_ACC_SAVE = import.meta.env.VITE_API_ACC_SAVE;
 
-export type AccountItem = {
-  id?: number;
-  nipp?: string;
-  username?: string;
-  email?: string;
-  [key: string]: unknown;
-};
-
-interface ApiResponse<T> {
-  data?: T;
-  message?: string;
-  status?: string;
-  [key: string]: unknown;
-}
 
 export const fetchAccounts = async (): Promise<AccountItem[]> => {
   try {

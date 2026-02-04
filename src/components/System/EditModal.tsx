@@ -1,189 +1,138 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import {  Select,  SelectContent,  SelectItem,  SelectTrigger,  SelectValue,} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table"
+import {  Table,  TableHeader,  TableBody,  TableRow,  TableHead,  TableCell,} from "@/components/ui/table"
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import type { SystemItem, HeaderEntry } from '@/types';
 
-const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmit }) => {
+interface EditModalProps {
+  showModal: boolean;
+  formData: Partial<SystemItem> | null;
+  setFormData: (data: Partial<SystemItem> | null) => void;
+  setShowModal: (show: boolean) => void;
+  handleSubmit: (data: Partial<SystemItem>) => Promise<void> | void;
+}
+
+const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmit }: EditModalProps) => {
   const [saving, setSaving] = useState(false);
+  const [localHeaders, setLocalHeaders] = useState<HeaderEntry[]>([]);
+  const [localIpWhitelist, setLocalIpWhitelist] = useState<string[]>([]);
 
-  // Initialize headers from existing data
   useEffect(() => {
-    if (!showModal || !formData || Array.isArray(formData.headers)) {
+    if (!showModal || !formData) {
+      setLocalHeaders([]);
+      setLocalIpWhitelist([]);
       return;
     }
 
-    // If headers is a string (from backend), parse it to array
-    if (typeof formData.headers === 'string' && formData.headers.trim()) {
+    const headersValue = formData.headers;
+    if (typeof headersValue === 'string' && (headersValue as string).trim()) {
       try {
-        const parsed = JSON.parse(formData.headers);
+        const parsed = JSON.parse(headersValue);
         const headersArray = Object.entries(parsed).map(([key, value]) => ({
           id: crypto.randomUUID(),
           key,
-          value
+          value: String(value)
         }));
-        setFormData(prev => ({ ...prev, headers: headersArray }));
+        setLocalHeaders(headersArray);
       } catch (e) {
-        // If parsing fails, initialize with empty array
-        setFormData(prev => ({ ...prev, headers: [] }));
+        setLocalHeaders([]);
       }
+    } else if (Array.isArray(headersValue)) {
+      setLocalHeaders(headersValue);
     } else {
-      // Initialize with empty array if no headers exist
-      setFormData(prev => ({ ...prev, headers: [] }));
-    }
-  }, [showModal, formData?.id]);
-
-  // Initialize ip_whitelist from existing data (simple string array)
-  useEffect(() => {
-    if (!showModal || !formData) {
-      return;
+      setLocalHeaders([]);
     }
 
-    // If ip_whitelist is a string (from backend), parse it to array
-    if (typeof formData.ip_whitelist === 'string' && formData.ip_whitelist.trim()) {
+    const ipWhitelistValue = formData.ip_whitelist;
+    if (typeof ipWhitelistValue === 'string' && (ipWhitelistValue as string).trim()) {
       try {
-        const parsed = JSON.parse(formData.ip_whitelist);
-        setFormData(prev => ({ ...prev, ip_whitelist: Array.isArray(parsed) ? parsed : [] }));
+        const parsed = JSON.parse(ipWhitelistValue);
+        setLocalIpWhitelist(Array.isArray(parsed) ? parsed : []);
       } catch (e) {
-        // If parsing fails, initialize with empty array
-        setFormData(prev => ({ ...prev, ip_whitelist: [] }));
+        setLocalIpWhitelist([]);
       }
-    } else if (!Array.isArray(formData.ip_whitelist)) {
-      // Initialize with empty array if no ip_whitelist exist
-      setFormData(prev => ({ ...prev, ip_whitelist: [] }));
+    } else if (Array.isArray(ipWhitelistValue)) {
+      setLocalIpWhitelist(ipWhitelistValue);
+    } else {
+      setLocalIpWhitelist([]);
     }
-  }, [showModal, formData?.id]);
+  }, [showModal, formData]);
 
   if (!showModal || !formData) {
     return null;
   }
 
-  // Ensure headers is an array (useEffect handles this, but render happens first)
-  const headers = Array.isArray(formData.headers) ? formData.headers : [];
-
-  // Ensure ip_whitelist is an array
-  const ipWhitelist = Array.isArray(formData.ip_whitelist) ? formData.ip_whitelist : [];
-
-  // Helper functions for header management
   const addHeaderRow = () => {
-    setFormData(prev => ({
-      ...prev,
-      headers: [
-        ...(prev.headers || []),
-        { id: crypto.randomUUID(), key: '', value: '' }
-      ]
-    }));
+    setLocalHeaders([
+      ...localHeaders,
+      { id: crypto.randomUUID(), key: '', value: '' }
+    ]);
   };
 
-  const removeHeaderRow = (id) => {
-    setFormData(prev => ({
-      ...prev,
-      headers: (prev.headers || []).filter(h => h.id !== id)
-    }));
+  const removeHeaderRow = (id: string) => {
+    setLocalHeaders(localHeaders.filter(h => h.id !== id));
   };
 
-  const updateHeaderKey = (id, value) => {
-    setFormData(prev => ({
-      ...prev,
-      headers: (prev.headers || []).map(h =>
-        h.id === id ? { ...h, key: value } : h
-      )
-    }));
+  const updateHeaderKey = (id: string, value: string) => {
+    setLocalHeaders(localHeaders.map(h =>
+      h.id === id ? { ...h, key: value } : h
+    ));
   };
 
-  const updateHeaderValue = (id, value) => {
-    setFormData(prev => ({
-      ...prev,
-      headers: (prev.headers || []).map(h =>
-        h.id === id ? { ...h, value: value } : h
-      )
-    }));
+  const updateHeaderValue = (id: string, value: string) => {
+    setLocalHeaders(localHeaders.map(h =>
+      h.id === id ? { ...h, value: value } : h
+    ));
   };
 
-  // Helper functions for ip_whitelist management (simple string array)
   const addIpWhitelistRow = () => {
-    setFormData(prev => ({
-      ...prev,
-      ip_whitelist: [...(prev.ip_whitelist || []), '']
-    }));
+    setLocalIpWhitelist([...localIpWhitelist, '']);
   };
 
-  const removeIpWhitelistRow = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      ip_whitelist: (prev.ip_whitelist || []).filter((_, i) => i !== index)
-    }));
+  const removeIpWhitelistRow = (index: number) => {
+    setLocalIpWhitelist(localIpWhitelist.filter((_, i) => i !== index));
   };
 
-  const updateIpWhitelistValue = (index, value) => {
-    setFormData(prev => ({
-      ...prev,
-      ip_whitelist: (prev.ip_whitelist || []).map((ip, i) =>
-        i === index ? value : ip
-      )
-    }));
+  const updateIpWhitelistValue = (index: number, value: string) => {
+    setLocalIpWhitelist(localIpWhitelist.map((ip, i) =>
+      i === index ? value : ip
+    ));
   };
 
-  const handleChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
+  const handleChange = (field: string, value: string | boolean) => {
+    setFormData({
+      ...formData,
       [field]: value
-    }));
+    });
   };
 
-  const handleFormSubmit = async (e) => {
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Convert headers array to JSON object string
-    const headersObject = {};
-    if (Array.isArray(formData.headers)) {
-      formData.headers.forEach(h => {
-        if (h.key && h.value) {
-          headersObject[h.key] = h.value;
-        }
-      });
-    }
+    const headersObject: Record<string, string> = {};
+    localHeaders.forEach(h => {
+      if (h.key && h.value) {
+        headersObject[h.key] = h.value;
+      }
+    });
 
     const headersString = Object.keys(headersObject).length > 0
       ? JSON.stringify(headersObject)
       : '';
 
-    // Convert ip_whitelist array to JSON string (filter out empty values)
-    const ipWhitelistArray = (Array.isArray(formData.ip_whitelist)
-      ? formData.ip_whitelist
-      : []
-    ).filter(ip => ip && ip.trim());
+    const ipWhitelistArray = localIpWhitelist.filter(ip => ip && ip.trim());
 
     const ipWhitelistString = ipWhitelistArray.length > 0
       ? JSON.stringify(ipWhitelistArray)
       : '';
 
-    // Create data to submit with converted headers and ip_whitelist
     const dataToSubmit = {
       ...formData,
       headers: headersString,
@@ -195,7 +144,8 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
       await handleSubmit(dataToSubmit);
       toast.success(formData?.id ? 'System updated successfully!' : 'System created successfully!');
     } catch (err) {
-      toast.error(err?.message || 'Failed to save system');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save system';
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -295,7 +245,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                     Add Header
                   </Button>
 
-                  {headers.length > 0 && (
+                  {localHeaders.length > 0 && (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -305,8 +255,8 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {headers.map((header) => (
-                          <TableRow key={header.id}>
+                        {localHeaders.map((header, index) => (
+                          <TableRow key={`${header.id}-${index}`}>
                             <TableCell>
                               <Input
                                 type="text"
@@ -340,7 +290,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                     </Table>
                   )}
 
-                  {headers.length === 0 && (
+                  {localHeaders.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No headers added. Click "Add Header" to add custom headers.
                     </p>
@@ -364,7 +314,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                     Add IP
                   </Button>
 
-                  {ipWhitelist.length > 0 && (
+                  {localIpWhitelist.length > 0 && (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -373,7 +323,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {ipWhitelist.map((ip, index) => (
+                        {localIpWhitelist.map((ip, index) => (
                           <TableRow key={index}>
                             <TableCell>
                               <Input
@@ -400,7 +350,7 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
                     </Table>
                   )}
 
-                  {ipWhitelist.length === 0 && (
+                  {localIpWhitelist.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No IPs added. Click "Add IP" to add IPs to whitelist.
                     </p>
@@ -437,18 +387,3 @@ const EditModal = ({ showModal, formData, setFormData, setShowModal, handleSubmi
 };
 
 export default EditModal;
-
-
-
-// {
-//             "id": 54,
-//             "nama": "TPS",
-//             "url": "tps.com",
-//             "destination": "/api/tps",
-//             "typeApi": "not_token",
-//             "status": true,
-//             "createdAt": "2025-12-15T06:56:57.695Z",
-//             "updatedAt": "2025-12-18T06:59:48.327Z",
-//             "headers": "{\"Accept\":\"application/json\"}",
-//             "token": null
-//         }

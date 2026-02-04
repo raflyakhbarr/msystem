@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
 import { fetchAccounts, saveAccount } from '../api/accountApi';
-import type { AccountItem } from '../api/accountApi';
 import type { AccountFormData } from '../components/Account/EditModal';
 import { useApiData } from '../hooks/useApiData';
-import DataTable, { type DataItem } from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable';
 import EditModal from '../components/Account/EditModal';
 import ActionsCell from '../components/Account/ActionsCell';
 import { useCrudForm } from '@/hooks/useCrudForm';
+import type { DataItem,AccountItem } from '@/types';
+
 
 const Account = () => {
   const { data: accounts, loading, error, refetch } = useApiData<AccountItem>(fetchAccounts);

@@ -1,5 +1,5 @@
 import apiClient from './axiosConfig';
-import type { ApiResponse } from './types';
+import type { ApiResponse } from '@/types';
 
 const ENDPOINT_LIST = import.meta.env.VITE_API_ACC_GROUP_ENDPOINT;
 const ENDPOINT_SAVE = import.meta.env.VITE_API_ACC_GROUP_SAVE;

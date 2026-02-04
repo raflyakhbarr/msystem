@@ -1,6 +1,6 @@
 import {Edit, List} from 'lucide-react'
 
-import type { MenuItem } from '@/api/menuApi';
+import type { MenuItem } from '@/types';
 
 interface ActionsCellProps {
   item: MenuItem;

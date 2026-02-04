@@ -18,9 +18,7 @@ import CMDBItem from './pages/cmdb-pages/CMDBItem'
 import CMDBVisualization from './pages/cmdb-pages/CMDBVisualization'
 import { Toaster } from 'sonner'
 import CMDBDashboard from './pages/cmdb-pages/CMDBDashboard'
-import BannerDisplay from './pages/banner/bannerDisplay'
-import BannerPreview from './pages/banner/BannerPreview'
-import BannerSetting from './pages/banner/bannerSetting'
+
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -222,34 +220,7 @@ function App() {
               )
             }
           />
-          <Route
-            path="banner/display"
-            element={<BannerDisplay/>}
-          />
-          <Route
-            path="banner/setting"
-            element={
-              isAuthenticated ? (
-                <Layout>
-                  <BannerSetting/>
-                </Layout>
-              ) : (
-                <Navigate to="/login"/>
-              )
-            }
-          />
-          <Route
-            path="banner/preview"
-            element={
-              isAuthenticated ? (
-                <Layout>
-                  <BannerPreview/>
-                </Layout>
-              ) : (
-                <Navigate to="/login"/>
-              )
-            }
-          />
+          
           <Route
             path="/"
             element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />}

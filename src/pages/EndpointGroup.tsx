@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { fetchMenuGroup, saveMenuGroup, type MenuGroupItem } from '../api/menugroupApi';
+import { fetchMenuGroup, saveMenuGroup} from '../api/menugroupApi';
 import { useApiData } from '../hooks/useApiData';
 import { useCrudForm } from '../hooks/useCrudForm';
-import DataTable, {type DataItem} from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable';
 import EditModal from '../components/menugroup/EditModal';
 import DetailsModal from '../components/menugroup/DetailsModal';
 import ActionsCell from '../components/menugroup/ActionsCell';
+import type { DataItem, MenuGroupItem } from '@/types';
 
 
 const EndpointGroupManagement = () => {

@@ -2,39 +2,11 @@
 
 import * as React from "react"
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react"
-
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-
-export interface ComboBoxOption {
-  value: string | number;
-  label: string;
-  [key: string]: unknown; 
-}
-
-interface ComboBoxProps {
-  options: ComboBoxOption[];
-  value?: string | number;
-  onValueChange?: (value: string | number) => void;
-  placeholder?: string;
-  className?: string;
-  loading?: boolean;
-  disabled?: boolean;
-  searchable?: boolean;
-}
+import {  Command,  CommandEmpty,  CommandGroup,  CommandInput,  CommandItem,  CommandList,} from "@/components/ui/command"
+import {  Popover,  PopoverContent,  PopoverTrigger,} from "@/components/ui/popover"
+import type { ComboBoxProps} from "@/types"
 
 export function ComboBox({ 
   options,

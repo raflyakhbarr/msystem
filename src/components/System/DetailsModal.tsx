@@ -1,15 +1,15 @@
-import React from 'react';
 import { formatDate } from '@/utils/formatDate';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import type { SystemItem } from '@/types';
 
-const DetailsModal = ({ showModal, item, setShowModal }) => {
+interface DetailsModalProps{
+  showModal: boolean;
+  item: SystemItem | null;
+  setShowModal:(show:boolean) => void
+}
+
+const DetailsModal = ({ showModal, item, setShowModal }: DetailsModalProps ) => {
   if (!item) {
     return null;
   }
@@ -65,7 +65,18 @@ const DetailsModal = ({ showModal, item, setShowModal }) => {
               <h4 className="text-sm font-medium text-muted-foreground mb-2">Headers</h4>
               <div className="rounded-md bg-muted/50 border border-border p-3">
                 <pre className="text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap break-all">
-                  {item.headers}
+                  {Array.isArray(item.headers)
+                    ? JSON.stringify(
+                        item.headers.reduce((acc, h) => {
+                          if (h.key && h.value) {
+                            acc[h.key] = h.value;
+                          }
+                          return acc;
+                        }, {} as Record<string, string>),
+                        null,
+                        2
+                      )
+                    : item.headers || 'No headers'}
                 </pre>
               </div>
             </div>

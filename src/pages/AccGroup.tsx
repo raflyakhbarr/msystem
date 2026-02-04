@@ -1,13 +1,12 @@
 import { useState, useMemo } from 'react';
 import { fetchAccGroup, saveAccGroup } from '../api/accgroupApi';
-import type { AccGroupItem } from '../api/accgroupApi';
 import type { AccGroupFormData } from '../components/accountgroup/EditModal';
 import { useApiData } from '../hooks/useApiData';
 import { useCrudForm } from '../hooks/useCrudForm';
-import DataTable, { type DataItem } from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable';
 import EditModal from '../components/accountgroup/EditModal';
 import ActionsCell from '../components/accountgroup/ActionsCell';
-
+import type { DataItem, AccGroupItem } from '@/types';
 
 
 const AccGroup = () => {

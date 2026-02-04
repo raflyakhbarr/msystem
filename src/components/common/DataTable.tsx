@@ -4,62 +4,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table";
+import {  Table,  TableHeader,  TableBody,  TableHead,  TableRow,  TableCell,} from "@/components/ui/table";
+import type {DataItem, DataTableProps, } from "@/types"
 
-interface Column {
-  key: string;
-  label: string;
-  searchable?: boolean;
-  sortable?: boolean;
-  exportable?: boolean;
-  isBoolean?: boolean;
-  isDate?: boolean;
-  isEnum?: boolean;
-  enumOptions?: Array<{ value: string; label: string; color?: string }>;
-  nested?: boolean;
-  badgelabel?: string;
-  colorlabel?: string
-  render?: (item: unknown) => React.ReactNode;
-}
-
-export interface DataItem {
-  [key: string]: unknown;
-  id?: string | number;
-}
-
-interface ActionButton {
-  label: string;
-  icon?: React.ReactNode;
-  onClick: () => void;
-  className?: string;
-}
-
-interface DataTableProps {
-  data: DataItem[];
-  columns: Column[];
-  title?: string;
-  loading?: boolean;
-  error?: string | null;
-  onRefresh?: () => void;
-  onAdd?: () => void;
-  onExport?: (data: DataItem[]) => unknown;
-  itemsPerPage?: number;
-  showAddButton?: boolean;
-  showExportButton?: boolean;
-  showRefreshButton?: boolean;
-  refreshing?: boolean;
-  actionButtons?: ActionButton[];
-  maxHeight?: string;
-}
-
-const DataTable = ({
+const DataTable = <T extends DataItem = DataItem>({
   data,
   columns,
   title,
@@ -75,11 +23,18 @@ const DataTable = ({
   refreshing = false,
   actionButtons = [],
   maxHeight
-}: DataTableProps) => {
+}: DataTableProps<T>) => {
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [sortOrder, setSortOrder] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const getNestedValue = (obj: DataItem, path: string): unknown => {
+    return path.split('.').reduce((current, key) => {
+      return current && typeof current === 'object'
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+    }, obj as unknown);
+  };
 
   React.useEffect(() => {
     const initialSearchTerms: Record<string, string> = {};
@@ -93,15 +48,9 @@ const DataTable = ({
 
   const handleSortClick = (field: string) => {
     if (sortOrder === field) {
-      if (sortDirection === 'asc') {
-        setSortDirection('desc');
-      } else if (sortDirection === 'desc') {
-        setSortOrder(null);
-        setSortDirection(null);
-      } else {
-        setSortOrder(field);
-        setSortDirection('asc');
-      }
+      sortDirection === 'asc' ? setSortDirection('desc')
+        : sortDirection === 'desc' ? (setSortOrder(null), setSortDirection(null))
+        : setSortDirection('asc');
     } else {
       setSortOrder(field);
       setSortDirection('asc');
@@ -125,8 +74,7 @@ const DataTable = ({
       let itemValue = item[column.key];
       
       if (column.nested) {
-        const keys = column.key.split('.');
-        itemValue = keys.reduce((obj:unknown, key:string) => (obj as Record<string, unknown>)?.[key], item as unknown);
+        itemValue = getNestedValue(item, column.key);
       }
       
       if (column.isDate && itemValue) {
@@ -162,9 +110,8 @@ const DataTable = ({
       
       const column = columns.find(col => col.key === sortOrder);
       if (column?.nested) {
-        const keys = sortOrder.split('.');
-        aValue = keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], a as unknown);
-        bValue = keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], b as unknown);
+        aValue = getNestedValue(a, sortOrder);
+        bValue = getNestedValue(b, sortOrder);
       }
       
       if (column?.isDate) {
@@ -187,40 +134,38 @@ const DataTable = ({
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
   const exportToExcel = async () => {
-    try {
-      // Dynamically import xlsx only when needed
-      const XLSX = await import('xlsx');
+    const prepareExportData = (simple: boolean = false): unknown[] => {
+      return sortedData.map((item: DataItem) => {
+        const exportItem: Record<string, unknown> = {};
+        columns.forEach(column => {
+          if (column.exportable !== false) {
+            let value = item[column.key];
 
-      let exportData:unknown;
-
-      if (onExport) {
-        exportData = onExport(sortedData);
-      } else {
-        exportData = sortedData.map((item: DataItem) => {
-          const exportItem: Record<string, unknown> = {};
-          columns.forEach(column => {
-            if (column.exportable !== false) {
-              let value = item[column.key];
-
+            if (!simple) {
               if (column.nested) {
-                const keys = column.key.split('.');
-                value = keys.reduce((obj: unknown, key) => (obj as Record<string, unknown>)?.[key], item);
+                value = getNestedValue(item, column.key);
               }
-
               if (typeof value === 'boolean') {
                 value = value ? 'Yes' : 'No';
               }
-
               if (column.isDate && value) {
-                value = new Date(value as string |number |Date).toLocaleDateString();
+                value = new Date(value as string | number | Date).toLocaleDateString();
               }
-
-              exportItem[column.label] = value || '';
             }
-          });
-          return exportItem;
+
+            exportItem[column.label] = value || '';
+          }
         });
-      }
+        return exportItem;
+      });
+    };
+
+    try {
+      const XLSX = await import('xlsx');
+
+      let exportData : unknown;
+
+      exportData = onExport ? onExport(sortedData) : prepareExportData(false);
 
       if (exportData && Array.isArray(exportData) && exportData.length > 0) {
         const ws = XLSX.utils.json_to_sheet(exportData);
@@ -235,18 +180,8 @@ const DataTable = ({
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       try {
-        // Dynamically import xlsx in fallback as well
         const XLSX = await import('xlsx');
-
-        const simpleData = sortedData.map((item: DataItem) => {
-          const exportItem: Record<string, unknown> = {};
-          columns.forEach(column => {
-            if (column.exportable !== false) {
-              exportItem[column.label] = item[column.key] || '';
-            }
-          });
-          return exportItem;
-        });
+        const simpleData = prepareExportData(true);
 
         const ws = XLSX.utils.json_to_sheet(simpleData);
         const wb = XLSX.utils.book_new();
@@ -495,8 +430,7 @@ const DataTable = ({
                             new Date(item[column.key] as string | number | Date).toLocaleDateString()
                           ) : column.nested ? (
                             (() => {
-                              const keys = column.key.split('.');
-                              return keys.reduce((obj: unknown, key: string) => (obj as Record<string, unknown>)?.[key], item as unknown) || '';
+                              return getNestedValue(item, column.key) || '';
                             })()
                           ) : (
                             item[column.key] || ''
@@ -531,21 +465,27 @@ const DataTable = ({
               Previous
             </button>
               
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum = i + 1
-              if (totalPages > 5 && currentPage > 3) pageNum = currentPage - 2 + i
-              if (pageNum > totalPages) return null
-              
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`px-3 py-1 rounded-md text-sm ${currentPage === pageNum ? 'bg-primary text-primary-foreground' : 'bg-background border border-border hover:bg-muted'}`}
-                >
-                  {pageNum}
-                </button>
-              )
-            })}
+            {(() => {
+              const maxButtons = 5;
+              let startPage = Math.max(1, currentPage - 2);
+
+              if (totalPages > maxButtons && startPage > totalPages - maxButtons + 1) {
+                startPage = totalPages - maxButtons + 1;
+              }
+
+              return Array.from({ length: Math.min(maxButtons, totalPages) }, (_, i) => {
+                const pageNum = startPage + i;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1 rounded-md text-sm ${currentPage === pageNum ? 'bg-primary text-primary-foreground' : 'bg-background border border-border hover:bg-muted'}`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              });
+            })()}
 
             <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}

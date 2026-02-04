@@ -1,23 +1,10 @@
 import apiClient from './axiosConfig';
-import type { ApiResponse } from './types';
+
+import type { SystemItem , ApiResponse } from '@/types';
 
 const SYSTEM_ENDPOINT = import.meta.env.VITE_API_SISTEM_ENDPOINT
 const SYSTEM_CB = import.meta.env.VITE_API_SISTEM_ENDPOINT_CB
 const SAVE_DATA_ENDPOINT = import.meta.env.VITE_API_SISTEM_SAVE_DATA_ENDPOINT
-
-export type SystemItem = {
-  id?: number;
-  nama: string;
-  url: string;
-  destination: string;
-  typeApi: string;
-  status: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  headers: string;
-  token: string | null;
-  ip_whitelist?: string;
-};
 
 export const fetchAllSystems = async (): Promise<SystemItem[]> => {
   try {

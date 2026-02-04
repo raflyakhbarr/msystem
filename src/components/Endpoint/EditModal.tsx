@@ -1,12 +1,7 @@
 import React, { useState } from 'react';
 import MenuGroupComboBox from '../ComboBox/MenuGroupComboBox';
-import type { MenuItem } from '../../api/menuApi';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import type { MenuItem } from '@/types';
+import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"

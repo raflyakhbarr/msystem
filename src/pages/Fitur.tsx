@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { fetchFitur, saveFitur, type FiturItem } from '../api/fiturApi.ts';
-import { fetchAllSystems, type SystemItem } from '../api/SystemApi.ts';
+import { fetchFitur, saveFitur } from '../api/fiturApi.ts';
+import { fetchAllSystems} from '../api/SystemApi.ts';
 import { useApiData } from '../hooks/useApiData.ts';
 import { useCrudForm } from '../hooks/useCrudForm.ts';
-import DataTable, {type DataItem} from '../components/common/DataTable.tsx';
+import DataTable from '../components/common/DataTable.tsx';
 import ActionsCell from '../components/Fitur/ActionsCell.jsx';
 import EditModal from '../components/Fitur/EditModal.jsx';
 import DetailsModal from '../components/Fitur/DetailsModal.tsx';
+import type { DataItem, SystemItem, FiturItem, Column } from '@/types';
 
 const Fitur = () => {
   const { data: fiturs, loading, error, refetch } = useApiData(fetchFitur);
@@ -115,8 +116,8 @@ const Fitur = () => {
       key: 'actions',
       label: 'Actions',
       searchable: false,
-      render: (item : unknown) => (
-        <ActionsCell item={item} onEdit={handleEditFitur} onView={handleViewFitur} />
+      render: (item : FiturItem) => (
+        <ActionsCell item={item} onEdit={handleEditFitur} onShowDetails={handleViewFitur} />
       )
     }
   ], [systems]);
@@ -125,7 +126,7 @@ const Fitur = () => {
     <div className="h-full flex flex-col">
       <DataTable
         data={(fiturs as unknown) as DataItem[] || []}
-        columns={columns}
+        columns={(columns as unknown) as Column<DataItem>[]}
         title="Fitur Management"
         loading={loading}
         error={error}
