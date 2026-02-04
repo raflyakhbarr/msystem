@@ -40,7 +40,7 @@ export default function CustomNode({ data, id }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'active': return 'bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700';
-      case 'inactive': return 'bg-gray-500 text-white border-gray-600 dark:bg-gray-600 dark:border-gray-700';
+      case 'inactive': return 'bg-red-500 text-white border-red-600 dark:bg-red-600 dark:border-red-700';
       case 'maintenance': return 'bg-yellow-500 text-white border-yellow-600 dark:bg-yellow-600 dark:border-yellow-700';
       case 'decommissioned': return 'bg-red-500 text-white border-red-600 dark:bg-red-600 dark:border-red-700';
       default: return 'bg-gray-500 text-white border-gray-600 dark:bg-gray-600 dark:border-gray-700';
@@ -50,7 +50,7 @@ export default function CustomNode({ data, id }) {
   const getNodeBorderColor = (status) => {
     switch (status) {
       case 'active': return 'border-green-500 dark:border-green-400';
-      case 'inactive': return 'border-gray-500 dark:border-gray-400';
+      case 'inactive': return 'border-red-500 dark:border-red-400';
       case 'maintenance': return 'border-yellow-500 dark:border-yellow-400';
       case 'decommissioned': return 'border-red-500 dark:border-red-400';
       default: return 'border-gray-500 dark:border-gray-400';
@@ -61,7 +61,7 @@ export default function CustomNode({ data, id }) {
     switch (status) {
       case 'active': return '#22c55e';
       case 'maintenance': return '#eab308';
-      case 'inactive': return '#6b7280';
+      case 'inactive': return '#ef4444';
       case 'decommissioned': return '#ef4444';
       default: return '#6b7280';
     }

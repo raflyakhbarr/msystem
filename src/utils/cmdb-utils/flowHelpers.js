@@ -100,7 +100,7 @@ export const getBestHandlePositions = (sourceNode, targetNode) => {
 export const getStatusColor = (status) => {
   switch (status) {
     case 'inactive':
-      return '#9ca3af';
+      return '#ef4444';
     case 'maintenance':
       return '#f59e0b';
     case 'decommissioned':
