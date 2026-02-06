@@ -34,7 +34,6 @@ import { Square } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
-import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
 import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
@@ -47,6 +46,7 @@ import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
+import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
@@ -172,17 +172,44 @@ export default function CMDBVisualization() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [highlightMode, setHighlightMode] = useState(false);
   const [showTableDrawer, setShowTableDrawer] = useState(false);
-  
-  const {
-    selectedFiles,
-    imagePreviews,
-    existingImages,
-    handleFileSelect,
-    handleRemoveNewImage,
-    handleRemoveExistingImage,
-    setImages,
-    resetImages,
-  } = useImageUpload();
+
+  // Services state
+  const [services, setServices] = useState({});
+  const [serviceDialog, setServiceDialog] = useState({ show: false, service: null, parentItem: null });
+  const [serviceIconUploads, setServiceIconUploads] = useState({});
+
+  // Service handlers
+  const handleServiceAdd = useCallback(() => {
+    setItemFormData(prev => ({
+      ...prev,
+      services: [...(prev.services || []), { name: '', status: 'active', icon_type: 'preset', icon_name: 'citrix' }]
+    }));
+  }, [setItemFormData]);
+
+  const handleServiceRemove = useCallback((index) => {
+    setItemFormData(prev => ({
+      ...prev,
+      services: prev.services.filter((_, i) => i !== index)
+    }));
+  }, [setItemFormData]);
+
+  const handleServiceChange = useCallback((index, field, value) => {
+    setItemFormData(prev => {
+      const newServices = [...(prev.services || [])];
+      newServices[index] = { ...newServices[index], [field]: value };
+      return { ...prev, services: newServices };
+    });
+  }, [setItemFormData]);
+
+  const handleServiceIconUpload = useCallback((index, e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setServiceIconUploads(prev => ({
+      ...prev,
+      [index]: file
+    }));
+  }, []);
 
   const {
     contextMenu,
@@ -352,6 +379,14 @@ export default function CMDBVisualization() {
     }
   };
 
+  const handleServiceClick = useCallback((service, nodeData) => {
+    setServiceDialog({
+      show: true,
+      service,
+      parentItem: items.find(i => i.id === parseInt(nodeData.id))
+    });
+  }, [items]);
+
   const processedNodes = useMemo(() => {
     return nodes.map(node => {
       let opacity = 1;
@@ -375,8 +410,19 @@ export default function CMDBVisualization() {
         }
       }
 
+      // Get services for this node (only for custom nodes, not group nodes)
+      let nodeServices = [];
+      if (node.type === 'custom' && !node.id.startsWith('group-')) {
+        nodeServices = services[node.id] || [];
+      }
+
       return {
         ...node,
+        data: {
+          ...node.data,
+          onServiceClick: handleServiceClick,
+          services: nodeServices,
+        },
         style: {
           ...node.style,
           opacity,
@@ -387,7 +433,7 @@ export default function CMDBVisualization() {
         }
       };
     });
-  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes]);
+  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, services]);
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
@@ -448,6 +494,27 @@ export default function CMDBVisualization() {
     setEdges(flowEdges);
   }, [transformToFlowData, setNodes, setEdges]);
 
+  // Fetch services for all items
+  useEffect(() => {
+    const fetchServices = async () => {
+      const servicesMap = {};
+      for (const item of items) {
+        try {
+          const res = await api.get(`/services/${item.id}`);
+          servicesMap[item.id] = res.data;
+        } catch (err) {
+          console.error(`Failed to fetch services for item ${item.id}:`, err);
+          servicesMap[item.id] = [];
+        }
+      }
+      setServices(servicesMap);
+    };
+
+    if (items.length > 0) {
+      fetchServices();
+    }
+  }, [items]);
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -487,12 +554,12 @@ export default function CMDBVisualization() {
   }, [showMiniMap]);
 
   const handleOpenAddItem = useCallback(() => {
-    setItemFormData(INITIAL_ITEM_FORM);
+    setItemFormData({ ...INITIAL_ITEM_FORM, services: [] });
     setEditItemMode(false);
     setCurrentItemId(null);
-    resetImages();
+    setServiceIconUploads({});
     setShowItemModal(true);
-  }, [resetImages]);
+  }, []);
 
   const handleEditItem = useCallback((item) => {
     setItemFormData({
@@ -505,12 +572,12 @@ export default function CMDBVisualization() {
       location: item.location || '',
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
+      services: services[item.id] || [],
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);
-    setImages(item.images);
     setShowItemModal(true);
-  }, [setImages]);
+  }, [services]);
 
   const handleItemSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -521,54 +588,82 @@ export default function CMDBVisualization() {
     }
 
     const initialPosition = !itemFormData.group_id ? getViewportCenter() : null;
-    const formDataToSend = new FormData();
-    
-    Object.keys(itemFormData).forEach(key => {
-      if (itemFormData[key] !== null) {
-        formDataToSend.append(key, itemFormData[key]);
-      }
-    });
-
-    formDataToSend.append('workspace_id', currentWorkspace.id);
-
-    if (initialPosition && !editItemMode) {
-      formDataToSend.append('position', JSON.stringify(initialPosition));
-    }
-
-    if (editItemMode) {
-      formDataToSend.append('existingImages', JSON.stringify(existingImages));
-    }
-
-    selectedFiles.forEach(file => {
-      formDataToSend.append('images', file);
-    });
 
     try {
+      let itemId;
+
+      // Prepare item data WITHOUT services field
+      const { services, ...itemDataWithoutServices } = itemFormData;
+
+      // Create or update CMDB item
       if (editItemMode) {
-        await api.put(`/cmdb/${currentItemId}`, formDataToSend, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        await api.put(`/cmdb/${currentItemId}`, {
+          ...itemDataWithoutServices,
         });
+        itemId = currentItemId;
+
+        // Delete existing services for this item
+        const existingServices = await api.get(`/services/${itemId}`);
+        for (const service of existingServices.data) {
+          await api.delete(`/services/${service.id}`);
+        }
       } else {
-        await api.post('/cmdb', formDataToSend, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        const result = await api.post('/cmdb', {
+          ...itemDataWithoutServices,
+          position: initialPosition ? JSON.stringify(initialPosition) : null,
+          workspace_id: currentWorkspace.id,
         });
+        itemId = result.data.id;
       }
-      
+
+      // Create/update services
+      if (services && services.length > 0) {
+        for (let i = 0; i < services.length; i++) {
+          const service = services[i];
+
+          // Create service first
+          const serviceData = {
+            cmdb_item_id: itemId,
+            name: service.name,
+            status: service.status,
+            icon_type: service.icon_type,
+            icon_name: service.icon_type === 'preset' ? (service.icon_name || 'citrix') : null,
+            description: service.description,
+          };
+
+          const serviceResponse = await api.post('/services', serviceData);
+          const createdService = serviceResponse.data;
+
+          // If upload type and icon file exists, upload icon separately
+          if (service.icon_type === 'upload') {
+            const iconFile = serviceIconUploads[i];
+            if (iconFile) {
+              const iconFormData = new FormData();
+              iconFormData.append('icon', iconFile);
+
+              await api.post(`/services/${createdService.id}/upload-icon`, iconFormData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+              });
+            }
+          }
+        }
+      }
+
       setShowItemModal(false);
-      
+
       setTimeout(() => {
-        setItemFormData(INITIAL_ITEM_FORM);
+        setItemFormData({ ...INITIAL_ITEM_FORM, services: [] });
         setEditItemMode(false);
         setCurrentItemId(null);
-        resetImages();
+        setServiceIconUploads({});
       }, 100);
-      
+
       await fetchAll();
     } catch (err) {
       console.error(err);
       toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-  }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, existingImages, selectedFiles, currentItemId, resetImages, fetchAll]);
+  }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, currentItemId, serviceIconUploads, fetchAll]);
 
   const handleOpenManageGroups = useCallback(() => {
     setGroupFormData(INITIAL_GROUP_FORM);
@@ -1817,24 +1912,22 @@ export default function CMDBVisualization() {
         editMode={editItemMode}
         formData={itemFormData}
         groups={groups}
-        selectedFiles={selectedFiles}
-        imagePreviews={imagePreviews}
-        existingImages={existingImages}
         currentWorkspace={currentWorkspace}
         onClose={() => {
           setShowItemModal(false);
-          setItemFormData(INITIAL_ITEM_FORM);
+          setItemFormData({ ...INITIAL_ITEM_FORM, services: [] });
           setEditItemMode(false);
-          resetImages();
+          setServiceIconUploads({});
         }}
         onSubmit={handleItemSubmit}
         onInputChange={(e) => {
           const { name, value } = e.target;
           setItemFormData(prev => ({ ...prev, [name]: value }));
         }}
-        onFileSelect={handleFileSelect}
-        onRemoveNewImage={handleRemoveNewImage}
-        onRemoveExistingImage={(imgPath) => handleRemoveExistingImage(imgPath, currentItemId)}
+        onServiceAdd={handleServiceAdd}
+        onServiceRemove={handleServiceRemove}
+        onServiceChange={handleServiceChange}
+        onServiceIconUpload={handleServiceIconUpload}
       />
 
       <ConnectionModal
@@ -1890,6 +1983,13 @@ export default function CMDBVisualization() {
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
         onExport={exportVisualization}
+      />
+
+      <ServiceDetailDialog
+        show={serviceDialog.show}
+        service={serviceDialog.service}
+        workspaceId={currentWorkspace?.id}
+        onClose={() => setServiceDialog({ show: false, service: null, parentItem: null })}
       />
 
       <AlertDialog open={alertDialog.show} onOpenChange={closeAlert}>

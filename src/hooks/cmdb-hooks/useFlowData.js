@@ -73,7 +73,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             ip: item.ip,
             category: item.category,
             location: item.location,
-            images: item.images,
             groupId: group.id,
             orderInGroup: item.order_in_group,
             env_type: item.env_type,
@@ -110,7 +109,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           ip: item.ip,
           category: item.category,
           location: item.location,
-          images: item.images,
           env_type: item.env_type,
         },
         style: {

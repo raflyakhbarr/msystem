@@ -53,3 +53,23 @@ export const INITIAL_GROUP_FORM = {
   description: '',
   color: '#e0e7ff'
 };
+
+export const PRESET_ICONS = [
+  { value: 'citrix', label: 'Citrix' },
+  { value: 'oracle', label: 'Oracle' },
+  { value: 'apache', label: 'Apache' },
+  { value: 'nginx', label: 'Nginx' },
+  { value: 'mongodb', label: 'MongoDB' },
+  { value: 'redis', label: 'Redis' },
+  { value: 'postgresql', label: 'PostgreSQL' },
+  { value: 'mysql', label: 'MySQL' },
+  { value: 'mssql', label: 'MSSQL' },
+  { value: 'cloud', label: 'Cloud' },
+  { value: 'internet', label: 'Internet' },
+  { value: 'security', label: 'Security' },
+  { value: 'firewall', label: 'Firewall' },
+  { value: 'vpn', label: 'VPN' },
+  { value: 'cpu', label: 'CPU' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'network', label: 'Network' },
+];

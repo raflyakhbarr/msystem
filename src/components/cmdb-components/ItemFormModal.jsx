@@ -1,5 +1,5 @@
-import { X, Image, Plus } from 'lucide-react';
-import { NODE_TYPES, API_BASE_URL } from '../../utils/cmdb-utils/constants';
+import { X, Plus, Server, Trash2 } from 'lucide-react';
+import { NODE_TYPES, PRESET_ICONS } from '../../utils/cmdb-utils/constants';
 import {
   Dialog,
   DialogContent,
@@ -17,28 +17,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import ServiceIcon from './ServiceIcon';
 
 export default function ItemFormModal({
   show,
   editMode,
   formData,
   groups,
-  selectedFiles,
-  imagePreviews,
-  existingImages,
-  currentWorkspace, // TAMBAHKAN PROP
+  currentWorkspace,
   onClose,
   onSubmit,
   onInputChange,
-  onFileSelect,
-  onRemoveNewImage,
-  onRemoveExistingImage,
+  onServiceAdd,
+  onServiceRemove,
+  onServiceChange,
+  onServiceIconUpload,
 }) {
   const handleSelectChange = (name, value) => {
     onInputChange({
       target: { name, value }
     });
   };
+
+  const services = formData.services || [];
 
   return (
     <Dialog open={show} onOpenChange={onClose}>
@@ -53,7 +54,7 @@ export default function ItemFormModal({
             )}
           </DialogTitle>
         </DialogHeader>
-        
+
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -68,7 +69,7 @@ export default function ItemFormModal({
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="type">Tipe *</Label>
               <Select
@@ -90,23 +91,7 @@ export default function ItemFormModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="env_type">Tipe Env</Label>
-              <Select
-                value={formData.env_type}
-                onValueChange={(value) => handleSelectChange('env_type', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fisik">Fisik</SelectItem>
-                  <SelectItem value="virtual">Virtual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="status">Status *</Label>
+              <Label htmlFor="status">Status</Label>
               <Select
                 value={formData.status}
                 onValueChange={(value) => handleSelectChange('status', value)}
@@ -118,7 +103,6 @@ export default function ItemFormModal({
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="maintenance">Maintenance</SelectItem>
-                  <SelectItem value="decommissioned">Decommissioned</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -129,7 +113,7 @@ export default function ItemFormModal({
                 id="ip"
                 name="ip"
                 type="text"
-                placeholder="IP Address"
+                placeholder="192.168.1.1"
                 value={formData.ip}
                 onChange={onInputChange}
               />
@@ -146,11 +130,11 @@ export default function ItemFormModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="internal">Internal</SelectItem>
-                  <SelectItem value="eksternal">Eksternal</SelectItem>
+                  <SelectItem value="external">External</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="location">Lokasi</Label>
               <Input
@@ -164,19 +148,33 @@ export default function ItemFormModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="group_id">Group</Label>
+              <Label htmlFor="env_type">Tipe Env</Label>
               <Select
-                value={formData.group_id ? String(formData.group_id) : "none"}
-                onValueChange={(value) => {
-                  handleSelectChange('group_id', value === "none" ? null : parseInt(value));
-                }}
+                value={formData.env_type}
+                onValueChange={(value) => handleSelectChange('env_type', value)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Tanpa Group</SelectItem>
-                  {groups.map(g => (
+                  <SelectItem value="fisik">Fisik</SelectItem>
+                  <SelectItem value="virtual">Virtual</SelectItem>
+                  <SelectItem value="cloud">Cloud</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="group_id">Group</Label>
+              <Select
+                value={formData.group_id ? String(formData.group_id) : undefined}
+                onValueChange={(value) => handleSelectChange('group_id', value ? parseInt(value) : null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih group (opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map((g) => (
                     <SelectItem key={g.id} value={String(g.id)}>
                       {g.name}
                     </SelectItem>
@@ -197,83 +195,103 @@ export default function ItemFormModal({
               />
             </div>
 
-            <div className="md:col-span-2 space-y-2">
-              <Label className="flex items-center gap-2">
-                <Image />
-                Gambar (Maks. 10)
+            {/* Services Section */}
+            <div className="md:col-span-2 space-y-3">
+              <Label className="flex items-center gap-2 text-base">
+                <Server />
+                Services
               </Label>
 
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={onFileSelect}
-                className="hidden"
-                id="image-upload"
-              />
+              {services.map((service, index) => (
+                <div key={index} className="flex gap-2 items-center p-3 border rounded-lg bg-gray-50">
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Service name (e.g., Citrix)"
+                      value={service.name}
+                      onChange={(e) => onServiceChange(index, 'name', e.target.value)}
+                      className="mb-2"
+                    />
 
-              <label
-                htmlFor="image-upload"
-                className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-secondary border-2 border-dashed rounded-md hover:bg-secondary/80 transition-colors"
+                    <div className="flex gap-2">
+                      <Select
+                        value={service.status}
+                        onValueChange={(value) => onServiceChange(index, 'status', value)}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <Select
+                        value={service.icon_type}
+                        onValueChange={(value) => onServiceChange(index, 'icon_type', value)}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="preset">Preset</SelectItem>
+                          <SelectItem value="upload">Upload</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {service.icon_type === 'preset' ? (
+                        <Select
+                          value={service.icon_name}
+                          onValueChange={(value) => onServiceChange(index, 'icon_name', value)}
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Select icon" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PRESET_ICONS.map(icon => (
+                              <SelectItem key={icon.value} value={icon.value}>
+                                <div className="flex items-center gap-2">
+                                  <ServiceIcon name={icon.value} size={16} />
+                                  {icon.label}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => onServiceIconUpload(index, e)}
+                          className="w-auto"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => onServiceRemove(index)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onServiceAdd}
+                className="w-full"
               >
-                <Plus />
-                Pilih Gambar
-              </label>
-
-              {existingImages.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Gambar Tersimpan:</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {existingImages.map((imgPath, index) => (
-                      <div key={`existing-${index}`} className="relative group">
-                        <img
-                          src={`${API_BASE_URL}${imgPath}`}
-                          alt={`Existing ${index + 1}`}
-                          className="w-full h-32 object-cover rounded border"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => onRemoveExistingImage(imgPath)}
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X size={12} />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {imagePreviews.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Gambar Baru:</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={`preview-${index}`} className="relative group">
-                        <img
-                          src={preview.preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-32 object-cover rounded border"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => onRemoveNewImage(index)}
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X size={12} />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                <Plus size={16} className="mr-2" />
+                Add Service
+              </Button>
             </div>
           </div>
-          
+
           <div className="flex gap-2 justify-end pt-4">
             <Button
               type="button"

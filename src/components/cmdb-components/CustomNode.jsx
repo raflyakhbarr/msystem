@@ -16,11 +16,11 @@ import {
   Wifi,
   AlertTriangle
 } from 'lucide-react';
+import ServiceIcon from './ServiceIcon';
 
 const API_BASE_URL = 'http://localhost:5000';
 
 export default function CustomNode({ data, id }) {
-  const [imageError, setImageError] = useState({});
   
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
@@ -69,19 +69,7 @@ export default function CustomNode({ data, id }) {
 
   const isStatusCascaded = data.originalStatus === 'active' && data.status !== 'active';
 
-  const images = (() => {
-    if (!data.images) return [];
-    if (Array.isArray(data.images)) return data.images;
-    try {
-      return JSON.parse(data.images);
-    } catch {
-      return [];
-    }
-  })();
-
-  const handleImageError = (index) => {
-    setImageError(prev => ({ ...prev, [index]: true }));
-  };
+  const services = data.services || [];
 
   const handleColor = getHandleColor(data.status);
 
@@ -161,26 +149,32 @@ export default function CustomNode({ data, id }) {
             </div>
           </div>
 
-          {/* Technology/Vendor Images */}
-          {images.length > 0 && (
+          {/* Services */}
+          {services.length > 0 && (
             <div className="mt-3 pt-2 border-t border-border">
               <div className="flex flex-wrap gap-1.5 justify-center">
-                {images.map((imgPath, index) => (
-                  !imageError[index] && (
-                    <div
-                      key={index}
-                      className="w-10 h-10 flex-shrink-0 bg-card rounded border border-border overflow-hidden hover:border-primary transition-colors"
-                      title={`Technology ${index + 1}`}
-                    >
+                {services.map((service) => (
+                  <div
+                    key={service.id}
+                    className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer
+                      hover:border-primary hover:scale-110 transition-all
+                      ${service.status === 'active' ? 'bg-green-50' : 'bg-red-50'}`}
+                    title={`${service.name} (${service.status})`}
+                    onClick={() => data.onServiceClick?.(service, data)}
+                  >
+                    {service.icon_type === 'preset' ? (
+                      <div className="w-full h-full flex items-center justify-center p-1">
+                        <ServiceIcon name={service.icon_name} size={32} />
+                      </div>
+                    ) : (
                       <img
-                        src={`${API_BASE_URL}${imgPath}`}
-                        alt={`Tech ${index + 1}`}
+                        src={`${API_BASE_URL}${service.icon_path}`}
+                        alt={service.name}
                         className="w-full h-full object-contain"
                         crossOrigin="anonymous"
-                        onError={() => handleImageError(index)}
                       />
-                    </div>
-                  )
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
