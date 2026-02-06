@@ -14,7 +14,8 @@ import {
   GitBranch,
   Shield,
   Wifi,
-  AlertTriangle
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
 
@@ -78,9 +79,13 @@ export default function CustomNode({ data, id }) {
       {/* Node UI */}
       <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${getNodeBorderColor(data.status)}`}>
         <div className="absolute top-1 right-1 flex gap-1 z-10">
+          {/* Info/Detail Button */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200">
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200"
+              >
                 <Info className="w-3 h-3" />
               </button>
             </PopoverTrigger>
@@ -123,6 +128,49 @@ export default function CustomNode({ data, id }) {
                       </p>
                     </div>
                   )}
+
+                  {/* Services Section in Popover */}
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-semibold text-muted-foreground">Services:</p>
+                      {data.onAddService && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            data.onAddService?.({ ...data, id });
+                          }}
+                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded flex items-center gap-1"
+                        >
+                          <Plus size={12} />
+                          Add Service
+                        </button>
+                      )}
+                    </div>
+                    {services.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {services.map((service) => (
+                          <div
+                            key={service.id}
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-100 border"
+                            title={`${service.name} (${service.status})`}
+                          >
+                            {service.icon_type === 'preset' ? (
+                              <ServiceIcon name={service.icon_name} size={14} />
+                            ) : (
+                              <img
+                                src={`${API_BASE_URL}${service.icon_path}`}
+                                alt={service.name}
+                                className="w-4 h-4 object-contain"
+                              />
+                            )}
+                            <span className="text-xs">{service.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No services</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </PopoverContent>

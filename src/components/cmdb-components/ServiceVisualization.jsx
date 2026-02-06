@@ -1,4 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import ReactFlow, {
   Background,
   Controls,
@@ -283,94 +301,101 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
       {/* Add/Edit Item Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">
-              {editItem ? 'Edit Item' : 'Add New Item'}
-            </h2>
+        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editItem ? 'Edit Item' : 'Add New Item'}
+              </DialogTitle>
+            </DialogHeader>
 
             <form onSubmit={handleItemSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Name *</label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
                   type="text"
                   required
                   value={itemFormData.name}
                   onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded"
                   placeholder="e.g., Web Server"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Type</label>
-                <select
+              <div className="space-y-2">
+                <Label htmlFor="type">Type</Label>
+                <Select
                   value={itemFormData.type}
-                  onChange={(e) => setItemFormData({ ...itemFormData, type: e.target.value })}
-                  className="w-full px-3 py-2 border rounded"
+                  onValueChange={(value) => setItemFormData({ ...itemFormData, type: value })}
                 >
-                  <option value="server">Server</option>
-                  <option value="database">Database</option>
-                  <option value="switch">Switch</option>
-                  <option value="workstation">Workstation</option>
-                  <option value="firewall">Firewall</option>
-                  <option value="router">Router</option>
-                </select>
+                  <SelectTrigger id="type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="server">Server</SelectItem>
+                    <SelectItem value="database">Database</SelectItem>
+                    <SelectItem value="switch">Switch</SelectItem>
+                    <SelectItem value="workstation">Workstation</SelectItem>
+                    <SelectItem value="firewall">Firewall</SelectItem>
+                    <SelectItem value="router">Router</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
                   value={itemFormData.status}
-                  onChange={(e) => setItemFormData({ ...itemFormData, status: e.target.value })}
-                  className="w-full px-3 py-2 border rounded"
+                  onValueChange={(value) => setItemFormData({ ...itemFormData, status: value })}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">IP Address</label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="ip">IP Address</Label>
+                <Input
+                  id="ip"
                   type="text"
                   value={itemFormData.ip}
                   onChange={(e) => setItemFormData({ ...itemFormData, ip: e.target.value })}
-                  className="w-full px-3 py-2 border rounded"
                   placeholder="192.168.1.1"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
                   value={itemFormData.description}
                   onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded"
                   rows={3}
                   placeholder="Item description..."
                 />
               </div>
 
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  {editItem ? 'Update' : 'Create'}
-                </button>
-                <button
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
                 >
                   Cancel
-                </button>
-              </div>
+                </Button>
+                <Button type="submit">
+                  {editItem ? 'Update' : 'Create'}
+                </Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Connection Modal */}

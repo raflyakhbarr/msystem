@@ -203,13 +203,33 @@ export default function ItemFormModal({
               </Label>
 
               {services.map((service, index) => (
-                <div key={index} className="flex gap-2 items-center p-3 border rounded-lg bg-gray-50">
-                  <div className="flex-1">
+                <div key={index} className="flex gap-2 items-start p-3 border rounded-lg bg-gray-50">
+                  {/* Icon Preview */}
+                  <div className="flex-shrink-0">
+                    {service.icon_type === 'preset' && service.icon_name ? (
+                      <div className="w-12 h-12 bg-white rounded border border-gray-200 flex items-center justify-center">
+                        <ServiceIcon name={service.icon_name} size={24} />
+                      </div>
+                    ) : service.icon_type === 'upload' && (service.icon_path || service.icon_preview) ? (
+                      <div className="w-12 h-12 bg-white rounded border border-gray-200 overflow-hidden">
+                        <img
+                          src={service.icon_preview || `http://localhost:5000${service.icon_path}`}
+                          alt={service.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-200 rounded border border-dashed border-gray-300 flex items-center justify-center">
+                        <Server size={20} className="text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-2">
                     <Input
                       placeholder="Service name (e.g., Citrix)"
                       value={service.name}
                       onChange={(e) => onServiceChange(index, 'name', e.target.value)}
-                      className="mb-2"
                     />
 
                     <div className="flex gap-2">
@@ -259,14 +279,23 @@ export default function ItemFormModal({
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => onServiceIconUpload(index, e)}
-                          className="w-auto"
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onServiceIconUpload(index, e)}
+                            className="flex-1"
+                          />
+                        </div>
                       )}
                     </div>
+
+                    {/* File upload info */}
+                    {service.icon_type === 'upload' && service.icon_name && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {service.icon_name}
+                      </p>
+                    )}
                   </div>
 
                   <Button

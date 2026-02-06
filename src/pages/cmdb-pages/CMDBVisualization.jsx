@@ -205,11 +205,25 @@ export default function CMDBVisualization() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Create preview URL
+    const preview = URL.createObjectURL(file);
+
+    // Update service with preview and filename
+    setItemFormData(prev => {
+      const newServices = [...(prev.services || [])];
+      newServices[index] = {
+        ...newServices[index],
+        icon_preview: preview,
+        icon_name: file.name
+      };
+      return { ...prev, services: newServices };
+    });
+
     setServiceIconUploads(prev => ({
       ...prev,
       [index]: file
     }));
-  }, []);
+  }, [setItemFormData]);
 
   const {
     contextMenu,
@@ -387,6 +401,39 @@ export default function CMDBVisualization() {
     });
   }, [items]);
 
+  const handleAddService = useCallback((nodeData) => {
+    const item = items.find(i => i.id === parseInt(nodeData.id));
+    if (!item) return;
+
+    const itemServices = services[item.id] || [];
+
+    // Add icon_preview for uploaded icons
+    const servicesWithPreview = itemServices.map(service => ({
+      ...service,
+      icon_preview: service.icon_type === 'upload' && service.icon_path
+        ? `http://localhost:5000${service.icon_path}`
+        : null
+    }));
+
+    // Open item modal in edit mode with current services
+    setItemFormData({
+      name: item.name || '',
+      type: item.type || '',
+      description: item.description || '',
+      status: item.status || 'active',
+      ip: item.ip || '',
+      category: item.category || 'internal',
+      location: item.location || '',
+      group_id: item.group_id || null,
+      env_type: item.env_type || 'fisik',
+      services: servicesWithPreview,
+    });
+    setCurrentItemId(item.id);
+    setEditItemMode(true);
+    setShowItemModal(true);
+    setServiceIconUploads({});
+  }, [items, services]);
+
   const processedNodes = useMemo(() => {
     return nodes.map(node => {
       let opacity = 1;
@@ -421,6 +468,7 @@ export default function CMDBVisualization() {
         data: {
           ...node.data,
           onServiceClick: handleServiceClick,
+          onAddService: handleAddService,
           services: nodeServices,
         },
         style: {
@@ -433,7 +481,7 @@ export default function CMDBVisualization() {
         }
       };
     });
-  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, services]);
+  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, handleAddService, services]);
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
@@ -562,6 +610,16 @@ export default function CMDBVisualization() {
   }, []);
 
   const handleEditItem = useCallback((item) => {
+    const itemServices = services[item.id] || [];
+
+    // Add icon_preview for uploaded icons
+    const servicesWithPreview = itemServices.map(service => ({
+      ...service,
+      icon_preview: service.icon_type === 'upload' && service.icon_path
+        ? `http://localhost:5000${service.icon_path}`
+        : null
+    }));
+
     setItemFormData({
       name: item.name || '',
       type: item.type || '',
@@ -572,11 +630,12 @@ export default function CMDBVisualization() {
       location: item.location || '',
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
-      services: services[item.id] || [],
+      services: servicesWithPreview,
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);
     setShowItemModal(true);
+    setServiceIconUploads({}); // Reset icon uploads for edit
   }, [services]);
 
   const handleItemSubmit = useCallback(async (e) => {
@@ -621,6 +680,9 @@ export default function CMDBVisualization() {
         for (let i = 0; i < services.length; i++) {
           const service = services[i];
 
+          // For edit mode, check if service already has an icon (keep existing icon if no new file)
+          const existingIconPath = editItemMode && service.icon_path ? service.icon_path : null;
+
           // Create service first
           const serviceData = {
             cmdb_item_id: itemId,
@@ -638,12 +700,16 @@ export default function CMDBVisualization() {
           if (service.icon_type === 'upload') {
             const iconFile = serviceIconUploads[i];
             if (iconFile) {
+              // New file uploaded - upload it
               const iconFormData = new FormData();
               iconFormData.append('icon', iconFile);
 
               await api.post(`/services/${createdService.id}/upload-icon`, iconFormData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
               });
+            } else if (existingIconPath && editItemMode) {
+              // Keep existing icon - no need to re-upload
+              console.log('Keeping existing icon:', existingIconPath);
             }
           }
         }
