@@ -167,14 +167,17 @@ export default function ItemFormModal({
             <div className="space-y-2">
               <Label htmlFor="group_id">Group</Label>
               <Select
-                value={formData.group_id ? String(formData.group_id) : undefined}
-                onValueChange={(value) => handleSelectChange('group_id', value ? parseInt(value) : null)}
+                value={formData.group_id ? String(formData.group_id) : "none"}
+                onValueChange={(value) => {
+                  handleSelectChange('group_id', value === "none" ? null : parseInt(value));
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih group (opsional)" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {groups.map((g) => (
+                  <SelectItem value="none">Tanpa Group</SelectItem>
+                  {groups.map(g => (
                     <SelectItem key={g.id} value={String(g.id)}>
                       {g.name}
                     </SelectItem>
