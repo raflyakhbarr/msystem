@@ -661,10 +661,81 @@ export default function CMDBVisualization() {
         });
         itemId = currentItemId;
 
-        // Delete existing services for this item
-        const existingServices = await api.get(`/services/${itemId}`);
-        for (const service of existingServices.data) {
-          await api.delete(`/services/${service.id}`);
+        // Get existing services for this item
+        const existingServicesResponse = await api.get(`/services/${itemId}`);
+        const existingServices = existingServicesResponse.data;
+
+        // Track which services are kept/updated
+        const keptServiceIds = new Set();
+
+        // Update or create services
+        if (services && services.length > 0) {
+          for (let i = 0; i < services.length; i++) {
+            const service = services[i];
+
+            // Check if this is an existing service (has id) or new service
+            const existingService = service.id
+              ? existingServices.find(s => s.id === service.id)
+              : null;
+
+            const serviceData = {
+              cmdb_item_id: itemId,
+              name: service.name,
+              status: service.status,
+              icon_type: service.icon_type,
+              icon_name: service.icon_type === 'preset' ? (service.icon_name || 'citrix') : null,
+              description: service.description,
+            };
+
+            let createdService;
+
+            if (existingService) {
+              // Update existing service
+              const updateResponse = await api.put(`/services/${existingService.id}`, serviceData);
+              createdService = updateResponse.data;
+              keptServiceIds.add(existingService.id);
+
+              // Check if icon needs to be updated for upload type
+              if (service.icon_type === 'upload') {
+                const iconFile = serviceIconUploads[i];
+                if (iconFile) {
+                  // New file uploaded - upload it
+                  const iconFormData = new FormData();
+                  iconFormData.append('icon', iconFile);
+
+                  await api.put(`/services/${createdService.id}/icon`, iconFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                  });
+                }
+                // If no new file, keep existing icon (icon_path stays in database)
+              }
+            } else {
+              // Create new service
+              const serviceResponse = await api.post('/services', serviceData);
+              createdService = serviceResponse.data;
+
+              // If upload type and icon file exists, upload icon separately
+              if (service.icon_type === 'upload') {
+                const iconFile = serviceIconUploads[i];
+                if (iconFile) {
+                  // New file uploaded - upload it
+                  const iconFormData = new FormData();
+                  iconFormData.append('icon', iconFile);
+
+                  await api.post(`/services/${createdService.id}/upload-icon`, iconFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        // Delete services that are not in the form anymore
+        for (const service of existingServices) {
+          if (!keptServiceIds.has(service.id)) {
+            await api.delete(`/services/${service.id}`);
+          }
         }
       } else {
         const result = await api.post('/cmdb', {
@@ -673,43 +744,37 @@ export default function CMDBVisualization() {
           workspace_id: currentWorkspace.id,
         });
         itemId = result.data.id;
-      }
 
-      // Create/update services
-      if (services && services.length > 0) {
-        for (let i = 0; i < services.length; i++) {
-          const service = services[i];
+        // Create services for new item
+        if (services && services.length > 0) {
+          for (let i = 0; i < services.length; i++) {
+            const service = services[i];
 
-          // For edit mode, check if service already has an icon (keep existing icon if no new file)
-          const existingIconPath = editItemMode && service.icon_path ? service.icon_path : null;
+            // Create service first
+            const serviceData = {
+              cmdb_item_id: itemId,
+              name: service.name,
+              status: service.status,
+              icon_type: service.icon_type,
+              icon_name: service.icon_type === 'preset' ? (service.icon_name || 'citrix') : null,
+              description: service.description,
+            };
 
-          // Create service first
-          const serviceData = {
-            cmdb_item_id: itemId,
-            name: service.name,
-            status: service.status,
-            icon_type: service.icon_type,
-            icon_name: service.icon_type === 'preset' ? (service.icon_name || 'citrix') : null,
-            description: service.description,
-          };
+            const serviceResponse = await api.post('/services', serviceData);
+            const createdService = serviceResponse.data;
 
-          const serviceResponse = await api.post('/services', serviceData);
-          const createdService = serviceResponse.data;
+            // If upload type and icon file exists, upload icon separately
+            if (service.icon_type === 'upload') {
+              const iconFile = serviceIconUploads[i];
+              if (iconFile) {
+                // New file uploaded - upload it
+                const iconFormData = new FormData();
+                iconFormData.append('icon', iconFile);
 
-          // If upload type and icon file exists, upload icon separately
-          if (service.icon_type === 'upload') {
-            const iconFile = serviceIconUploads[i];
-            if (iconFile) {
-              // New file uploaded - upload it
-              const iconFormData = new FormData();
-              iconFormData.append('icon', iconFile);
-
-              await api.post(`/services/${createdService.id}/upload-icon`, iconFormData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-              });
-            } else if (existingIconPath && editItemMode) {
-              // Keep existing icon - no need to re-upload
-              console.log('Keeping existing icon:', existingIconPath);
+                await api.post(`/services/${createdService.id}/upload-icon`, iconFormData, {
+                  headers: { 'Content-Type': 'multipart/form-data' }
+                });
+              }
             }
           }
         }
