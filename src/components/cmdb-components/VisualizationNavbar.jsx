@@ -347,30 +347,33 @@ export default function VisualizationNavbar({
                 <div className="text-sm bg-primary/10 text-primary px-3 py-1.5 rounded-lg border border-primary/20 font-medium">
                   {selectedForHiding.size} dipilih
                 </div>
-                <button
+                <Button
                   onClick={onShowOnlySelected}
-                  className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium flex items-center gap-2 text-sm transition-colors shadow-sm"
+                  size="sm"
+                  className="px-3 py-1.5 h-auto text-sm"
                   title="Tampilkan Hanya yang Dipilih"
                 >
                   <Eye size={14} />
                   <span className="hidden lg:inline">Tampilkan Pilihan</span>
-                </button>
+                </Button>
               </>
             )}
 
             {/* Show All Button */}
             {hiddenNodes.size > 0 && (
-              <button
+              <Button
                 onClick={onShowAllNodes}
-                className="px-3 py-1.5 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg font-medium flex items-center gap-2 text-sm transition-colors shadow-sm"
+                variant="secondary"
+                size="sm"
+                className="px-3 py-1.5 h-auto text-sm"
                 title="Tampilkan Semua Node"
               >
                 <Eye size={14} />
                 <span className="hidden lg:inline">Tampilkan Semua</span>
-                <span className="bg-accent/80 px-1.5 py-0.5 rounded text-xs">
+                <span className="bg-secondary/80 px-1.5 py-0.5 rounded text-xs">
                   {hiddenNodes.size}
                 </span>
-              </button>
+              </Button>
             )}
           </div>
         </div>

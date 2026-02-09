@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Pencil, Trash2, Link, Plus, Layers, Eye } from 'lucide-react'; 
+import { Pencil, Trash2, Link, Plus, Layers, Eye } from 'lucide-react';
+import { Button } from "@/components/ui/button"; 
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace'; 
@@ -603,28 +604,34 @@ export default function CMDBItem() {
         searchable: false,
         render: (item) => (
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={() => handleOpenConnectionModal(item)}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Kelola Koneksi"
             >
               <Link size={16} />
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handleEdit(item)}
-              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
               title="Edit"
             >
               <Pencil size={16} />
-            </button>
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                   title="Hapus"
                 >
                   <Trash2 size={16} />
-                </button>
+                </Button>
               </AlertDialogTrigger>
 
               <AlertDialogContent>

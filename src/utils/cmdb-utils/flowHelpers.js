@@ -1,20 +1,61 @@
 import { MarkerType } from 'reactflow';
 import api from '../../services/api';
 
-export const calculateGroupDimensions = (groupId, groupItems) => {
+export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) => {
   const itemsPerRow = 3;
-  const itemWidth = 180;
-  const itemHeight = 120;
-  const gap = 60;
-  const padding = 40;
-  
+  const itemWidth = 160;
+  const baseItemHeight = 100;     // Tinggi dasar item TANPA service
+  const serviceHeight = 36;       // Tambahan tinggi per baris service (40px + gap)
+  const servicesPerRow = 3;       // Jumlah service per baris dalam item
+  const gapX = 40;                // Gap horizontal antar item (kiri-kanan)
+  const gapY = 40;                // Gap vertikal antar baris (atas-bawah)
+  const padding = 20;
+
   const itemCount = groupItems.length;
   const rows = Math.ceil(itemCount / itemsPerRow);
-  
-  const width = Math.min(itemsPerRow, itemCount) * (itemWidth + gap) + padding * 2;
-  const height = rows * (itemHeight + gap) + padding * 2 + 40;
-  
-  return { width, height, itemsPerRow, itemWidth, itemHeight, gap, padding };
+
+  // Hitung tinggi maksimum per item secara dinamis berdasarkan jumlah service
+  const getItemHeight = (servicesCount = 0) => {
+    if (servicesCount === 0) return baseItemHeight;
+    const serviceRows = Math.ceil(servicesCount / servicesPerRow);
+    return baseItemHeight + 20 + (serviceRows * serviceHeight); // 20px untuk padding service section
+  };
+
+  // Hitung tinggi untuk setiap item - AMBIL DARI servicesMap
+  const itemHeights = groupItems.map(item => {
+    const itemServices = servicesMap[item.id] || [];
+    return getItemHeight(itemServices.length);
+  });
+
+  // Hitung tinggi per baris (ambil maksimum dari item di baris tersebut)
+  const rowHeights = [];
+  for (let row = 0; row < rows; row++) {
+    const startIdx = row * itemsPerRow;
+    const endIdx = Math.min(startIdx + itemsPerRow, itemCount);
+    const itemsInRow = itemHeights.slice(startIdx, endIdx);
+    rowHeights.push(Math.max(...itemsInRow));
+  }
+
+  // Total tinggi = jumlah dari tinggi setiap baris + gap antar baris
+  const totalRowHeights = rowHeights.reduce((sum, height) => sum + height, 0);
+  const totalGapY = (rows - 1) * gapY;
+
+  const width = Math.min(itemsPerRow, itemCount) * (itemWidth + gapX) + padding * 2;
+  const height = totalRowHeights + totalGapY + padding * 2 + 40;
+
+  return {
+    width,
+    height,
+    itemsPerRow,
+    itemWidth,
+    itemHeights,       // Array tinggi untuk setiap item
+    rowHeights,        // Array tinggi untuk setiap baris
+    baseItemHeight,
+    gapX,
+    gapY,
+    padding,
+    getItemHeight      // Fungsi helper untuk menghitung tinggi per item
+  };
 };
 
 export const getBestHandlePositions = (sourceNode, targetNode) => {

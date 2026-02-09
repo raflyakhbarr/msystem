@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { 
+import {
   Activity, Server, AlertTriangle, CheckCircle2, XCircle, Wrench,
   Network, Clock, Eye, Zap, PieChart as PieChartIcon, BarChart as BarChartIcon,
   Check, Layers, TrendingUp, TrendingDown, Database, Calendar,
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace';
 import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitcher';
@@ -65,9 +66,9 @@ const CustomTooltip = ({ active, payload, total }) => {
 const InfoPopover = ({ title, description, formula, interpretation }) => (
   <Popover>
     <PopoverTrigger asChild>
-      <button className="ml-1 text-muted-foreground hover:text-foreground transition-colors">
+      <Button variant="ghost" size="icon" className="h-4 w-4 text-muted-foreground hover:text-foreground">
         <Info size={14} />
-      </button>
+      </Button>
     </PopoverTrigger>
     <PopoverContent className="w-80" align="start">
       <div className="space-y-3">

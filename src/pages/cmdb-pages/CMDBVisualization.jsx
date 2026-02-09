@@ -47,10 +47,12 @@ import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
 import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
+import StorageFormModal from '../../components/cmdb-components/StorageFormModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { MousePointer2, GitBranch, Link, Pencil, Trash2 } from 'lucide-react';
+import { MousePointer2, GitBranch, Link, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
@@ -66,9 +68,12 @@ const nodeTypes = {
 const DIMENSIONS = {
   itemsPerRow: 3,
   itemWidth: 180,
-  itemHeight: 120,
-  gap: 60,
-  padding: 40,
+  baseItemHeight: 100,     // Tinggi dasar item tanpa service
+  serviceHeight: 36,       // Tambahan tinggi per baris service
+  servicesPerRow: 3,       // Jumlah service per baris dalam item
+  gapX: 60,
+  gapY: 10,
+  padding: 20,
 };
 
 const debounce = (func, wait) => {
@@ -135,6 +140,7 @@ export default function CMDBVisualization() {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
+  const [showStorageModal, setShowStorageModal] = useState(false);
 
   const [itemFormData, setItemFormData] = useState(INITIAL_ITEM_FORM);
   const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
@@ -166,17 +172,18 @@ export default function CMDBVisualization() {
     duplicateWorkspace,
   } = useWorkspace();
 
-  const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes);
-  
+  // Services state - PINDAHKAN KE ATAS sebelum useFlowData
+  const [services, setServices] = useState({});
+  const [serviceDialog, setServiceDialog] = useState({ show: false, service: null, parentItem: null });
+  const [serviceIconUploads, setServiceIconUploads] = useState({});
+
+  // Modal states
   const [showExportModal, setShowExportModal] = useState(false);
   const [highlightMode, setHighlightMode] = useState(false);
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
-  // Services state
-  const [services, setServices] = useState({});
-  const [serviceDialog, setServiceDialog] = useState({ show: false, service: null, parentItem: null });
-  const [serviceIconUploads, setServiceIconUploads] = useState({});
+  const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
+  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -222,6 +229,26 @@ export default function CMDBVisualization() {
     setServiceIconUploads(prev => ({
       ...prev,
       [index]: file
+    }));
+  }, [setItemFormData]);
+
+  // Storage handlers
+  const handleStorageClick = useCallback(() => {
+    setShowStorageModal(true);
+  }, []);
+
+  const handleStorageSave = useCallback((storageData) => {
+    setItemFormData(prev => ({
+      ...prev,
+      storage: storageData
+    }));
+    setShowStorageModal(false);
+  }, [setItemFormData]);
+
+  const handleStorageDelete = useCallback(() => {
+    setItemFormData(prev => ({
+      ...prev,
+      storage: null
     }));
   }, [setItemFormData]);
 
@@ -427,6 +454,7 @@ export default function CMDBVisualization() {
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
       services: servicesWithPreview,
+      storage: item.storage || null,  // ← Tambahkan storage
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);
@@ -549,7 +577,14 @@ export default function CMDBVisualization() {
       for (const item of items) {
         try {
           const res = await api.get(`/services/${item.id}`);
-          servicesMap[item.id] = res.data;
+          // Tambahkan icon_preview untuk services yang di-upload
+          const servicesWithPreview = res.data.map(service => ({
+            ...service,
+            icon_preview: service.icon_type === 'upload' && service.icon_path
+              ? `http://localhost:5000${service.icon_path}`
+              : null
+          }));
+          servicesMap[item.id] = servicesWithPreview;
         } catch (err) {
           console.error(`Failed to fetch services for item ${item.id}:`, err);
           servicesMap[item.id] = [];
@@ -631,6 +666,7 @@ export default function CMDBVisualization() {
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
       services: servicesWithPreview,
+      storage: item.storage || null,  // ← Tambahkan storage
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);
@@ -1093,28 +1129,34 @@ export default function CMDBVisualization() {
         searchable: false,
         render: (item) => (
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={() => handleOpenConnectionModal(item)}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
               title="Kelola Koneksi"
             >
               <Link size={16} />
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handleEditItem(item)}
-              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
               title="Edit"
             >
               <Pencil size={16} />
-            </button>
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                   title="Hapus"
                 >
                   <Trash2 size={16} />
-                </button>
+                </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -1190,23 +1232,65 @@ export default function CMDBVisualization() {
     const groupNode = currentNodes.find(n => n.id === node.parentNode);
     if (!groupNode) return;
 
-    const { itemsPerRow, itemWidth, itemHeight, gap, padding } = DIMENSIONS;
+    const { itemsPerRow, itemWidth, gapX, gapY, padding } = DIMENSIONS;
     const relX = node.position.x - padding;
     const relY = node.position.y - padding - 40;
 
-    const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gap))));
-    const row = Math.max(0, Math.round(relY / (itemHeight + gap)));
-    
+    const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
+
+    // Hitung baris berdasarkan kumulatif tinggi baris dari groupNode
+    let row = 0;
+    let currentY = 0;
+    const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+    const rowCount = Math.ceil(itemsInGroup.length / itemsPerRow);
+
+    // Cari baris yang sesuai dengan posisi Y
+    for (let r = 0; r < rowCount; r++) {
+      // Hitung tinggi baris ini (ambil maksimum dari item di baris tersebut)
+      const startIdx = r * itemsPerRow;
+      const endIdx = Math.min(startIdx + itemsPerRow, itemsInGroup.length);
+      const itemsInRow = itemsInGroup.slice(startIdx, endIdx);
+
+      let maxRowHeight = DIMENSIONS.baseItemHeight; // Default
+      if (groupNode.data?.rowHeights && groupNode.data.rowHeights[r]) {
+        maxRowHeight = groupNode.data.rowHeights[r];
+      } else {
+        // Fallback: hitung dari items yang ada
+        for (const item of itemsInRow) {
+          const itemServices = item.data?.services || [];
+          const serviceCount = itemServices.length;
+          const itemHeight = DIMENSIONS.baseItemHeight + (serviceCount > 0 ? 20 + Math.ceil(serviceCount / DIMENSIONS.servicesPerRow) * DIMENSIONS.serviceHeight : 0);
+          maxRowHeight = Math.max(maxRowHeight, itemHeight);
+        }
+      }
+
+      const rowBottomY = currentY + maxRowHeight + gapY / 2;
+
+      if (relY <= rowBottomY) {
+        row = r;
+        break;
+      }
+
+      currentY += maxRowHeight + gapY;
+    }
+
     const newIndex = row * itemsPerRow + col;
-    
+
     if (newIndex >= 0 && newIndex <= currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode).length) {
+      // Hitung relativeY berdasarkan kumulatif tinggi baris sebelumnya
+      let targetRelativeY = padding + 40;
+      for (let r = 0; r < row; r++) {
+        const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
+        targetRelativeY += rowHeight + gapY;
+      }
+
       setHoverPosition({
         groupId: node.parentNode,
         index: newIndex,
-        relativeX: padding + col * (itemWidth + gap),
-        relativeY: padding + 40 + row * (itemHeight + gap),
-        absoluteX: groupNode.position.x + padding + col * (itemWidth + gap),
-        absoluteY: groupNode.position.y + padding + 40 + row * (itemHeight + gap),
+        relativeX: padding + col * (itemWidth + gapX),
+        relativeY: targetRelativeY,
+        absoluteX: groupNode.position.x + padding + col * (itemWidth + gapX),
+        absoluteY: groupNode.position.y + targetRelativeY,
       });
     }
   }, [draggedNode]);
@@ -1721,17 +1805,18 @@ export default function CMDBVisualization() {
                       const nodeId = `group-${group.id}`;
                       const isHidden = hiddenNodes.has(nodeId);
                       return (
-                        <button
+                        <Button
                           key={nodeId}
                           onClick={() => toggleNodeVisibility(nodeId)}
-                          className={`w-full px-3 py-2 rounded text-left flex items-center justify-between transition-colors ${
+                          variant="ghost"
+                          className={`w-full justify-start px-3 py-2 h-auto ${
                             isHidden
                               ? 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                               : 'bg-white border border-gray-200 hover:bg-gray-50'
                           }`}
                         >
                           <span className="font-medium truncate">{group.name}</span>
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -1750,17 +1835,18 @@ export default function CMDBVisualization() {
                       const nodeId = String(item.id);
                       const isHidden = hiddenNodes.has(nodeId);
                       return (
-                        <button
+                        <Button
                           key={nodeId}
                           onClick={() => toggleNodeVisibility(nodeId)}
-                          className={`w-full px-3 py-2 rounded text-left flex items-center justify-between transition-colors ${
+                          variant="ghost"
+                          className={`w-full justify-start px-3 py-2 h-auto ${
                             isHidden
                               ? 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                               : 'bg-white border border-gray-200 hover:bg-gray-50'
                           }`}
                         >
                           <span className="truncate">{item.name}</span>
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -1789,11 +1875,12 @@ export default function CMDBVisualization() {
                         const isGroupHidden = hiddenNodes.has(groupNodeId);
                         
                         return (
-                          <button
+                          <Button
                             key={nodeId}
                             onClick={() => toggleNodeVisibility(nodeId)}
                             disabled={isGroupHidden}
-                            className={`w-full px-3 py-2 rounded text-sm text-left flex items-center justify-between transition-colors ${
+                            variant="ghost"
+                            className={`w-full justify-start px-3 py-2 h-auto text-sm ${
                               isGroupHidden
                                 ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
                                 : isHidden
@@ -1802,7 +1889,7 @@ export default function CMDBVisualization() {
                             }`}
                           >
                             <span className="truncate">{item.name}</span>
-                          </button>
+                          </Button>
                         );
                       })}
                     </div>
@@ -2029,9 +2116,9 @@ export default function CMDBVisualization() {
           </div>
           <DrawerFooter>
             <DrawerClose asChild>
-              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">
+              <Button variant="secondary">
                 Close
-              </button>
+              </Button>
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>
@@ -2059,6 +2146,15 @@ export default function CMDBVisualization() {
         onServiceRemove={handleServiceRemove}
         onServiceChange={handleServiceChange}
         onServiceIconUpload={handleServiceIconUpload}
+        onStorageClick={handleStorageClick}
+        onStorageDelete={handleStorageDelete}
+      />
+
+      <StorageFormModal
+        show={showStorageModal}
+        storage={itemFormData.storage}
+        onClose={() => setShowStorageModal(false)}
+        onSave={handleStorageSave}
       />
 
       <ConnectionModal
@@ -2160,12 +2256,14 @@ export default function CMDBVisualization() {
         <div className="absolute top-30 left-1/2 transform -translate-x-1/2 bg-[rgba(0,105,140,0.5)] px-4 text-white py-2 rounded-lg shadow-lg z-50 flex items-center gap-3">
           <GitBranch />
           <span>Selected node and highlighted dependencies</span>
-          <button
+          <Button
             onClick={clearHighlight}
-            className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-xs transition-colors"
+            variant="ghost"
+            size="sm"
+            className="ml-2 bg-white/20 hover:bg-white/30 h-7 px-2 text-xs"
           >
             Clear (ESC)
-          </button>
+          </Button>
         </div>
       )}
     </div>

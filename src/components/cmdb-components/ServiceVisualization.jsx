@@ -264,22 +264,22 @@ export default function ServiceVisualization({ service, workspaceId }) {
     <div className="h-full w-full relative">
       {/* Toolbar */}
       <div className="absolute top-4 left-4 z-10 flex gap-2 bg-white p-2 rounded-lg shadow-md">
-        <button
+        <Button
           onClick={handleOpenAddModal}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white"
         >
           <Plus size={16} />
           Add Item
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={handleSavePositions}
           disabled={isSaving}
-          className="flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 text-white disabled:opacity-50"
         >
           <Save size={16} />
           {isSaving ? 'Saving...' : 'Save Positions'}
-        </button>
+        </Button>
       </div>
 
       {/* React Flow Canvas */}
@@ -430,18 +430,19 @@ export default function ServiceVisualization({ service, workspaceId }) {
             </div>
 
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={handleSaveConnections}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white"
               >
                 Save
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setShowConnectionModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         </div>

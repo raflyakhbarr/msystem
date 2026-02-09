@@ -1,23 +1,30 @@
 import { useCallback } from 'react';
 import { 
   calculateGroupDimensions, 
-  getBestHandlePositions, 
-  getStatusColor, 
-  shouldShowCrossMarker,
+  getBestHandlePositions,
   createEdgeConfig 
 } from '../../utils/cmdb-utils/flowHelpers';
+import { 
+  calculatePropagatedStatuses,
+  getStatusColor,
+  shouldShowCrossMarker 
+} from '../../utils/cmdb-utils/statusPropagation';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
 
+    // Hitung propagated statuses untuk semua edges
+    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections);
+
+    // Create group nodes
     groups.forEach((group) => {
       const groupItems = items
         .filter(item => item.group_id === group.id)
         .sort((a, b) => (a.order_in_group || 0) - (b.order_in_group || 0));
-      
-      const dimensions = calculateGroupDimensions(group.id, groupItems);
+
+      const dimensions = calculateGroupDimensions(group.id, groupItems, servicesMap);
       
       const groupPos = group.position
         ? { x: group.position.x, y: group.position.y }
@@ -37,6 +44,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           itemCount: groupItems.length,
           width: dimensions.width,
           height: dimensions.height,
+          rowHeights: dimensions.rowHeights, // Tambahkan rowHeights untuk drag calculation
         },
         style: {
           width: dimensions.width,
@@ -49,12 +57,25 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         hidden: isHidden,
       });
 
+      // Create item nodes in group
       groupItems.forEach((item, index) => {
         const row = Math.floor(index / dimensions.itemsPerRow);
         const col = index % dimensions.itemsPerRow;
-        
-        const relativeX = dimensions.padding + col * (dimensions.itemWidth + dimensions.gap);
-        const relativeY = dimensions.padding + 40 + row * (dimensions.itemHeight + dimensions.gap);
+
+        // Ambil services untuk item ini dari servicesMap
+        const itemServices = servicesMap[item.id] || [];
+        const serviceCount = itemServices.length;
+
+        // Hitung tinggi item berdasarkan jumlah service
+        const itemHeight = dimensions.getItemHeight ? dimensions.getItemHeight(serviceCount) : dimensions.baseItemHeight;
+
+        // Hitung posisi Y berdasarkan kumulatif tinggi baris sebelumnya
+        let relativeY = dimensions.padding + 40;
+        for (let r = 0; r < row; r++) {
+          relativeY += dimensions.rowHeights[r] + dimensions.gapY;
+        }
+
+        const relativeX = dimensions.padding + col * (dimensions.itemWidth + dimensions.gapX);
 
         const itemNodeId = String(item.id);
         const isItemHidden = hiddenNodes.has(itemNodeId) || isHidden;
@@ -76,9 +97,12 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             groupId: group.id,
             orderInGroup: item.order_in_group,
             env_type: item.env_type,
+            services: itemServices,
+            storage: item.storage || null, // Tambahkan storage
           },
           style: {
             width: dimensions.itemWidth,
+            height: itemHeight,
             opacity: isItemHidden ? 0.3 : 1,
             pointerEvents: isItemHidden ? 'none' : 'all',
           },
@@ -88,6 +112,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       });
     });
 
+    // Create ungrouped item nodes
     const ungroupedItems = items.filter(item => !item.group_id);
     ungroupedItems.forEach((item) => {
       const pos = item.position
@@ -96,6 +121,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       const itemNodeId = String(item.id);
       const isHidden = hiddenNodes.has(itemNodeId);
+
+      // Ambil services untuk item ini dari servicesMap
+      const itemServices = servicesMap[item.id] || [];
 
       flowNodes.push({
         id: itemNodeId,
@@ -110,6 +138,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           category: item.category,
           location: item.location,
           env_type: item.env_type,
+          services: itemServices,
+          storage: item.storage || null, // Tambahkan storage
         },
         style: {
           zIndex: 1,
@@ -121,8 +151,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       });
     });
 
+    // Create edges for item-to-item and item-to-group connections
     connections.forEach((conn) => {
-      if (conn.source_group_id) return;
+      if (conn.source_group_id) return; // Skip, akan diprocess terpisah
       
       const sourceNode = flowNodes.find(n => n.id === String(conn.source_id));
       
@@ -133,33 +164,42 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         targetId = String(conn.target_id);
         edgeId = `e${conn.source_id}-${conn.target_id}`;
         isGroupConnection = false;
-        
-        const sourceItem = items.find(i => i.id === conn.source_id);
-        if (sourceItem) {
-          showCrossMarker = shouldShowCrossMarker(sourceItem.status);
-          strokeColor = getStatusColor(sourceItem.status);
-        } else {
-          strokeColor = '#10b981';
-          showCrossMarker = false;
-        }
       } else if (conn.target_group_id) {
         targetNode = flowNodes.find(n => n.id === `group-${conn.target_group_id}`);
         targetId = `group-${conn.target_group_id}`;
         edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
         isGroupConnection = true;
-        
-        const sourceItem = items.find(i => i.id === conn.source_id);
-        if (sourceItem) {
-          showCrossMarker = shouldShowCrossMarker(sourceItem.status);
-          strokeColor = getStatusColor(sourceItem.status === 'active' ? 'active-group' : sourceItem.status);
-          if (sourceItem.status === 'active') strokeColor = '#8b5cf6';
-        } else {
-          strokeColor = '#8b5cf6';
-          showCrossMarker = false;
-        }
       }
       
       if (!sourceNode || !targetNode) return;
+
+      // Gunakan status dari propagation calculation
+      const edgeStatusInfo = edgeStatuses[edgeId];
+      
+      if (edgeStatusInfo) {
+        // Jika edge terpropagasi, gunakan propagated status
+        const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+        showCrossMarker = shouldShowCrossMarker(effectiveStatus);
+
+        // Untuk group connection, gunakan warna purple jika active
+        if (isGroupConnection && effectiveStatus === 'active') {
+          strokeColor = '#8b5cf6';
+        }
+      } else {
+        // Fallback ke logic lama
+        const sourceItem = items.find(i => i.id === conn.source_id);
+        if (sourceItem) {
+          showCrossMarker = shouldShowCrossMarker(sourceItem.status);
+          strokeColor = getStatusColor(sourceItem.status);
+          if (isGroupConnection && sourceItem.status === 'active') {
+            strokeColor = '#8b5cf6';
+          }
+        } else {
+          strokeColor = isGroupConnection ? '#8b5cf6' : '#10b981';
+          showCrossMarker = false;
+        }
+      }
 
       const isEdgeHidden = hiddenNodes.has(String(conn.source_id)) || hiddenNodes.has(targetId);
 
@@ -185,9 +225,29 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         isEdgeHidden
       );
 
+      // Tambahkan info propagasi ke edge data
+      if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
+        edgeConfig.data = {
+          isPropagated: true,
+          propagatedFrom: edgeStatusInfo.propagatedFrom,
+          propagatedStatus: edgeStatusInfo.propagatedStatus,
+        };
+        
+        edgeConfig.labelStyle = {
+          ...edgeConfig.labelStyle,
+          fontSize: 20,
+          fontWeight: 'bold',
+        };
+        
+        if (showCrossMarker) {
+          edgeConfig.label = `✕`;
+        }
+      }
+
       flowEdges.push(edgeConfig);
     });
 
+    // Create edges for group-to-item connections
     connections.forEach((conn) => {
       if (!conn.source_group_id || !conn.target_id) return;
       
@@ -199,6 +259,21 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
       const isEdgeHidden = hiddenNodes.has(`group-${conn.source_group_id}`) || hiddenNodes.has(String(conn.target_id));
 
+      // Gunakan status dari propagation calculation
+      const edgeStatusInfo = edgeStatuses[edgeId];
+      let strokeColor = '#8b5cf6';
+      let showCrossMarker = false;
+
+      if (edgeStatusInfo) {
+        const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+        showCrossMarker = shouldShowCrossMarker(effectiveStatus);
+        
+        if (effectiveStatus === 'active') {
+          strokeColor = '#8b5cf6';
+        }
+      }
+
       let sourceHandle, targetHandle;
       if (edgeHandles[edgeId]) {
         sourceHandle = edgeHandles[edgeId].sourceHandle;
@@ -209,16 +284,16 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         targetHandle = handles.targetHandle;
       }
 
-      flowEdges.push({
+      const edgeConfig = {
         id: edgeId,
         source: `group-${conn.source_group_id}`,
         target: String(conn.target_id),
         sourceHandle,
         targetHandle, 
         type: 'smoothstep',
-        markerEnd: { type: 'arrowclosed', color: '#8b5cf6' },
+        markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: { 
-          stroke: '#8b5cf6', 
+          stroke: strokeColor, 
           strokeWidth: 2.5,
           strokeDasharray: '8,4',
           opacity: isEdgeHidden ? 0.2 : 1,
@@ -226,7 +301,40 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         zIndex: 8,
         reconnectable: true, 
         hidden: isEdgeHidden,
-      });
+      };
+
+      // Tambahkan cross marker jika perlu
+      if (showCrossMarker) {
+        edgeConfig.label = '✕';
+        edgeConfig.labelStyle = { 
+          fill: strokeColor, 
+          fontWeight: 'bold', 
+          fontSize: 25,
+          background: 'white',
+          borderRadius: '50%',
+        };
+        edgeConfig.labelBgStyle = { 
+          fill: 'white', 
+          fillOpacity: 0,
+        };
+        edgeConfig.labelBgPadding = [8, 8];
+        edgeConfig.labelBgBorderRadius = 50;
+      }
+
+      // Tambahkan info propagasi
+      if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
+        edgeConfig.data = {
+          isPropagated: true,
+          propagatedFrom: edgeStatusInfo.propagatedFrom,
+          propagatedStatus: edgeStatusInfo.propagatedStatus,
+        };
+        
+        if (showCrossMarker) {
+          edgeConfig.label = `✕`;
+        }
+      }
+
+      flowEdges.push(edgeConfig);
     });
 
     // Create edges for group-to-group connections
@@ -241,6 +349,21 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       const edgeId = `group-e${conn.source_id}-${conn.target_id}`;
       const isEdgeHidden = hiddenNodes.has(sourceId) || hiddenNodes.has(targetId);
 
+      // Gunakan status dari propagation calculation
+      const edgeStatusInfo = edgeStatuses[edgeId];
+      let strokeColor = '#6366f1';
+      let showCrossMarker = false;
+
+      if (edgeStatusInfo) {
+        const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+        showCrossMarker = shouldShowCrossMarker(effectiveStatus);
+        
+        if (effectiveStatus === 'active') {
+          strokeColor = '#6366f1';
+        }
+      }
+
       let sourceHandle, targetHandle;
       if (edgeHandles[edgeId]) {
         sourceHandle = edgeHandles[edgeId].sourceHandle;
@@ -251,16 +374,16 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         targetHandle = handles.targetHandle;
       }
 
-      flowEdges.push({
+      const edgeConfig = {
         id: edgeId,
         source: sourceId,
         target: targetId,
         sourceHandle, 
         targetHandle,
         type: 'smoothstep',
-        markerEnd: { type: 'arrowclosed', color: '#6366f1' },
+        markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: { 
-          stroke: '#6366f1', 
+          stroke: strokeColor, 
           strokeWidth: 3, 
           strokeDasharray: '5,5',
           opacity: isEdgeHidden ? 0.2 : 1,
@@ -268,10 +391,44 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         zIndex: 5,
         reconnectable: true, 
         hidden: isEdgeHidden,
-      });
+      };
+
+      // Tambahkan cross marker jika perlu
+      if (showCrossMarker) {
+        edgeConfig.label = '✕';
+        edgeConfig.labelStyle = { 
+          fill: strokeColor, 
+          fontWeight: 'bold', 
+          fontSize: 25,
+          background: 'white',
+          borderRadius: '50%',
+        };
+        edgeConfig.labelBgStyle = { 
+          fill: 'white', 
+          fillOpacity: 0,
+        };
+        edgeConfig.labelBgPadding = [8, 8];
+        edgeConfig.labelBgBorderRadius = 50;
+      }
+
+      // Tambahkan info propagasi
+      if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
+        edgeConfig.data = {
+          isPropagated: true,
+          propagatedFrom: edgeStatusInfo.propagatedFrom,
+          propagatedStatus: edgeStatusInfo.propagatedStatus,
+        };
+        
+        if (showCrossMarker) {
+          edgeConfig.label = `✕`;
+        }
+      }
+
+      flowEdges.push(edgeConfig);
     });
+
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap]);
 
   return { transformToFlowData };
 };

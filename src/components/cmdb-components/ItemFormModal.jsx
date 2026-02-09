@@ -1,4 +1,4 @@
-import { X, Plus, Server, Trash2 } from 'lucide-react';
+import { X, Plus, Server, Trash2, HardDrive, Edit } from 'lucide-react';
 import { NODE_TYPES, PRESET_ICONS } from '../../utils/cmdb-utils/constants';
 import {
   Dialog,
@@ -32,6 +32,8 @@ export default function ItemFormModal({
   onServiceRemove,
   onServiceChange,
   onServiceIconUpload,
+  onStorageClick,
+  onStorageDelete,
 }) {
   const handleSelectChange = (name, value) => {
     onInputChange({
@@ -167,14 +169,17 @@ export default function ItemFormModal({
             <div className="space-y-2">
               <Label htmlFor="group_id">Group</Label>
               <Select
-                value={formData.group_id ? String(formData.group_id) : undefined}
-                onValueChange={(value) => handleSelectChange('group_id', value ? parseInt(value) : null)}
+                value={formData.group_id ? String(formData.group_id) : "none"}
+                onValueChange={(value) => {
+                  handleSelectChange('group_id', value === "none" ? null : parseInt(value));
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih group (opsional)" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {groups.map((g) => (
+                  <SelectItem value="none">Tanpa Group</SelectItem>
+                  {groups.map(g => (
                     <SelectItem key={g.id} value={String(g.id)}>
                       {g.name}
                     </SelectItem>
@@ -193,6 +198,92 @@ export default function ItemFormModal({
                 onChange={onInputChange}
                 rows={3}
               />
+            </div>
+
+            {/* Storage Section */}
+            <div className="md:col-span-2 space-y-3">
+              <Label className="flex items-center gap-2 text-base">
+                <HardDrive />
+                Storage
+              </Label>
+              {formData.storage ? (
+                <div className="p-3 bg-muted rounded-lg">
+                  {/* Storage Summary Cards */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="text-center p-2 bg-white rounded border">
+                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="font-semibold text-sm">{formData.storage.total} {formData.storage.unit}</p>
+                    </div>
+                    <div className="text-center p-2 bg-blue-50 rounded border border-blue-200">
+                      <p className="text-xs text-muted-foreground">Used</p>
+                      <p className="font-semibold text-sm text-blue-600">{formData.storage.used} {formData.storage.unit}</p>
+                    </div>
+                    <div className="text-center p-2 bg-green-50 rounded border border-green-200">
+                      <p className="text-xs text-muted-foreground">Free</p>
+                      <p className="font-semibold text-sm text-green-600">
+                        {formData.storage.total - formData.storage.used} {formData.storage.unit}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Storage Partitions Info (if exists) */}
+                  {formData.storage.partitions && formData.storage.partitions.length > 0 && (
+                    <div className="mb-3 p-2 bg-white rounded border">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Partitions:</p>
+                      <div className="space-y-1">
+                        {formData.storage.partitions.map((partition, idx) => {
+                          const usedPercent = (partition.used / partition.total) * 100;
+                          const isWarning = usedPercent > 80;
+                          const isCritical = usedPercent > 90;
+
+                          return (
+                            <div key={idx} className="flex items-center justify-between text-xs p-1.5 bg-gray-50 rounded">
+                              <span className="font-medium">{partition.name}</span>
+                              <span className={`font-medium ${isCritical ? 'text-red-600' : isWarning ? 'text-yellow-600' : 'text-green-600'}`}>
+                                {partition.used}/{partition.total} {partition.unit} ({usedPercent.toFixed(1)}%)
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onStorageClick}
+                      className="flex-1"
+                    >
+                      <Edit size={14} className="mr-1" />
+                      Edit Storage
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={onStorageDelete}
+                      className="flex-1"
+                    >
+                      <Trash2 size={14} className="mr-1" />
+                      Hapus Storage
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={onStorageClick}
+                >
+                  <HardDrive size={16} className="mr-2" />
+                  Tambah Storage
+                </Button>
+              )}
             </div>
 
             {/* Services Section */}

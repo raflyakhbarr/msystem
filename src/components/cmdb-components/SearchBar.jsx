@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Layers, GitBranch } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Button } from "@/components/ui/button";
 
 export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
   const [searchValue, setSearchValue] = useState('');
@@ -82,27 +83,30 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
         className="w-full pl-8 pr-8 h-8 py-1.5 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring focus:border-transparent"
       />
       {searchValue && (
-        <button
+        <Button
           onClick={handleClear}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          size="icon"
+          className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 text-muted-foreground hover:text-foreground"
         >
           <X size={12} />
-        </button>
+        </Button>
       )}
     </div>
       {isOpen && filteredNodes.length > 0 && (
         <div className="absolute top-full mt-2 w-full bg-popover border border-border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
           <div className="p-2 space-y-1">
             {filteredNodes.map((node) => (
-              <button
+              <Button
                 key={node.id}
                 onClick={() => handleSelectNode(node)}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors flex items-start gap-3"
+                variant="ghost"
+                className="w-full justify-start h-auto px-3 py-2 text-left"
               >
                 <span className="mt-0.5">
                   {getNodeIcon(node)}
                 </span>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 ml-3">
                   <div className="font-medium text-sm truncate">
                     {node.data?.name || 'Unnamed'}
                   </div>
@@ -128,7 +132,7 @@ export default function SearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
                     </div>
                   )}
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

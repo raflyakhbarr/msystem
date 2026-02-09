@@ -5,6 +5,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Info,
   Server,
@@ -14,7 +16,7 @@ import {
   GitBranch,
   Shield,
   Wifi,
-  AlertTriangle,
+  HardDrive,
   Plus
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
@@ -22,7 +24,8 @@ import ServiceIcon from './ServiceIcon';
 const API_BASE_URL = 'http://localhost:5000';
 
 export default function CustomNode({ data, id }) {
-  
+  const storage = data.storage || null;
+
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
 
@@ -82,12 +85,14 @@ export default function CustomNode({ data, id }) {
           {/* Info/Detail Button */}
           <Popover>
             <PopoverTrigger asChild>
-              <button
+              <Button
                 onClick={(e) => e.stopPropagation()}
-                className="bg-gray-900 hover:bg-gray-700 text-white p-1 rounded-full shadow-lg transition-colors duration-200"
+                variant="default"
+                size="icon"
+                className="h-5 w-5 p-0 bg-gray-900 hover:bg-gray-700 text-white rounded-full shadow-lg"
               >
                 <Info className="w-3 h-3" />
-              </button>
+              </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 max-h-[80vh] overflow-y-auto" align="start" side="right">
               <div className="space-y-3">
@@ -134,16 +139,17 @@ export default function CustomNode({ data, id }) {
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-semibold text-muted-foreground">Services:</p>
                       {data.onAddService && (
-                        <button
+                        <Button
                           onClick={(e) => {
                             e.stopPropagation();
                             data.onAddService?.({ ...data, id });
                           }}
-                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded flex items-center gap-1"
+                          size="sm"
+                          className="h-6 px-2 py-0 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           <Plus size={12} />
                           Add Service
-                        </button>
+                        </Button>
                       )}
                     </div>
                     {services.length > 0 ? (
@@ -171,6 +177,89 @@ export default function CustomNode({ data, id }) {
                       <p className="text-xs text-muted-foreground italic">No services</p>
                     )}
                   </div>
+
+                  {/* Storage Section in Popover */}
+                  {storage && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="font-semibold text-muted-foreground flex items-center gap-1">
+                          <HardDrive size={14} />
+                          Storage:
+                        </p>
+                      </div>
+
+                      {/* Storage Summary */}
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="text-center p-2 bg-muted rounded">
+                          <p className="text-xs text-muted-foreground">Total</p>
+                          <p className="font-semibold text-sm">{storage.total} {storage.unit}</p>
+                        </div>
+                        <div className="text-center p-2 bg-blue-50 rounded">
+                          <p className="text-xs text-muted-foreground">Used</p>
+                          <p className="font-semibold text-sm text-blue-600">{storage.used} {storage.unit}</p>
+                        </div>
+                        <div className="text-center p-2 bg-green-50 rounded">
+                          <p className="text-xs text-muted-foreground">Free</p>
+                          <p className="font-semibold text-sm text-green-600">
+                            {storage.total - storage.used} {storage.unit}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Storage Progress Bar - Total Storage */}
+                      {storage.total > 0 && (
+                        <div className="mb-4 p-3 bg-muted rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">Total Storage Usage</span>
+                            <span className="text-xs text-muted-foreground">
+                              {((storage.used / storage.total) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <Progress
+                            value={(storage.used / storage.total) * 100}
+                            className="h-3"
+                          />
+                          <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                            <span>{storage.used} {storage.unit} Terpakai</span>
+                            <span>{storage.total - storage.used} {storage.unit} Bebas</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Storage Partitions */}
+                      {storage.partitions && storage.partitions.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Partitions:</p>
+                          <div className="space-y-2">
+                            {storage.partitions.map((partition, idx) => {
+                              const usedPercent = (partition.used / partition.total) * 100;
+                              const isWarning = usedPercent > 80;
+                              const isCritical = usedPercent > 90;
+
+                              return (
+                                <div key={idx} className="p-2 bg-muted rounded text-xs">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold">{partition.name}</span>
+                                    <span className={`font-medium ${isCritical ? 'text-red-600' : isWarning ? 'text-yellow-600' : 'text-green-600'}`}>
+                                      {partition.used}/{partition.total} {partition.unit}
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={usedPercent}
+                                    className={`h-2 ${isCritical ? '[&>[data-progress]:bg-red-500]' : isWarning ? '[&>[data-progress]:bg-yellow-500]' : '[&>[data-progress]:bg-blue-500]'}`}
+                                  />
+                                  <div className="flex justify-between mt-1 text-muted-foreground">
+                                    <span>Used: {usedPercent.toFixed(1)}%</span>
+                                    <span>Free: {(100 - usedPercent).toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </PopoverContent>

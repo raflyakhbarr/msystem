@@ -218,37 +218,43 @@ export default function WorkspaceSwitcher({
               </div>
               
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditDialog(workspace);
                   }}
-                  className="p-1 hover:bg-accent rounded"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
                   title="Edit"
                 >
                   <Edit size={12} />
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     openDuplicateDialog(workspace);
                   }}
-                  className="p-1 hover:bg-accent rounded"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
                   title="Duplicate"
                 >
                   <Copy size={12} />
-                </button>
+                </Button>
                 {!workspace.is_default && (
-                  <button
+                  <Button
                     onClick={(e) => {
                       e.stopPropagation();
                       openDeleteAlert(workspace);
                     }}
-                    className="p-1 hover:bg-destructive/10 text-destructive rounded"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
                     title="Delete"
                   >
                     <Trash2 size={12} />
-                  </button>
+                  </Button>
                 )}
               </div>
             </DropdownMenuItem>
