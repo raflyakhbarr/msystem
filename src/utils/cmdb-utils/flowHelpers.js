@@ -247,3 +247,42 @@ export const deleteEdgeHandle = async (edgeId) => {
     console.error('Gagal menghapus edge handle dari database:', err);
   }
 };
+
+// ==================== SERVICE EDGE HANDLES ====================
+
+// Load service edge handles from database
+export const loadServiceEdgeHandles = async (serviceId, workspaceId) => {
+  try {
+    const response = await api.get(`/service-edge-handles/${serviceId}/edge-handles?workspace_id=${workspaceId}`);
+    return response.data;
+  } catch (err) {
+    console.error('Gagal memuat konfigurasi service edge dari database:', err);
+    return {};
+  }
+};
+
+// Save a single service edge handle
+export const saveServiceEdgeHandle = async (edgeId, sourceHandle, targetHandle, serviceId, workspaceId) => {
+  try {
+    await api.put(`/service-edge-handles/edge-handles/${edgeId}`, {
+      sourceHandle,
+      targetHandle,
+      serviceId,
+      workspace_id: workspaceId,
+    });
+  } catch (err) {
+    console.error('Gagal menyimpan service edge handle ke database:', err);
+  }
+};
+
+// Bulk save service edge handles
+export const saveServiceEdgeHandles = async (handles, serviceId, workspaceId) => {
+  try {
+    await api.post(`/service-edge-handles/${serviceId}/edge-handles/bulk`, {
+      edgeHandles: handles,
+      workspace_id: workspaceId,
+    });
+  } catch (err) {
+    console.error('Gagal menyimpan konfigurasi service edge ke database:', err);
+  }
+};

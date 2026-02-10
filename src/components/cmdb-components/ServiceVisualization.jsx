@@ -1,4 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import ReactFlow, {
+  Background,
+  Controls,
+  useNodesState,
+  useEdgesState,
+  reconnectEdge,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { useMemo } from 'react';
+import { Plus, Link2, Trash2, Save } from 'lucide-react';
+import api from '../../services/api';
+import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
+import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
+import CustomServiceNode from './CustomServiceNode';
+import ServiceConnectionModal from './ServiceConnectionModal';
+import ServiceItemContextMenu from './ServiceItemContextMenu';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -17,21 +34,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import ReactFlow, {
-  Background,
-  Controls,
-  useNodesState,
-  useEdgesState,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { Plus, Link2, Trash2, Save } from 'lucide-react';
-import api from '../../services/api';
-import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
-import CustomNode from './CustomNode';
-import { toast } from 'sonner';
 
 const nodeTypes = {
-  custom: CustomNode,
+  custom: CustomServiceNode,
 };
 
 const API_BASE_URL = 'http://localhost:5000';
@@ -45,6 +50,16 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
 
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState({
+    show: false,
+    position: { x: 0, y: 0 },
+    item: null,
+  });
+
+  // Edge Handles State
+  const [edgeHandles, setEdgeHandles] = useState({});
+
   const [itemFormData, setItemFormData] = useState({
     name: '',
     type: 'server',
@@ -55,7 +70,31 @@ export default function ServiceVisualization({ service, workspaceId }) {
     location: '',
   });
 
+  // Default viewport settings - atur zoom dan posisi default
+  const defaultViewport = useMemo(() => ({
+    x: 50,
+    y: 100,
+    zoom: 0.1, // Zoom level: 0.1 = 10%, 1 = 100%, 2 = 200%
+  }), []);
+
   const { items, connections, loading, fetchAll } = useServiceItems(service.id, workspaceId);
+
+  // Load service edge handles on mount
+  useEffect(() => {
+    const loadHandles = async () => {
+      const handles = await loadServiceEdgeHandles(service.id, workspaceId);
+      setEdgeHandles(handles);
+    };
+    loadHandles();
+  }, [service.id, workspaceId]);
+
+  // Siapkan data parent service dengan icon_preview
+  const parentServiceData = service ? {
+    ...service,
+    icon_preview: service.icon_type === 'upload' && service.icon_path
+      ? `${API_BASE_URL}${service.icon_path}`
+      : null
+  } : null;
 
   // Transform items to nodes
   const initialNodes = items.map(item => ({
@@ -70,19 +109,25 @@ export default function ServiceVisualization({ service, workspaceId }) {
       ip: item.ip,
       category: item.category,
       location: item.location,
-      services: [], // Service items don't have nested services
+      parentService: parentServiceData,
     },
   }));
 
-  // Transform connections to edges
-  const initialEdges = connections.map(conn => ({
-    id: `e${conn.source_id}-${conn.target_id}`,
-    source: String(conn.source_id),
-    target: String(conn.target_id),
-    type: 'smoothstep',
-    animated: false,
-    style: { stroke: '#10b981', strokeWidth: 2 },
-  }));
+  // Transform connections to edges with handle positions
+  const initialEdges = connections.map(conn => {
+    const edgeId = `e${conn.source_id}-${conn.target_id}`;
+    const handleConfig = edgeHandles[edgeId] || {};
+    return {
+      id: edgeId,
+      source: String(conn.source_id),
+      target: String(conn.target_id),
+      sourceHandle: handleConfig.sourceHandle || 'source-right',
+      targetHandle: handleConfig.targetHandle || 'target-left',
+      type: 'smoothstep',
+      animated: false,
+      style: { stroke: '#10b981', strokeWidth: 2 },
+    };
+  });
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -101,7 +146,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         ip: item.ip,
         category: item.category,
         location: item.location,
-        services: [],
+        parentService: parentServiceData,
       },
     }));
     setNodes(newNodes);
@@ -109,16 +154,22 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Update edges when connections change
   useEffect(() => {
-    const newEdges = connections.map(conn => ({
-      id: `e${conn.source_id}-${conn.target_id}`,
-      source: String(conn.source_id),
-      target: String(conn.target_id),
-      type: 'smoothstep',
-      animated: false,
-      style: { stroke: '#10b981', strokeWidth: 2 },
-    }));
+    const newEdges = connections.map(conn => {
+      const edgeId = `e${conn.source_id}-${conn.target_id}`;
+      const handleConfig = edgeHandles[edgeId] || {};
+      return {
+        id: edgeId,
+        source: String(conn.source_id),
+        target: String(conn.target_id),
+        sourceHandle: handleConfig.sourceHandle || 'source-right',
+        targetHandle: handleConfig.targetHandle || 'target-left',
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: '#10b981', strokeWidth: 2 },
+      };
+    });
     setEdges(newEdges);
-  }, [connections, setEdges]);
+  }, [connections, edgeHandles, setEdges]);
 
   const handleOpenAddModal = useCallback(() => {
     setItemFormData({
@@ -252,6 +303,77 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   };
 
+  // Context Menu Handlers
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu({ show: false, position: { x: 0, y: 0 }, item: null });
+  }, []);
+
+  const handleNodeContextMenu = useCallback((event, node) => {
+    event.preventDefault();
+    const item = items.find(i => i.id === parseInt(node.id));
+    if (!item) return;
+
+    setContextMenu({
+      show: true,
+      position: {
+        x: event.pageX,
+        y: event.pageY,
+      },
+      item,
+    });
+  }, [items]);
+
+  const handleContextMenuEdit = useCallback((item) => {
+    setEditItem(item);
+    setItemFormData({
+      name: item.name || '',
+      type: item.type || 'server',
+      description: item.description || '',
+      status: item.status || 'active',
+      ip: item.ip || '',
+      category: item.category || 'internal',
+      location: item.location || '',
+    });
+    setShowAddModal(true);
+  }, []);
+
+  const handleContextMenuDelete = useCallback((item) => {
+    handleDeleteItem(item.id);
+  }, [handleDeleteItem]);
+
+  const handleContextMenuManageConnections = useCallback((item) => {
+    handleOpenConnectionModal(item);
+  }, [handleOpenConnectionModal]);
+
+  // Handle reconnecting edges (moving connection points only, NOT creating new connections)
+  const handleReconnect = useCallback(async (oldEdge, newConnection) => {
+    try {
+      // Update edge handles state
+      const newEdgeHandles = {
+        ...edgeHandles,
+        [oldEdge.id]: {
+          sourceHandle: newConnection.sourceHandle,
+          targetHandle: newConnection.targetHandle,
+        }
+      };
+
+      await saveServiceEdgeHandle(
+        oldEdge.id,
+        newConnection.sourceHandle,
+        newConnection.targetHandle,
+        service.id,
+        workspaceId
+      );
+
+      setEdgeHandles(newEdgeHandles);
+      setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+      toast.success('Connection point moved!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to move connection point');
+    }
+  }, [edgeHandles, setEdges, service.id, workspaceId]);
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -288,12 +410,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onReconnect={handleReconnect}
+        onNodeContextMenu={handleNodeContextMenu}
+        onPaneClick={handleCloseContextMenu}
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         nodeTypes={nodeTypes}
         nodesDraggable={true}
         nodesConnectable={false}
         elementsSelectable={true}
-        fitView
+        defaultViewport={defaultViewport}
       >
         <Background />
         <Controls />
@@ -371,6 +496,33 @@ export default function ServiceVisualization({ service, workspaceId }) {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={itemFormData.category}
+                  onValueChange={(value) => setItemFormData({ ...itemFormData, category: value })}
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="internal">Internal</SelectItem>
+                    <SelectItem value="external">External</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  type="text"
+                  value={itemFormData.location}
+                  onChange={(e) => setItemFormData({ ...itemFormData, location: e.target.value })}
+                  placeholder="e.g., Data Center 1"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
@@ -399,54 +551,32 @@ export default function ServiceVisualization({ service, workspaceId }) {
       )}
 
       {/* Connection Modal */}
-      {showConnectionModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Manage Connections</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Select items to connect with <strong>{selectedItem.name}</strong>
-            </p>
+      <ServiceConnectionModal
+        show={showConnectionModal}
+        selectedItem={selectedItem}
+        allItems={items}
+        selectedConnections={selectedConnections}
+        onClose={() => setShowConnectionModal(false)}
+        onToggleConnection={(itemId) => {
+          if (selectedConnections.includes(itemId)) {
+            setSelectedConnections(selectedConnections.filter(id => id !== itemId));
+          } else {
+            setSelectedConnections([...selectedConnections, itemId]);
+          }
+        }}
+        onSave={handleSaveConnections}
+      />
 
-            <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-              {items
-                .filter(i => i.id !== selectedItem.id)
-                .map(item => (
-                  <label key={item.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedConnections.includes(item.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedConnections([...selectedConnections, item.id]);
-                        } else {
-                          setSelectedConnections(selectedConnections.filter(id => id !== item.id));
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span>{item.name}</span>
-                  </label>
-                ))}
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={handleSaveConnections}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Save
-              </Button>
-              <Button
-                onClick={() => setShowConnectionModal(false)}
-                variant="secondary"
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Context Menu */}
+      <ServiceItemContextMenu
+        show={contextMenu.show}
+        position={contextMenu.position}
+        item={contextMenu.item}
+        onEdit={handleContextMenuEdit}
+        onDelete={handleContextMenuDelete}
+        onManageConnections={handleContextMenuManageConnections}
+        onClose={handleCloseContextMenu}
+      />
     </div>
   );
 }

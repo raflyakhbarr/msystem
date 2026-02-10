@@ -44,6 +44,7 @@ export default function ItemFormModal({
   const services = formData.services || [];
 
   return (
+    <>
     <Dialog open={show} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -285,7 +286,7 @@ export default function ItemFormModal({
                 </Button>
               )}
             </div>
-
+            
             {/* Services Section */}
             <div className="md:col-span-2 space-y-3">
               <Label className="flex items-center gap-2 text-base">
@@ -316,14 +317,15 @@ export default function ItemFormModal({
                     )}
                   </div>
 
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 min-w-0 space-y-2">
                     <Input
                       placeholder="Service name (e.g., Citrix)"
                       value={service.name}
                       onChange={(e) => onServiceChange(index, 'name', e.target.value)}
+                      className="w-full"
                     />
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Select
                         value={service.status}
                         onValueChange={(value) => onServiceChange(index, 'status', value)}
@@ -355,27 +357,27 @@ export default function ItemFormModal({
                           value={service.icon_name}
                           onValueChange={(value) => onServiceChange(index, 'icon_name', value)}
                         >
-                          <SelectTrigger className="w-40">
+                          <SelectTrigger className="flex-1 min-w-[160px]">
                             <SelectValue placeholder="Select icon" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-w-[200px]">
                             {PRESET_ICONS.map(icon => (
                               <SelectItem key={icon.value} value={icon.value}>
                                 <div className="flex items-center gap-2">
-                                  <ServiceIcon name={icon.value} size={16} />
-                                  {icon.label}
+                                  <ServiceIcon name={icon.value} size={16} className="flex-shrink-0" />
+                                  <span className="truncate">{icon.label}</span>
                                 </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-[160px]">
                           <Input
                             type="file"
                             accept="image/*"
                             onChange={(e) => onServiceIconUpload(index, e)}
-                            className="flex-1"
+                            className="w-full"
                           />
                         </div>
                       )}
@@ -383,7 +385,7 @@ export default function ItemFormModal({
 
                     {/* File upload info */}
                     {service.icon_type === 'upload' && service.icon_name && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground truncate">
                         Selected: {service.icon_name}
                       </p>
                     )}
@@ -394,6 +396,7 @@ export default function ItemFormModal({
                     variant="destructive"
                     size="icon"
                     onClick={() => onServiceRemove(index)}
+                    className="flex-shrink-0"
                   >
                     <Trash2 size={16} />
                   </Button>
@@ -427,5 +430,6 @@ export default function ItemFormModal({
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

@@ -25,6 +25,7 @@ const API_BASE_URL = 'http://localhost:5000';
 
 export default function CustomNode({ data, id }) {
   const storage = data.storage || null;
+  const services = data.services || [];
 
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
@@ -70,10 +71,6 @@ export default function CustomNode({ data, id }) {
       default: return '#6b7280';
     }
   };
-
-  const isStatusCascaded = data.originalStatus === 'active' && data.status !== 'active';
-
-  const services = data.services || [];
 
   const handleColor = getHandleColor(data.status);
 
@@ -134,7 +131,7 @@ export default function CustomNode({ data, id }) {
                     </div>
                   )}
 
-                  {/* Services Section in Popover */}
+                  {/* Services Section (CMDB Items Only) */}
                   <div className="mt-3 pt-3 border-t border-border">
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-semibold text-muted-foreground">Services:</p>
