@@ -1,16 +1,18 @@
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ServiceIcon from './ServiceIcon';
 import ServiceVisualization from './ServiceVisualization';
-import { 
-  Server, 
-  Activity, 
-  Calendar, 
-  MapPin, 
+import {
+  Server,
+  Activity,
+  Calendar,
+  MapPin,
   AlertCircle,
   CheckCircle2,
   Clock
@@ -56,6 +58,9 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
       `}</style>
       <Dialog open={show} onOpenChange={onClose}>
         <DialogContent className="dialog-horizontal h-[85vh] p-0 gap-0 overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{service.name} - Service Details</DialogTitle>
+          </DialogHeader>
           <div className="flex h-full">
           {/* Left Panel - Service Information */}
           <div className="w-[380px] bg-white border-r border-slate-200/60 flex flex-col">

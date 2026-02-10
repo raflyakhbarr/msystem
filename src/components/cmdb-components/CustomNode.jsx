@@ -131,7 +131,7 @@ export default function CustomNode({ data, id }) {
                     </div>
                   )}
 
-                  {/* Services Section (CMDB Items Only) */}
+                  {/* Services Section */}
                   <div className="mt-3 pt-3 border-t border-border">
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-semibold text-muted-foreground">Services:</p>

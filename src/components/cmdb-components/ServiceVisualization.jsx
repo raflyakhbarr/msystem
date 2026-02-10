@@ -425,15 +425,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
       </ReactFlow>
 
       {/* Add/Edit Item Modal */}
-      {showAddModal && (
-        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editItem ? 'Edit Item' : 'Add New Item'}
-              </DialogTitle>
-            </DialogHeader>
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editItem ? 'Edit Service Item' : 'Add New Service Item'}
+            </DialogTitle>
+          </DialogHeader>
 
+          {showAddModal && (
             <form onSubmit={handleItemSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
@@ -546,9 +546,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 </Button>
               </DialogFooter>
             </form>
-          </DialogContent>
-        </Dialog>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Connection Modal */}
       <ServiceConnectionModal
