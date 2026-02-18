@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const CustomServiceGroupNode = memo(({ data }) => {
+const CustomServiceGroupNode = memo(({ data, style }) => {
   // Warna handle berdasarkan service theme (green/teal untuk service level)
   const handleColor = '#10b981';
 
@@ -13,8 +13,8 @@ const CustomServiceGroupNode = memo(({ data }) => {
         backgroundColor: data.color || 'rgba(16, 185, 129, 0.15)',
         border: '2px solid #10b981',
         padding: '5px',
-        minWidth: data.width || 200,
-        minHeight: data.height || 200,
+        width: style?.width || data.width || 200,
+        height: style?.height || data.height || 200,
         position: 'relative',
         borderRadius: '8px',
       }}

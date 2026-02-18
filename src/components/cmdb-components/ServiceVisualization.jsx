@@ -152,36 +152,34 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return;
     }
 
-    const itemNodes = items.map(item => ({
-      id: String(item.id),
-      type: 'custom',
-      position: parsePosition(item.position),
-      data: {
-        name: item.name,
-        type: item.type,
-        description: item.description,
-        status: item.status,
-        ip: item.ip,
-        category: item.category,
-        location: item.location,
-        parentService: parentServiceData,
-        groupId: item.group_id,
-        orderInGroup: item.order_in_group,
-      },
-    }));
+    const flowNodes = [];
 
-    const groupNodes = groups.map(group => {
-      const itemsInGroup = items.filter(i => i.group_id === group.id);
-      const itemCount = itemsInGroup.length;
-      const itemsPerRow = 3;
+    // Dimensions for grouped items
+    const itemWidth = 160;
+    const itemHeight = 80;
+    const itemsPerRow = 3;
+    const gapX = 10;
+    const gapY = 10;
+    const padding = 15;
+    const headerHeight = 40;
+
+    // Create group nodes first
+    groups.forEach(group => {
+      const groupItems = items
+        .filter(item => item.group_id === group.id)
+        .sort((a, b) => (a.order_in_group || 0) - (b.order_in_group || 0));
+
+      const itemCount = groupItems.length;
       const rows = Math.ceil(itemCount / itemsPerRow);
-      const width = Math.max(200, itemsPerRow * 180);
-      const height = Math.max(200, rows * 120);
+      const width = Math.max(200, padding * 2 + itemsPerRow * (itemWidth + gapX));
+      const height = Math.max(150, headerHeight + padding * 2 + rows * (itemHeight + gapY));
 
-      return {
+      const groupPos = parsePosition(group.position);
+
+      flowNodes.push({
         id: `service-group-${group.id}`,
         type: 'serviceGroup',
-        position: parsePosition(group.position),
+        position: groupPos,
         data: {
           name: group.name,
           description: group.description,
@@ -192,12 +190,69 @@ export default function ServiceVisualization({ service, workspaceId }) {
           groupId: group.id,
         },
         style: {
+          width: width,
+          height: height,
           zIndex: 0,
         },
-      };
+      });
+
+      // Create item nodes INSIDE this group
+      groupItems.forEach((item, index) => {
+        const row = Math.floor(index / itemsPerRow);
+        const col = index % itemsPerRow;
+
+        const relativeX = padding + col * (itemWidth + gapX);
+        const relativeY = headerHeight + padding + row * (itemHeight + gapY);
+
+        flowNodes.push({
+          id: String(item.id),
+          type: 'custom',
+          position: { x: relativeX, y: relativeY },
+          parentNode: `service-group-${group.id}`,
+          extent: 'parent',
+          data: {
+            name: item.name,
+            type: item.type,
+            description: item.description,
+            status: item.status,
+            ip: item.ip,
+            category: item.category,
+            location: item.location,
+            parentService: parentServiceData,
+            groupId: item.group_id,
+            orderInGroup: item.order_in_group,
+          },
+          style: {
+            width: itemWidth,
+            height: itemHeight,
+          },
+        });
+      });
     });
 
-    setNodes([...groupNodes, ...itemNodes]);
+    // Create ungrouped item nodes
+    const ungroupedItems = items.filter(item => !item.group_id);
+    ungroupedItems.forEach(item => {
+      flowNodes.push({
+        id: String(item.id),
+        type: 'custom',
+        position: parsePosition(item.position),
+        data: {
+          name: item.name,
+          type: item.type,
+          description: item.description,
+          status: item.status,
+          ip: item.ip,
+          category: item.category,
+          location: item.location,
+          parentService: parentServiceData,
+          groupId: item.group_id,
+          orderInGroup: item.order_in_group,
+        },
+      });
+    });
+
+    setNodes(flowNodes);
 
     // Update refs
     prevItemsRef.current = items;
