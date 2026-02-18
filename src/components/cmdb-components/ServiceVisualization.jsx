@@ -299,6 +299,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         type: 'smoothstep',
         animated: false,
         style: { stroke: '#10b981', strokeWidth: 2 },
+        zIndex:10,
       };
     });
 

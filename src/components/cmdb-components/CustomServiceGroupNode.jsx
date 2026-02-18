@@ -124,17 +124,17 @@ const CustomServiceGroupNode = memo(({ data, style }) => {
       />
 
       {/* GROUP CONTENT */}
-      <div className="font-bold text-base mb-1" style={{ color: '#059669' }}>
+      <div className="font-bold text-base mb-1 text-center" style={{ color: '#059669' }}>
         {data.name}
       </div>
 
       {data.description && (
-        <div className="text-xs text-muted-foreground mb-2">
+        <div className="text-xs text-muted-foreground mb-2 text-center">
           {data.description}
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground">
+      <div className="text-xs text-muted-foreground text-center">
         {data.itemCount || 0} items
       </div>
     </div>
