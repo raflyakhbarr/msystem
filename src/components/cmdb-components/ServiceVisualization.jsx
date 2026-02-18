@@ -54,6 +54,10 @@ const parsePosition = (positionData) => {
 
 export default function ServiceVisualization({ service, workspaceId }) {
   const reactFlowInstance = useRef(null);
+  const nodesRef = useRef([]);
+  const isReorderingRef = useRef(false);
+  const dragStateRef = useRef({ isDragging: false, startTime: 0 });
+
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -68,6 +72,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
+
+  // Drag state for reordering items in groups
+  const [draggedNode, setDraggedNode] = useState(null);
+  const [hoverPosition, setHoverPosition] = useState(null);
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
@@ -100,6 +108,17 @@ export default function ServiceVisualization({ service, workspaceId }) {
     x: 50,
     y: 100,
     zoom: 0.1,
+  }), []);
+
+  // Dimensions for item layout in groups (DIGUNAKAN UNTUK RENDER & DRAG)
+  const DIMENSIONS = useMemo(() => ({
+    itemsPerRow: 3,
+    itemWidth: 160,
+    itemHeight: 80,
+    gapX: 10,
+    gapY: 30, 
+    padding: 15,
+    headerHeight: 40,
   }), []);
 
   const {
@@ -155,15 +174,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
     const flowNodes = [];
 
-    // Dimensions for grouped items
-    const itemWidth = 160;
-    const itemHeight = 80;
-    const itemsPerRow = 3;
-    const gapX = 10;
-    const gapY = 10;
-    const padding = 15;
-    const headerHeight = 40;
-
     // Create group nodes first
     groups.forEach(group => {
       const groupItems = items
@@ -171,6 +181,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         .sort((a, b) => (a.order_in_group || 0) - (b.order_in_group || 0));
 
       const itemCount = groupItems.length;
+      const { itemsPerRow, itemWidth, itemHeight, gapX, gapY, padding, headerHeight } = DIMENSIONS;
       const rows = Math.ceil(itemCount / itemsPerRow);
       const width = Math.max(200, padding * 2 + itemsPerRow * (itemWidth + gapX));
       const height = Math.max(150, headerHeight + padding * 2 + rows * (itemHeight + gapY));
@@ -181,6 +192,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         id: `service-group-${group.id}`,
         type: 'serviceGroup',
         position: groupPos,
+        draggable: true,
         data: {
           name: group.name,
           description: group.description,
@@ -211,6 +223,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           position: { x: relativeX, y: relativeY },
           parentNode: `service-group-${group.id}`,
           extent: 'parent',
+          draggable: true,
           data: {
             name: item.name,
             type: item.type,
@@ -226,6 +239,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           style: {
             width: itemWidth,
             height: itemHeight,
+            pointerEvents: 'all',
           },
         });
       });
@@ -238,6 +252,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         id: String(item.id),
         type: 'custom',
         position: parsePosition(item.position),
+        draggable: true,
         data: {
           name: item.name,
           type: item.type,
@@ -254,6 +269,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     });
 
     setNodes(flowNodes);
+    nodesRef.current = flowNodes;
 
     // Update refs
     prevItemsRef.current = items;
@@ -389,6 +405,112 @@ export default function ServiceVisualization({ service, workspaceId }) {
     setEditGroupMode(true);
     setShowGroupModal(true);
   }, []);
+
+  // Drag handlers for reordering items in groups
+  const onNodeDragStart = useCallback((event, node) => {
+    if (node.parentNode) {
+      setDraggedNode(node.id);
+      dragStateRef.current = { isDragging: true, startTime: Date.now() };
+    }
+  }, []);
+
+  const onNodeDrag = useCallback((event, node) => {
+    if (!node.parentNode || !draggedNode) return;
+
+    const currentNodes = nodesRef.current;
+    const groupNode = currentNodes.find(n => n.id === node.parentNode);
+    if (!groupNode) return;
+
+    const { itemsPerRow, itemWidth, itemHeight, gapX, gapY, padding, headerHeight } = DIMENSIONS;
+    const relX = node.position.x - padding;
+    const relY = node.position.y - padding - headerHeight;
+
+    const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
+
+    // Calculate row based on fixed item height
+    const row = Math.max(0, Math.floor(Math.max(0, relY) / (itemHeight + gapY)));
+
+    const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+    const newIndex = Math.min(row * itemsPerRow + col, itemsInGroup.length);
+
+    if (newIndex >= 0 && newIndex <= itemsInGroup.length) {
+      const newRow = Math.floor(newIndex / itemsPerRow);
+      const newCol = newIndex % itemsPerRow;
+
+      const relativeX = padding + newCol * (itemWidth + gapX);
+      const relativeY = headerHeight + padding + newRow * (itemHeight + gapY);
+
+      // Calculate absolute position for hover indicator
+      const absoluteX = groupNode.position.x + relativeX;
+      const absoluteY = groupNode.position.y + relativeY;
+
+      setHoverPosition({
+        index: newIndex,
+        relativeX,
+        relativeY,
+        absoluteX,
+        absoluteY,
+        groupId: node.parentNode,
+      });
+    }
+  }, [draggedNode]);
+
+  const onNodeDragStop = useCallback(async (event, node) => {
+    const dragDuration = Date.now() - dragStateRef.current.startTime;
+    dragStateRef.current = { isDragging: false, startTime: 0 };
+
+    if (dragDuration < 100) {
+      setDraggedNode(null);
+      setHoverPosition(null);
+      return;
+    }
+
+    if (!draggedNode || !hoverPosition || !node.parentNode) {
+      setDraggedNode(null);
+      setHoverPosition(null);
+      isReorderingRef.current = false;
+      return;
+    }
+
+    try {
+      await api.patch(`/service-groups/items/${node.id}/reorder`, {
+        new_order: hoverPosition.index
+      });
+
+      // Update dragged node position visual immediately
+      setNodes(prevNodes => {
+        const updatedNodes = prevNodes.map(n => {
+          if (n.id === draggedNode) {
+            return {
+              ...n,
+              position: {
+                x: hoverPosition.relativeX,
+                y: hoverPosition.relativeY
+              },
+              data: {
+                ...n.data,
+                orderInGroup: hoverPosition.index
+              }
+            };
+          }
+          return n;
+        });
+
+        nodesRef.current = updatedNodes;
+        return updatedNodes;
+      });
+
+      // Immediately fetch all data to get updated positions for ALL items
+      await fetchAll();
+
+    } catch (err) {
+      console.error('Failed to reorder:', err);
+      toast.error('Failed to reorder item');
+    } finally {
+      setDraggedNode(null);
+      setHoverPosition(null);
+    }
+  }, [draggedNode, hoverPosition, fetchAll, setNodes]);
 
   const handleItemSubmit = async (e) => {
     e.preventDefault();
@@ -747,6 +869,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onReconnect={handleReconnect}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneClick={handleCloseContextMenu}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
+        onNodeDragStop={onNodeDragStop}
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         nodeTypes={nodeTypes}
         nodesDraggable={true}
@@ -757,6 +882,41 @@ export default function ServiceVisualization({ service, workspaceId }) {
         <Background />
         <Controls />
       </ReactFlow>
+
+      {/* Hover indicator for drag-to-reorder */}
+      {hoverPosition && draggedNode && (
+        <div
+          style={{
+            position: 'absolute',
+            pointerEvents: 'none',
+            zIndex: 102,
+            border: '3px dashed #8b5cf6',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(139, 92, 246, 0.15)',
+            width: `${DIMENSIONS.itemWidth}px`,
+            height: `${DIMENSIONS.itemHeight}px`,
+            transform: `translate(${hoverPosition.absoluteX}px, ${hoverPosition.absoluteY}px)`,
+            transition: 'transform 0.1s ease-out',
+            boxShadow: '0 0 20px rgba(139, 92, 246, 0.3)',
+          }}
+        >
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            color: '#8b5cf6',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            backgroundColor: 'white',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          }}>
+            Drop Here
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Item Modal */}
       <ServiceItemFormModal
