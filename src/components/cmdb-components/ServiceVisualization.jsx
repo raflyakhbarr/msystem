@@ -318,7 +318,23 @@ export default function ServiceVisualization({ service, workspaceId }) {
         };
       });
 
-    setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges]);
+    const itemToGroupEdges = groupConnections
+      .filter(conn => conn.source_id && conn.target_group_id)
+      .map(conn => {
+        const edgeId = `service-item-group-e${conn.source_id}-${conn.target_group_id}`;
+        return {
+          id: edgeId,
+          source: String(conn.source_id),
+          target: `service-group-${conn.target_group_id}`,
+          sourceHandle: 'source-right',
+          targetHandle: 'target-top',
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: '#ec4899', strokeWidth: 2, strokeDasharray: '3,3' },
+        };
+      });
+
+    setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges, ...itemToGroupEdges]);
 
     // Update refs
     prevConnectionsRef.current = connections;
@@ -511,11 +527,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
       // Save item-to-group connections
       const currentGroupConns = groupConnections
         .filter(c => c.source_id === selectedItem.id)
-        .map(c => c.target_id);
+        .map(c => c.target_group_id);
 
       const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
       for (const targetGroupId of groupsToAdd) {
-        await api.post('/service-groups/connections/to-item', {
+        await api.post('/service-groups/connections/from-item', {
           service_id: service.id,
           source_id: selectedItem.id,
           target_group_id: targetGroupId,
@@ -525,7 +541,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
       const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
       for (const targetGroupId of groupsToRemove) {
-        await api.delete(`/service-groups/connections/to-item/${service.id}/${selectedItem.id}/${targetGroupId}`);
+        await api.delete(`/service-groups/connections/from-item/${service.id}/${selectedItem.id}/${targetGroupId}`);
       }
 
       setShowConnectionModal(false);
