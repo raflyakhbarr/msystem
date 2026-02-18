@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -7,59 +7,79 @@ import ReactFlow, {
   reconnectEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { useMemo } from 'react';
-import { Plus, Link2, Trash2, Save } from 'lucide-react';
+import { Plus, Link2, Trash2, Save, Layers, FolderOpen } from 'lucide-react';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
 import CustomServiceNode from './CustomServiceNode';
+import CustomServiceGroupNode from './CustomServiceGroupNode';
 import ServiceConnectionModal from './ServiceConnectionModal';
 import ServiceItemContextMenu from './ServiceItemContextMenu';
+import ServiceGroupModal from './ServiceGroupModal';
+import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
+import ServiceItemFormModal from './ServiceItemFormModal';
 import { toast } from 'sonner';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { INITIAL_GROUP_FORM } from '../../utils/cmdb-utils/constants';
 
 const nodeTypes = {
   custom: CustomServiceNode,
+  serviceGroup: CustomServiceGroupNode,
 };
 
 const API_BASE_URL = 'http://localhost:5000';
+
+// Helper function to safely parse position from database
+const parsePosition = (positionData) => {
+  if (!positionData) return { x: 0, y: 0 };
+
+  // If it's already an object, return it
+  if (typeof positionData === 'object') {
+    return positionData;
+  }
+
+  // If it's a string, try to parse it
+  if (typeof positionData === 'string') {
+    try {
+      return JSON.parse(positionData);
+    } catch (e) {
+      console.error('Invalid position JSON:', positionData, e);
+      return { x: 0, y: 0 };
+    }
+  }
+
+  // Fallback
+  return { x: 0, y: 0 };
+};
 
 export default function ServiceVisualization({ service, workspaceId }) {
   const reactFlowInstance = useRef(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [editGroupMode, setEditGroupMode] = useState(false);
+  const [currentGroupId, setCurrentGroupId] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
+  const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
+  const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
+  const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
     show: false,
     position: { x: 0, y: 0 },
     item: null,
+    group: null,
   });
 
   // Edge Handles State
   const [edgeHandles, setEdgeHandles] = useState({});
 
+  // Item Form Data
   const [itemFormData, setItemFormData] = useState({
     name: '',
     type: 'server',
@@ -68,16 +88,31 @@ export default function ServiceVisualization({ service, workspaceId }) {
     ip: '',
     category: 'internal',
     location: '',
+    group_id: null,
   });
 
-  // Default viewport settings - atur zoom dan posisi default
+  // Group Form Data
+  const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
+
+  // Default viewport settings
   const defaultViewport = useMemo(() => ({
     x: 50,
     y: 100,
-    zoom: 0.1, // Zoom level: 0.1 = 10%, 1 = 100%, 2 = 200%
+    zoom: 0.1,
   }), []);
 
-  const { items, connections, loading, fetchAll } = useServiceItems(service.id, workspaceId);
+  const {
+    items,
+    connections,
+    groups,
+    groupConnections,
+    loading,
+    fetchAll,
+    createServiceGroup,
+    updateServiceGroup,
+    deleteServiceGroup,
+    saveServiceGroupConnections
+  } = useServiceItems(service.id, workspaceId);
 
   // Load service edge handles on mount
   useEffect(() => {
@@ -89,55 +124,38 @@ export default function ServiceVisualization({ service, workspaceId }) {
   }, [service.id, workspaceId]);
 
   // Siapkan data parent service dengan icon_preview
-  const parentServiceData = service ? {
+  const parentServiceData = useMemo(() => service ? {
     ...service,
     icon_preview: service.icon_type === 'upload' && service.icon_path
       ? `${API_BASE_URL}${service.icon_path}`
       : null
-  } : null;
+  } : null, [service]);
 
-  // Transform items to nodes
-  const initialNodes = items.map(item => ({
-    id: String(item.id),
-    type: 'custom',
-    position: item.position || { x: 0, y: 0 },
-    data: {
-      name: item.name,
-      type: item.type,
-      description: item.description,
-      status: item.status,
-      ip: item.ip,
-      category: item.category,
-      location: item.location,
-      parentService: parentServiceData,
-    },
-  }));
+  // Initialize with empty arrays
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // Transform connections to edges with handle positions
-  const initialEdges = connections.map(conn => {
-    const edgeId = `e${conn.source_id}-${conn.target_id}`;
-    const handleConfig = edgeHandles[edgeId] || {};
-    return {
-      id: edgeId,
-      source: String(conn.source_id),
-      target: String(conn.target_id),
-      sourceHandle: handleConfig.sourceHandle || 'source-right',
-      targetHandle: handleConfig.targetHandle || 'target-left',
-      type: 'smoothstep',
-      animated: false,
-      style: { stroke: '#10b981', strokeWidth: 2 },
-    };
-  });
+  // Use refs to track previous data and prevent unnecessary updates
+  const prevItemsRef = useRef(null);
+  const prevGroupsRef = useRef(null);
+  const prevConnectionsRef = useRef(null);
+  const prevGroupConnectionsRef = useRef(null);
+  const prevEdgeHandlesRef = useRef(null);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  // Update nodes when items change
+  // Update nodes when items or groups change
   useEffect(() => {
-    const newNodes = items.map(item => ({
+    // Skip if data hasn't actually changed
+    const itemsChanged = JSON.stringify(prevItemsRef.current) !== JSON.stringify(items);
+    const groupsChanged = JSON.stringify(prevGroupsRef.current) !== JSON.stringify(groups);
+
+    if (!itemsChanged && !groupsChanged) {
+      return;
+    }
+
+    const itemNodes = items.map(item => ({
       id: String(item.id),
       type: 'custom',
-      position: item.position || { x: 0, y: 0 },
+      position: parsePosition(item.position),
       data: {
         name: item.name,
         type: item.type,
@@ -147,14 +165,57 @@ export default function ServiceVisualization({ service, workspaceId }) {
         category: item.category,
         location: item.location,
         parentService: parentServiceData,
+        groupId: item.group_id,
+        orderInGroup: item.order_in_group,
       },
     }));
-    setNodes(newNodes);
-  }, [items, setNodes]);
+
+    const groupNodes = groups.map(group => {
+      const itemsInGroup = items.filter(i => i.group_id === group.id);
+      const itemCount = itemsInGroup.length;
+      const itemsPerRow = 3;
+      const rows = Math.ceil(itemCount / itemsPerRow);
+      const width = Math.max(200, itemsPerRow * 180);
+      const height = Math.max(200, rows * 120);
+
+      return {
+        id: `service-group-${group.id}`,
+        type: 'serviceGroup',
+        position: parsePosition(group.position),
+        data: {
+          name: group.name,
+          description: group.description,
+          color: group.color || 'rgba(16, 185, 129, 0.15)',
+          width: width,
+          height: height,
+          itemCount: itemCount,
+          groupId: group.id,
+        },
+        style: {
+          zIndex: 0,
+        },
+      };
+    });
+
+    setNodes([...groupNodes, ...itemNodes]);
+
+    // Update refs
+    prevItemsRef.current = items;
+    prevGroupsRef.current = groups;
+  }, [items, groups, parentServiceData]);
 
   // Update edges when connections change
   useEffect(() => {
-    const newEdges = connections.map(conn => {
+    // Skip if data hasn't actually changed
+    const connectionsChanged = JSON.stringify(prevConnectionsRef.current) !== JSON.stringify(connections);
+    const groupConnectionsChanged = JSON.stringify(prevGroupConnectionsRef.current) !== JSON.stringify(groupConnections);
+    const edgeHandlesChanged = JSON.stringify(prevEdgeHandlesRef.current) !== JSON.stringify(edgeHandles);
+
+    if (!connectionsChanged && !groupConnectionsChanged && !edgeHandlesChanged) {
+      return;
+    }
+
+    const itemEdges = connections.map(conn => {
       const edgeId = `e${conn.source_id}-${conn.target_id}`;
       const handleConfig = edgeHandles[edgeId] || {};
       return {
@@ -168,8 +229,46 @@ export default function ServiceVisualization({ service, workspaceId }) {
         style: { stroke: '#10b981', strokeWidth: 2 },
       };
     });
-    setEdges(newEdges);
-  }, [connections, edgeHandles, setEdges]);
+
+    const groupToGroupEdges = groupConnections
+      .filter(conn => conn.source_id && conn.target_id)
+      .map(conn => {
+        const edgeId = `service-group-e${conn.source_id}-${conn.target_id}`;
+        return {
+          id: edgeId,
+          source: `service-group-${conn.source_id}`,
+          target: `service-group-${conn.target_id}`,
+          sourceHandle: 'source-right',
+          targetHandle: 'target-left',
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' },
+        };
+      });
+
+    const groupToItemEdges = groupConnections
+      .filter(conn => conn.source_group_id && conn.target_id)
+      .map(conn => {
+        const edgeId = `service-group-item-e${conn.source_group_id}-${conn.target_id}`;
+        return {
+          id: edgeId,
+          source: `service-group-${conn.source_group_id}`,
+          target: String(conn.target_id),
+          sourceHandle: 'source-bottom',
+          targetHandle: 'target-top',
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: '#8b5cf6', strokeWidth: 2 },
+        };
+      });
+
+    setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges]);
+
+    // Update refs
+    prevConnectionsRef.current = connections;
+    prevGroupConnectionsRef.current = groupConnections;
+    prevEdgeHandlesRef.current = edgeHandles;
+  }, [connections, groupConnections, edgeHandles]);
 
   const handleOpenAddModal = useCallback(() => {
     setItemFormData({
@@ -180,9 +279,17 @@ export default function ServiceVisualization({ service, workspaceId }) {
       ip: '',
       category: 'internal',
       location: '',
+      group_id: null,
     });
     setEditItem(null);
     setShowAddModal(true);
+  }, []);
+
+  const handleOpenManageGroups = useCallback(() => {
+    setGroupFormData(INITIAL_GROUP_FORM);
+    setEditGroupMode(false);
+    setCurrentGroupId(null);
+    setShowGroupModal(true);
   }, []);
 
   const handleEditItem = useCallback((item) => {
@@ -194,9 +301,21 @@ export default function ServiceVisualization({ service, workspaceId }) {
       ip: item.ip || '',
       category: item.category || 'internal',
       location: item.location || '',
+      group_id: item.group_id || null,
     });
     setEditItem(item);
     setShowAddModal(true);
+  }, []);
+
+  const handleEditGroup = useCallback((group) => {
+    setGroupFormData({
+      name: group.name || '',
+      description: group.description || '',
+      color: group.color || '#e0e7ff'
+    });
+    setCurrentGroupId(group.id);
+    setEditGroupMode(true);
+    setShowGroupModal(true);
   }, []);
 
   const handleItemSubmit = async (e) => {
@@ -226,6 +345,35 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   };
 
+  const handleGroupSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      if (editGroupMode) {
+        await updateServiceGroup(currentGroupId, groupFormData);
+      } else {
+        const position = reactFlowInstance.current
+          ? { x: Math.random() * 200, y: Math.random() * 200 }
+          : { x: 0, y: 0 };
+
+        await createServiceGroup({
+          ...groupFormData,
+          position,
+        });
+      }
+
+      await fetchAll();
+      setShowGroupModal(false);
+      setGroupFormData(INITIAL_GROUP_FORM);
+      setEditGroupMode(false);
+      setCurrentGroupId(null);
+      toast.success(editGroupMode ? 'Group updated!' : 'Group created!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to save group: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
   const handleDeleteItem = async (itemId) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
@@ -239,6 +387,16 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   };
 
+  const handleDeleteGroup = async (groupId) => {
+    try {
+      await deleteServiceGroup(groupId);
+      toast.success('Group deleted!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete group');
+    }
+  };
+
   const handleOpenConnectionModal = useCallback((item) => {
     setSelectedItem(item);
     const existing = connections
@@ -248,16 +406,30 @@ export default function ServiceVisualization({ service, workspaceId }) {
     setShowConnectionModal(true);
   }, [connections]);
 
+  const handleOpenGroupConnectionModal = (group) => {
+    setSelectedGroupForConnection(group);
+
+    const existingGroupConns = groupConnections
+      .filter(conn => conn.source_id === group.id)
+      .map(conn => conn.target_id);
+
+    const existingItemConns = groupConnections
+      .filter(conn => conn.source_group_id === group.id)
+      .map(conn => conn.target_id);
+
+    setSelectedGroupToGroupConnections(existingGroupConns);
+    setSelectedGroupToItemConnections(existingItemConns);
+    setShowGroupConnectionModal(true);
+  };
+
   const handleSaveConnections = async () => {
     if (!selectedItem) return;
 
     try {
-      // Get current connections
       const current = connections
         .filter(c => c.source_id === selectedItem.id)
         .map(c => c.target_id);
 
-      // Add new connections
       const toAdd = selectedConnections.filter(id => !current.includes(id));
       for (const targetId of toAdd) {
         await api.post(`/service-items/${service.id}/connections`, {
@@ -267,7 +439,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
         });
       }
 
-      // Remove old connections
       const toRemove = current.filter(id => !selectedConnections.includes(id));
       for (const targetId of toRemove) {
         await api.delete(`/service-items/${service.id}/connections/${selectedItem.id}/${targetId}`);
@@ -282,18 +453,49 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   };
 
+  const handleSaveGroupConnections = async () => {
+    if (!selectedGroupForConnection) return;
+
+    try {
+      await saveServiceGroupConnections(
+        selectedGroupForConnection.id,
+        selectedGroupToGroupConnections,
+        selectedGroupToItemConnections
+      );
+
+      setShowGroupConnectionModal(false);
+      toast.success('Group connections updated!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update group connections');
+    }
+  };
+
   const handleSavePositions = async () => {
     if (isSaving) return;
 
     setIsSaving(true);
     try {
-      const updatePromises = nodes.map(node =>
-        api.put(`/service-items/items/${node.id}/position`, {
-          position: node.position,
-        })
-      );
+      // Save item positions
+      const itemPromises = nodes
+        .filter(node => node.type === 'custom')
+        .map(node =>
+          api.put(`/service-items/items/${node.id}/position`, {
+            position: node.position,
+          })
+        );
 
-      await Promise.all(updatePromises);
+      // Save group positions
+      const groupPromises = nodes
+        .filter(node => node.type === 'serviceGroup')
+        .map(node => {
+          const groupId = node.data.groupId;
+          return api.put(`/service-groups/${groupId}/position`, {
+            position: node.position,
+          });
+        });
+
+      await Promise.all([...itemPromises, ...groupPromises]);
       toast.success('Positions saved!');
     } catch (err) {
       console.error(err);
@@ -305,50 +507,74 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Context Menu Handlers
   const handleCloseContextMenu = useCallback(() => {
-    setContextMenu({ show: false, position: { x: 0, y: 0 }, item: null });
+    setContextMenu({ show: false, position: { x: 0, y: 0 }, item: null, group: null });
   }, []);
 
   const handleNodeContextMenu = useCallback((event, node) => {
     event.preventDefault();
-    const item = items.find(i => i.id === parseInt(node.id));
-    if (!item) return;
 
-    setContextMenu({
-      show: true,
-      position: {
-        x: event.pageX,
-        y: event.pageY,
-      },
-      item,
-    });
-  }, [items]);
+    if (node.type === 'serviceGroup') {
+      const group = groups.find(g => g.id === node.data.groupId);
+      if (!group) return;
 
-  const handleContextMenuEdit = useCallback((item) => {
-    setEditItem(item);
-    setItemFormData({
-      name: item.name || '',
-      type: item.type || 'server',
-      description: item.description || '',
-      status: item.status || 'active',
-      ip: item.ip || '',
-      category: item.category || 'internal',
-      location: item.location || '',
-    });
-    setShowAddModal(true);
-  }, []);
+      setContextMenu({
+        show: true,
+        position: {
+          x: event.pageX,
+          y: event.pageY,
+        },
+        item: null,
+        group,
+      });
+    } else {
+      const item = items.find(i => i.id === parseInt(node.id));
+      if (!item) return;
 
-  const handleContextMenuDelete = useCallback((item) => {
-    handleDeleteItem(item.id);
-  }, [handleDeleteItem]);
+      setContextMenu({
+        show: true,
+        position: {
+          x: event.pageX,
+          y: event.pageY,
+        },
+        item,
+        group: null,
+      });
+    }
+  }, [items, groups]);
 
-  const handleContextMenuManageConnections = useCallback((item) => {
-    handleOpenConnectionModal(item);
-  }, [handleOpenConnectionModal]);
+  const handleContextMenuEdit = useCallback((target) => {
+    handleCloseContextMenu();
+    if (contextMenu.item) {
+      handleEditItem(contextMenu.item);
+    } else if (contextMenu.group) {
+      handleEditGroup(contextMenu.group);
+    }
+  }, [contextMenu, handleEditItem, handleEditGroup, handleCloseContextMenu]);
 
-  // Handle reconnecting edges (moving connection points only, NOT creating new connections)
+  const handleContextMenuDelete = useCallback(() => {
+    handleCloseContextMenu();
+    if (contextMenu.item) {
+      handleDeleteItem(contextMenu.item.id);
+    }
+  }, [contextMenu, handleDeleteItem, handleCloseContextMenu]);
+
+  const handleContextMenuManageConnections = useCallback(() => {
+    handleCloseContextMenu();
+    if (contextMenu.item) {
+      handleOpenConnectionModal(contextMenu.item);
+    }
+  }, [contextMenu, handleOpenConnectionModal, handleCloseContextMenu]);
+
+  const handleContextMenuManageGroupConnections = useCallback(() => {
+    handleCloseContextMenu();
+    if (contextMenu.group) {
+      handleOpenGroupConnectionModal(contextMenu.group);
+    }
+  }, [contextMenu, handleOpenGroupConnectionModal, handleCloseContextMenu]);
+
+  // Handle reconnecting edges
   const handleReconnect = useCallback(async (oldEdge, newConnection) => {
     try {
-      // Update edge handles state
       const newEdgeHandles = {
         ...edgeHandles,
         [oldEdge.id]: {
@@ -395,6 +621,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
         </Button>
 
         <Button
+          onClick={handleOpenManageGroups}
+          className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white"
+        >
+          <FolderOpen size={16} />
+          Manage Groups
+        </Button>
+
+        <Button
           onClick={handleSavePositions}
           disabled={isSaving}
           className="flex items-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 text-white disabled:opacity-50"
@@ -425,130 +659,54 @@ export default function ServiceVisualization({ service, workspaceId }) {
       </ReactFlow>
 
       {/* Add/Edit Item Modal */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Service Item' : 'Add New Service Item'}
-            </DialogTitle>
-          </DialogHeader>
+      <ServiceItemFormModal
+        show={showAddModal}
+        editMode={!!editItem}
+        formData={itemFormData}
+        groups={groups}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditItem(null);
+          setItemFormData({
+            name: '',
+            type: 'server',
+            description: '',
+            status: 'active',
+            ip: '',
+            category: 'internal',
+            location: '',
+            group_id: null,
+          });
+        }}
+        onSubmit={handleItemSubmit}
+        onInputChange={(e) => {
+          const { name, value } = e.target;
+          setItemFormData(prev => ({ ...prev, [name]: value }));
+        }}
+      />
 
-          {showAddModal && (
-            <form onSubmit={handleItemSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  required
-                  value={itemFormData.name}
-                  onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
-                  placeholder="e.g., Web Server"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="type">Type</Label>
-                <Select
-                  value={itemFormData.type}
-                  onValueChange={(value) => setItemFormData({ ...itemFormData, type: value })}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="server">Server</SelectItem>
-                    <SelectItem value="database">Database</SelectItem>
-                    <SelectItem value="switch">Switch</SelectItem>
-                    <SelectItem value="workstation">Workstation</SelectItem>
-                    <SelectItem value="firewall">Firewall</SelectItem>
-                    <SelectItem value="router">Router</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={itemFormData.status}
-                  onValueChange={(value) => setItemFormData({ ...itemFormData, status: value })}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ip">IP Address</Label>
-                <Input
-                  id="ip"
-                  type="text"
-                  value={itemFormData.ip}
-                  onChange={(e) => setItemFormData({ ...itemFormData, ip: e.target.value })}
-                  placeholder="192.168.1.1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={itemFormData.category}
-                  onValueChange={(value) => setItemFormData({ ...itemFormData, category: value })}
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="internal">Internal</SelectItem>
-                    <SelectItem value="external">External</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  type="text"
-                  value={itemFormData.location}
-                  onChange={(e) => setItemFormData({ ...itemFormData, location: e.target.value })}
-                  placeholder="e.g., Data Center 1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={itemFormData.description}
-                  onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
-                  rows={3}
-                  placeholder="Item description..."
-                />
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowAddModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  {editItem ? 'Update' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Group Modal */}
+      <ServiceGroupModal
+        show={showGroupModal}
+        editMode={editGroupMode}
+        formData={groupFormData}
+        groups={groups}
+        currentWorkspace={{ id: workspaceId, name: `Workspace ${workspaceId}` }}
+        onClose={() => {
+          setShowGroupModal(false);
+          setGroupFormData(INITIAL_GROUP_FORM);
+          setEditGroupMode(false);
+          setCurrentGroupId(null);
+        }}
+        onSubmit={handleGroupSubmit}
+        onInputChange={(e) => {
+          const { name, value } = e.target;
+          setGroupFormData(prev => ({ ...prev, [name]: value }));
+        }}
+        onEditGroup={handleEditGroup}
+        onDeleteGroup={handleDeleteGroup}
+        onOpenGroupConnection={handleOpenGroupConnectionModal}
+      />
 
       {/* Connection Modal */}
       <ServiceConnectionModal
@@ -567,6 +725,32 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onSave={handleSaveConnections}
       />
 
+      {/* Group Connection Modal */}
+      <ServiceGroupConnectionModal
+        show={showGroupConnectionModal}
+        selectedGroup={selectedGroupForConnection}
+        groups={groups}
+        items={items}
+        selectedGroupConnections={selectedGroupToGroupConnections}
+        selectedItemConnections={selectedGroupToItemConnections}
+        onClose={() => setShowGroupConnectionModal(false)}
+        onSave={handleSaveGroupConnections}
+        onToggleGroupConnection={(groupId) => {
+          if (selectedGroupToGroupConnections.includes(groupId)) {
+            setSelectedGroupToGroupConnections(selectedGroupToGroupConnections.filter(id => id !== groupId));
+          } else {
+            setSelectedGroupToGroupConnections([...selectedGroupToGroupConnections, groupId]);
+          }
+        }}
+        onToggleItemConnection={(itemId) => {
+          if (selectedGroupToItemConnections.includes(itemId)) {
+            setSelectedGroupToItemConnections(selectedGroupToItemConnections.filter(id => id !== itemId));
+          } else {
+            setSelectedGroupToItemConnections([...selectedGroupToItemConnections, itemId]);
+          }
+        }}
+      />
+
       {/* Context Menu */}
       <ServiceItemContextMenu
         show={contextMenu.show}
@@ -575,6 +759,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onEdit={handleContextMenuEdit}
         onDelete={handleContextMenuDelete}
         onManageConnections={handleContextMenuManageConnections}
+        onManageGroupConnections={handleContextMenuManageGroupConnections}
         onClose={handleCloseContextMenu}
       />
     </div>

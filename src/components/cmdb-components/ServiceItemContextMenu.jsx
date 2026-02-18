@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Link2 } from 'lucide-react';
+import { Pencil, Trash2, Link2, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function ServiceItemContextMenu({
@@ -8,13 +8,14 @@ export default function ServiceItemContextMenu({
   onEdit,
   onDelete,
   onManageConnections,
+  onManageGroupConnections,
   onClose,
 }) {
-  if (!show || !item) return null;
+  if (!show) return null;
+  const isGroup = !item; // If no item, then it's a group context menu
 
   const handleAction = (action) => {
     action();
-    onClose();
   };
 
   return (
@@ -35,20 +36,39 @@ export default function ServiceItemContextMenu({
       >
         {/* Header */}
         <div className="px-3 py-2 border-b border-border">
-          <p className="text-xs text-muted-foreground">Service Item Actions</p>
-          <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {isGroup ? 'Service Group Actions' : 'Service Item Actions'}
+          </p>
+          <p className="text-sm font-semibold text-foreground truncate">
+            {isGroup ? 'Service Group' : item.name}
+          </p>
         </div>
 
         {/* Menu Items */}
         <div className="py-1">
-          {/* Manage Connections */}
-          <button
-            onClick={() => handleAction(() => onManageConnections(item))}
-            className="w-full px-4 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950/20 flex items-center gap-3 text-sm text-foreground transition-colors"
-          >
-            <Link2 className="text-blue-600" size={16} />
-            <span>Manage Connections</span>
-          </button>
+          {!isGroup && (
+            <>
+              {/* Manage Connections - Only for items */}
+              <button
+                onClick={() => handleAction(() => onManageConnections(item))}
+                className="w-full px-4 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950/20 flex items-center gap-3 text-sm text-foreground transition-colors"
+              >
+                <Link2 className="text-blue-600" size={16} />
+                <span>Manage Connections</span>
+              </button>
+            </>
+          )}
+
+          {/* Manage Group Connections - Only for groups */}
+          {isGroup && onManageGroupConnections && (
+            <button
+              onClick={() => handleAction(() => onManageGroupConnections())}
+              className="w-full px-4 py-2.5 text-left hover:bg-purple-50 dark:hover:bg-purple-950/20 flex items-center gap-3 text-sm text-foreground transition-colors"
+            >
+              <FolderOpen className="text-purple-600" size={16} />
+              <span>Manage Group Connections</span>
+            </button>
+          )}
 
           {/* Edit */}
           <button
@@ -56,19 +76,23 @@ export default function ServiceItemContextMenu({
             className="w-full px-4 py-2.5 text-left hover:bg-yellow-50 dark:hover:bg-yellow-950/20 flex items-center gap-3 text-sm text-foreground transition-colors"
           >
             <Pencil className="text-yellow-600" size={16} />
-            <span>Edit Item</span>
+            <span>{isGroup ? 'Edit Group' : 'Edit Item'}</span>
           </button>
 
-          <div className="my-1 border-t border-border"></div>
+          {!isGroup && (
+            <>
+              <div className="my-1 border-t border-border"></div>
 
-          {/* Delete */}
-          <button
-            onClick={() => handleAction(() => onDelete(item))}
-            className="w-full px-4 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-3 text-sm text-red-600 transition-colors"
-          >
-            <Trash2 size={16} />
-            <span>Delete Item</span>
-          </button>
+              {/* Delete - Only for items */}
+              <button
+                onClick={() => handleAction(() => onDelete(item))}
+                className="w-full px-4 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-3 text-sm text-red-600 transition-colors"
+              >
+                <Trash2 size={16} />
+                <span>Delete Item</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
