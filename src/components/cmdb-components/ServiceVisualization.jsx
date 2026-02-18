@@ -476,10 +476,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .map(c => c.target_id);
     setSelectedConnections(existing);
 
-    // Get existing group connections for this item
+    // Get existing group connections for this item (item-to-group)
     const existingGroupConns = groupConnections
       .filter(conn => conn.source_id === item.id)
-      .map(conn => conn.target_id);
+      .map(conn => conn.target_group_id);
     setSelectedGroupConnections(existingGroupConns);
 
     setShowConnectionModal(true);
@@ -494,7 +494,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
     const existingItemConns = groupConnections
       .filter(conn => conn.source_group_id === group.id)
-      .map(conn => conn.target_id);
+      .map(conn => conn.target_item_id);
 
     setSelectedGroupToGroupConnections(existingGroupConns);
     setSelectedGroupToItemConnections(existingItemConns);
