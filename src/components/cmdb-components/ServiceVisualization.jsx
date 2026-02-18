@@ -64,6 +64,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [currentGroupId, setCurrentGroupId] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
+  const [selectedGroupConnections, setSelectedGroupConnections] = useState([]);
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
@@ -302,13 +303,13 @@ export default function ServiceVisualization({ service, workspaceId }) {
       });
 
     const groupToItemEdges = groupConnections
-      .filter(conn => conn.source_group_id && conn.target_id)
+      .filter(conn => conn.source_group_id && conn.target_item_id)
       .map(conn => {
-        const edgeId = `service-group-item-e${conn.source_group_id}-${conn.target_id}`;
+        const edgeId = `service-group-item-e${conn.source_group_id}-${conn.target_item_id}`;
         return {
           id: edgeId,
           source: `service-group-${conn.source_group_id}`,
-          target: String(conn.target_id),
+          target: String(conn.target_item_id),
           sourceHandle: 'source-bottom',
           targetHandle: 'target-top',
           type: 'smoothstep',
@@ -458,8 +459,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .filter(c => c.source_id === item.id)
       .map(c => c.target_id);
     setSelectedConnections(existing);
+
+    // Get existing group connections for this item
+    const existingGroupConns = groupConnections
+      .filter(conn => conn.source_id === item.id)
+      .map(conn => conn.target_id);
+    setSelectedGroupConnections(existingGroupConns);
+
     setShowConnectionModal(true);
-  }, [connections]);
+  }, [connections, groupConnections]);
 
   const handleOpenGroupConnectionModal = (group) => {
     setSelectedGroupForConnection(group);
@@ -481,6 +489,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     if (!selectedItem) return;
 
     try {
+      // Save item-to-item connections
       const current = connections
         .filter(c => c.source_id === selectedItem.id)
         .map(c => c.target_id);
@@ -497,6 +506,26 @@ export default function ServiceVisualization({ service, workspaceId }) {
       const toRemove = current.filter(id => !selectedConnections.includes(id));
       for (const targetId of toRemove) {
         await api.delete(`/service-items/${service.id}/connections/${selectedItem.id}/${targetId}`);
+      }
+
+      // Save item-to-group connections
+      const currentGroupConns = groupConnections
+        .filter(c => c.source_id === selectedItem.id)
+        .map(c => c.target_id);
+
+      const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
+      for (const targetGroupId of groupsToAdd) {
+        await api.post('/service-groups/connections/to-item', {
+          service_id: service.id,
+          source_id: selectedItem.id,
+          target_group_id: targetGroupId,
+          workspace_id: workspaceId,
+        });
+      }
+
+      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
+      for (const targetGroupId of groupsToRemove) {
+        await api.delete(`/service-groups/connections/to-item/${service.id}/${selectedItem.id}/${targetGroupId}`);
       }
 
       setShowConnectionModal(false);
@@ -768,13 +797,25 @@ export default function ServiceVisualization({ service, workspaceId }) {
         show={showConnectionModal}
         selectedItem={selectedItem}
         allItems={items}
+        groups={groups}
         selectedConnections={selectedConnections}
-        onClose={() => setShowConnectionModal(false)}
+        selectedGroupConnections={selectedGroupConnections}
+        onClose={() => {
+          setShowConnectionModal(false);
+          setSelectedGroupConnections([]);
+        }}
         onToggleConnection={(itemId) => {
           if (selectedConnections.includes(itemId)) {
             setSelectedConnections(selectedConnections.filter(id => id !== itemId));
           } else {
             setSelectedConnections([...selectedConnections, itemId]);
+          }
+        }}
+        onToggleGroupConnection={(groupId) => {
+          if (selectedGroupConnections.includes(groupId)) {
+            setSelectedGroupConnections(selectedGroupConnections.filter(id => id !== groupId));
+          } else {
+            setSelectedGroupConnections([...selectedGroupConnections, groupId]);
           }
         }}
         onSave={handleSaveConnections}

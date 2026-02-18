@@ -10,7 +10,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
 
   const fetchServiceItems = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
-
     try {
       const res = await api.get(`/service-items/${serviceId}/items?workspace_id=${workspaceId}`);
       setItems(res.data);
@@ -21,7 +20,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
 
   const fetchServiceConnections = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
-
     try {
       const res = await api.get(`/service-items/${serviceId}/connections?workspace_id=${workspaceId}`);
       setConnections(res.data);
@@ -32,7 +30,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
 
   const fetchServiceGroups = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
-
     try {
       const res = await api.get(`/service-groups/${serviceId}?workspace_id=${workspaceId}`);
       setGroups(res.data);
@@ -43,7 +40,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
 
   const fetchServiceGroupConnections = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
-
     try {
       const res = await api.get(`/service-groups/${serviceId}/connections?workspace_id=${workspaceId}`);
       setGroupConnections(res.data);
@@ -54,27 +50,25 @@ export const useServiceItems = (serviceId, workspaceId) => {
 
   const fetchAll = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
-
     setLoading(true);
     try {
       await Promise.all([
         fetchServiceItems(),
         fetchServiceConnections(),
         fetchServiceGroups(),
-        fetchServiceGroupConnections()
+        fetchServiceGroupConnections(),
       ]);
     } finally {
       setLoading(false);
     }
   }, [fetchServiceItems, fetchServiceConnections, fetchServiceGroups, fetchServiceGroupConnections, serviceId, workspaceId]);
 
-  // Create service group
   const createServiceGroup = useCallback(async (groupData) => {
     try {
       const res = await api.post('/service-groups', {
         ...groupData,
         service_id: serviceId,
-        workspace_id: workspaceId
+        workspace_id: workspaceId,
       });
       await fetchServiceGroups();
       return res.data;
@@ -84,7 +78,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
     }
   }, [serviceId, workspaceId, fetchServiceGroups]);
 
-  // Update service group
   const updateServiceGroup = useCallback(async (groupId, groupData) => {
     try {
       const res = await api.put(`/service-groups/${groupId}`, groupData);
@@ -96,7 +89,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
     }
   }, [fetchServiceGroups]);
 
-  // Delete service group
   const deleteServiceGroup = useCallback(async (groupId) => {
     try {
       await api.delete(`/service-groups/${groupId}`);
@@ -107,51 +99,47 @@ export const useServiceItems = (serviceId, workspaceId) => {
     }
   }, [fetchAll]);
 
-  // Save service group connections
   const saveServiceGroupConnections = useCallback(async (groupId, selectedGroupConns, selectedItemConns) => {
     try {
-      // Get current group connections
+      // ── GROUP-TO-GROUP connections ──────────────────────────────────────
+      // Koneksi tipe ini: source_id = groupId, target_id = group lain
       const currentGroupConns = groupConnections
-        .filter(conn => conn.source_id === groupId && conn.target_id)
+        .filter(conn => conn.source_id === groupId && conn.target_id !== null)
         .map(conn => conn.target_id);
 
-      // Add new group connections
       const groupsToAdd = selectedGroupConns.filter(id => !currentGroupConns.includes(id));
       for (const targetId of groupsToAdd) {
         await api.post('/service-groups/connections', {
           service_id: serviceId,
           source_id: groupId,
           target_id: targetId,
-          workspace_id: workspaceId
+          workspace_id: workspaceId,
         });
       }
 
-      // Remove old group connections
       const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConns.includes(id));
       for (const targetId of groupsToRemove) {
         await api.delete(`/service-groups/connections/${serviceId}/${groupId}/${targetId}`);
       }
 
-      // Get current item connections
+      // ── GROUP-TO-ITEM connections ───────────────────────────────────────
       const currentItemConns = groupConnections
-        .filter(conn => conn.source_group_id === groupId && conn.target_id)
-        .map(conn => conn.target_id);
+        .filter(conn => conn.source_group_id === groupId && conn.target_item_id !== null)
+        .map(conn => conn.target_item_id);
 
-      // Add new item connections
       const itemsToAdd = selectedItemConns.filter(id => !currentItemConns.includes(id));
-      for (const targetId of itemsToAdd) {
+      for (const targetItemId of itemsToAdd) {
         await api.post('/service-groups/connections/to-item', {
           service_id: serviceId,
           source_group_id: groupId,
-          target_id: targetId,
-          workspace_id: workspaceId
+          target_item_id: targetItemId,   // PERBAIKAN: ganti target_id → target_item_id
+          workspace_id: workspaceId,
         });
       }
 
-      // Remove old item connections
       const itemsToRemove = currentItemConns.filter(id => !selectedItemConns.includes(id));
-      for (const targetId of itemsToRemove) {
-        await api.delete(`/service-groups/connections/to-item/${serviceId}/${groupId}/${targetId}`);
+      for (const targetItemId of itemsToRemove) {
+        await api.delete(`/service-groups/connections/to-item/${serviceId}/${groupId}/${targetItemId}`);
       }
 
       await fetchServiceGroupConnections();
