@@ -119,6 +119,8 @@ export default function CMDBVisualization() {
   const nodesRef = useRef([]);
   const isReorderingRef = useRef(false);
   const socketRef = useRef(null);
+  const prevWorkspaceIdRef = useRef(null);
+  const [shouldAutoCenter, setShouldAutoCenter] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -1665,6 +1667,87 @@ export default function CMDBVisualization() {
     setShowTableDrawer(prev => !prev);
   }, []);
 
+  // Handler untuk Jump to First Node (Quick Jump)
+  const handleJumpToFirstNode = useCallback(() => {
+    if (!reactFlowInstance.current || nodes.length === 0) return;
+
+    const firstNode = nodes[0];
+    let targetX = firstNode.position.x;
+    let targetY = firstNode.position.y;
+
+    // Handle nodes dalam group
+    if (firstNode.parentNode) {
+      const parentNode = nodes.find(n => n.id === firstNode.parentNode);
+      if (parentNode) {
+        targetX += parentNode.position.x;
+        targetY += parentNode.position.y;
+      }
+    }
+
+    // Center viewport ke node pertama
+    reactFlowInstance.current.setCenter(targetX, targetY, {
+      zoom: 1.2,
+      duration: 800,
+    });
+
+    // Highlight node
+    setNodes(prevNodes =>
+      prevNodes.map(n => ({
+        ...n,
+        style: {
+          ...n.style,
+          outline: n.id === firstNode.id ? '3px solid #3b82f6' : 'none',
+          outlineOffset: '2px',
+          transition: 'outline 0.3s ease',
+        }
+      }))
+    );
+
+    // Remove highlight setelah 3 detik
+    setTimeout(() => {
+      setNodes(prevNodes =>
+        prevNodes.map(n => ({
+          ...n,
+          style: {
+            ...n.style,
+            outline: 'none',
+          }
+        }))
+      );
+    }, 3000);
+  }, [nodes, setNodes]);
+
+  // Handler untuk Fit View (center semua nodes)
+  const handleFitView = useCallback(() => {
+    if (!reactFlowInstance.current || nodes.length === 0) return;
+
+    reactFlowInstance.current.fitView({
+      padding: 0.2,
+      duration: 800,
+    });
+  }, [nodes]);
+
+  // Auto-center saat workspace berubah
+  useEffect(() => {
+    if (currentWorkspace && currentWorkspace.id !== prevWorkspaceIdRef.current) {
+      prevWorkspaceIdRef.current = currentWorkspace.id;
+      setShouldAutoCenter(true);
+    }
+  }, [currentWorkspace?.id]); // Hanya pantau ID, bukan object
+
+  // Trigger auto-center setelah nodes terupdate dari workspace switch
+  useEffect(() => {
+    if (shouldAutoCenter && nodes.length > 0 && reactFlowInstance.current) {
+      // Tunggu sedikit untuk memastikan nodes sudah ter-render
+      const timer = setTimeout(() => {
+        handleJumpToFirstNode();
+        setShouldAutoCenter(false);
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [shouldAutoCenter, nodes.length, reactFlowInstance, handleJumpToFirstNode]);
+
   return (
     <div className="w-full h-screen flex flex-col">
       <VisualizationNavbar
@@ -1779,6 +1862,8 @@ export default function CMDBVisualization() {
         hideViewAllOption={true}
         showMiniMap={showMiniMap}
         onToggleMiniMap={() => setShowMiniMap(prev => !prev)}
+        onJumpToFirstNode={handleJumpToFirstNode}
+        onFitView={handleFitView}
       />
 
       {/* Rest of your JSX remains mostly the same, but uses processedNodes and processedEdges */}

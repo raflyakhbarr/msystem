@@ -2,7 +2,7 @@ import {
   Eye, Save, Plus, Layers, MousePointer2, Square,
   GitBranch, Download, Hand, Undo2, Redo2,
   ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table,
-  Map // TAMBAHKAN IMPORT INI
+  Map, Crosshair, Maximize2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,6 +59,8 @@ export default function VisualizationNavbar({
   hideViewAllOption = false,
   viewAllMode = false,
   onToggleViewAll,
+  onJumpToFirstNode,
+  onFitView,
 }) {
   const getSelectionIcon = () => {
     switch (selectionMode) {
@@ -282,6 +284,34 @@ export default function VisualizationNavbar({
                 <Map size={14} />
                 <span className="hidden lg:inline ml-1">MiniMap</span>
               </Button>
+
+              {/* QUICK JUMP BUTTON */}
+              {onJumpToFirstNode && (
+                <Button
+                  onClick={onJumpToFirstNode}
+                  variant="ghost"
+                  size="sm"
+                  title="Jump to First Node"
+                  disabled={!currentWorkspace || nodes.length === 0}
+                >
+                  <Crosshair size={14} />
+                  <span className="hidden lg:inline ml-1">Jump</span>
+                </Button>
+              )}
+
+              {/* FIT VIEW BUTTON */}
+              {onFitView && (
+                <Button
+                  onClick={onFitView}
+                  variant="ghost"
+                  size="sm"
+                  title="Fit All Nodes in View"
+                  disabled={!currentWorkspace || nodes.length === 0}
+                >
+                  <Maximize2 size={14} />
+                  <span className="hidden lg:inline ml-1">Fit View</span>
+                </Button>
+              )}
             </div>
 
             <div className="h-8 w-px bg-border"></div>
