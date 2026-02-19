@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, Link } from 'lucide-react';
 import {
   Dialog,
@@ -23,8 +23,23 @@ export default function ServiceConnectionModal({
   onToggleGroupConnection,
   onSave
 }) {
-  const [searchQuery, setSearchQuery] =('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('items');
+
+  // Reset search query when tab changes
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    setSearchQuery('');
+  };
+
+  // Reset search query and activeTab when modal opens
+  useEffect(() => {
+    if (show) {
+      setSearchQuery('');
+      setActiveTab('items');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show]);
 
   if (!show) return null;
 
@@ -57,7 +72,7 @@ export default function ServiceConnectionModal({
             <p className="font-semibold">{selectedItem?.name}</p>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="items">
                 To Items ({selectedConnections.length})
