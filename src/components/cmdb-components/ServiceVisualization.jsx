@@ -211,9 +211,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
       // Create item nodes INSIDE this group
       groupItems.forEach((item, index) => {
+        // Hitung posisi grid
         const row = Math.floor(index / itemsPerRow);
         const col = index % itemsPerRow;
 
+        // Hitung posisi relatif terhadap group
         const relativeX = padding + col * (itemWidth + gapX);
         const relativeY = headerHeight + padding + row * (itemHeight + gapY);
 
@@ -289,13 +291,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
     const itemEdges = connections.map(conn => {
       const edgeId = `e${conn.source_id}-${conn.target_id}`;
-      const handleConfig = edgeHandles[edgeId] || {};
+      const handleConfig = edgeHandles[edgeId];
+
       return {
         id: edgeId,
         source: String(conn.source_id),
         target: String(conn.target_id),
-        sourceHandle: handleConfig.sourceHandle || 'source-right',
-        targetHandle: handleConfig.targetHandle || 'target-left',
+        // DEFAULT: Ubah dari kanan-kiri ke atas-bawah
+        sourceHandle: (handleConfig && handleConfig.sourceHandle) || 'source-bottom',
+        targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-bottom',
         type: 'smoothstep',
         animated: false,
         style: { stroke: '#10b981', strokeWidth: 2 },
@@ -307,12 +311,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .filter(conn => conn.source_id && conn.target_id)
       .map(conn => {
         const edgeId = `service-group-e${conn.source_id}-${conn.target_id}`;
+        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+
         return {
           id: edgeId,
           source: `service-group-${conn.source_id}`,
           target: `service-group-${conn.target_id}`,
-          sourceHandle: 'source-right',
-          targetHandle: 'target-left',
+          sourceHandle: (handleConfig && handleConfig.sourceHandle) || 'source-right',
+          targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-left',
           type: 'smoothstep',
           animated: false,
           style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' },
@@ -323,12 +329,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .filter(conn => conn.source_group_id && conn.target_item_id)
       .map(conn => {
         const edgeId = `service-group-item-e${conn.source_group_id}-${conn.target_item_id}`;
+        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+
         return {
           id: edgeId,
           source: `service-group-${conn.source_group_id}`,
           target: String(conn.target_item_id),
-          sourceHandle: 'source-bottom',
-          targetHandle: 'target-top',
+          sourceHandle: (handleConfig && handleConfig.sourceHandle) || 'source-bottom',
+          targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-top',
           type: 'smoothstep',
           animated: false,
           style: { stroke: '#8b5cf6', strokeWidth: 2 },
@@ -339,12 +347,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .filter(conn => conn.source_id && conn.target_group_id)
       .map(conn => {
         const edgeId = `service-item-group-e${conn.source_id}-${conn.target_group_id}`;
+        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+
         return {
           id: edgeId,
           source: String(conn.source_id),
           target: `service-group-${conn.target_group_id}`,
-          sourceHandle: 'source-right',
-          targetHandle: 'target-top',
+          sourceHandle: (handleConfig && handleConfig.sourceHandle) || 'source-right',
+          targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-top',
           type: 'smoothstep',
           animated: false,
           style: { stroke: '#ec4899', strokeWidth: 2, strokeDasharray: '3,3' },
@@ -797,15 +807,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Handle reconnecting edges
   const handleReconnect = useCallback(async (oldEdge, newConnection) => {
+    // Save to database FIRST
     try {
-      const newEdgeHandles = {
-        ...edgeHandles,
-        [oldEdge.id]: {
-          sourceHandle: newConnection.sourceHandle,
-          targetHandle: newConnection.targetHandle,
-        }
-      };
-
       await saveServiceEdgeHandle(
         oldEdge.id,
         newConnection.sourceHandle,
@@ -814,14 +817,31 @@ export default function ServiceVisualization({ service, workspaceId }) {
         workspaceId
       );
 
-      setEdgeHandles(newEdgeHandles);
+      // Reconnect edge in local state immediately
       setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+
+      // Update edge handles state AFTER edge reconnect to prevent race condition
+      setEdgeHandles(prev => ({
+        ...prev,
+        [oldEdge.id]: {
+          sourceHandle: newConnection.sourceHandle,
+          targetHandle: newConnection.targetHandle,
+        }
+      }));
+
       toast.success('Connection point moved!');
     } catch (err) {
       console.error(err);
       toast.error('Failed to move connection point');
+      // Revert by reloading edge handles from database
+      try {
+        const handles = await loadServiceEdgeHandles(service.id, workspaceId);
+        setEdgeHandles(handles);
+      } catch (loadErr) {
+        console.error('Failed to reload edge handles:', loadErr);
+      }
     }
-  }, [edgeHandles, setEdges, service.id, workspaceId]);
+  }, [service.id, workspaceId, setEdges]);
 
   if (loading) {
     return (

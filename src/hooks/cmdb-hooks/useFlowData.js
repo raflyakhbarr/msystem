@@ -59,9 +59,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       // Create item nodes in group
       groupItems.forEach((item, index) => {
-        const row = Math.floor(index / dimensions.itemsPerRow);
-        const col = index % dimensions.itemsPerRow;
-
         // Ambil services untuk item ini dari servicesMap
         const itemServices = servicesMap[item.id] || [];
         const serviceCount = itemServices.length;
@@ -69,12 +66,17 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         // Hitung tinggi item berdasarkan jumlah service
         const itemHeight = dimensions.getItemHeight ? dimensions.getItemHeight(serviceCount) : dimensions.baseItemHeight;
 
-        // Hitung posisi Y berdasarkan kumulatif tinggi baris sebelumnya
-        let relativeY = dimensions.padding + 40;
+        // Hitung posisi berdasarkan grid layout
+        const row = Math.floor(index / dimensions.itemsPerRow);
+        const col = index % dimensions.itemsPerRow;
+
+        // Hitung Y position dengan row heights yang bervariasi
+        let relativeY = dimensions.padding + 40; // Header height
         for (let r = 0; r < row; r++) {
           relativeY += dimensions.rowHeights[r] + dimensions.gapY;
         }
 
+        // Hitung X position
         const relativeX = dimensions.padding + col * (dimensions.itemWidth + dimensions.gapX);
 
         const itemNodeId = String(item.id);
@@ -83,7 +85,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         flowNodes.push({
           id: itemNodeId,
           type: 'custom',
-          position: { x: relativeX, y: relativeY },
+          position: { x: relativeX, y: relativeY },  // ← Gunakan posisi dari DB!
           parentNode: groupNodeId,
           extent: 'parent',
           data: {
@@ -98,7 +100,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             orderInGroup: item.order_in_group,
             env_type: item.env_type,
             services: itemServices,
-            storage: item.storage || null, // Tambahkan storage
+            storage: item.storage || null,
           },
           style: {
             width: dimensions.itemWidth,
