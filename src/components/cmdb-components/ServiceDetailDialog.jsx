@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ServiceIcon from './ServiceIcon';
 import ServiceVisualization from './ServiceVisualization';
+import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import {
   Server,
   Activity,
@@ -74,7 +75,7 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                       <ServiceIcon name={service.icon_name} size={32} className="text-white" />
                     ) : (
                       <img
-                        src={`http://localhost:5000${service.icon_path}`}
+                        src={`${API_BASE_URL}${service.icon_path}`}
                         alt={service.name}
                         className="w-8 h-8 object-contain"
                       />

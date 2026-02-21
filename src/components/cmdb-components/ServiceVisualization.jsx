@@ -20,14 +20,12 @@ import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
 import ServiceItemFormModal from './ServiceItemFormModal';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { INITIAL_GROUP_FORM } from '../../utils/cmdb-utils/constants';
+import { INITIAL_GROUP_FORM, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
 const nodeTypes = {
   custom: CustomServiceNode,
   serviceGroup: CustomServiceGroupNode,
 };
-
-const API_BASE_URL = 'http://localhost:5000';
 
 // Helper function to safely parse position from database
 const parsePosition = (positionData) => {

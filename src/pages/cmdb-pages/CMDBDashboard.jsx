@@ -17,6 +17,7 @@ import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace';
 import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitcher';
 import { io } from 'socket.io-client';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Area, AreaChart } from 'recharts';
+import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
 const STATUS_CONFIG = {
   active: { label: 'Active', color: 'text-green-600', bgColor: 'bg-green-50', icon: CheckCircle2 },
@@ -126,7 +127,7 @@ export default function CMDBDashboard() {
   const [detailChartType, setDetailChartType] = useState('pie');
 
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
+    const socket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,

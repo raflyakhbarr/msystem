@@ -3,7 +3,7 @@ import {
   GitBranch, Shield, Wifi
 } from 'lucide-react';
 
-export const API_BASE_URL = 'http://localhost:5000';
+export const API_BASE_URL = import.meta.env.VITE_CMDB_API_BASE_URL;
 
 export const NODE_TYPES = [
   { value: 'server', label: 'Server' },

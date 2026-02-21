@@ -1,5 +1,5 @@
 import { X, Plus, Server, Trash2, HardDrive, Edit } from 'lucide-react';
-import { NODE_TYPES, PRESET_ICONS } from '../../utils/cmdb-utils/constants';
+import { NODE_TYPES, PRESET_ICONS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import {
   Dialog,
   DialogContent,
@@ -305,7 +305,7 @@ export default function ItemFormModal({
                     ) : service.icon_type === 'upload' && (service.icon_path || service.icon_preview) ? (
                       <div className="w-12 h-12 bg-white rounded border border-gray-200 overflow-hidden">
                         <img
-                          src={service.icon_preview || `http://localhost:5000${service.icon_path}`}
+                          src={service.icon_preview || `${API_BASE_URL}${service.icon_path}`}
                           alt={service.name}
                           className="w-full h-full object-cover"
                         />

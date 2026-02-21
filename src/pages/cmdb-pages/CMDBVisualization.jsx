@@ -36,7 +36,7 @@ import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
 import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
-import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
+import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
@@ -440,7 +440,7 @@ export default function CMDBVisualization() {
     const servicesWithPreview = itemServices.map(service => ({
       ...service,
       icon_preview: service.icon_type === 'upload' && service.icon_path
-        ? `http://localhost:5000${service.icon_path}`
+        ? `${API_BASE_URL}${service.icon_path}`
         : null
     }));
 
@@ -583,7 +583,7 @@ export default function CMDBVisualization() {
           const servicesWithPreview = res.data.map(service => ({
             ...service,
             icon_preview: service.icon_type === 'upload' && service.icon_path
-              ? `http://localhost:5000${service.icon_path}`
+              ? `${API_BASE_URL}${service.icon_path}`
               : null
           }));
           servicesMap[item.id] = servicesWithPreview;
@@ -612,7 +612,7 @@ export default function CMDBVisualization() {
     });
   }, [nodes]);
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
+    const socket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
@@ -653,7 +653,7 @@ export default function CMDBVisualization() {
     const servicesWithPreview = itemServices.map(service => ({
       ...service,
       icon_preview: service.icon_type === 'upload' && service.icon_path
-        ? `http://localhost:5000${service.icon_path}`
+        ? `${API_BASE_URL}${service.icon_path}`
         : null
     }));
 

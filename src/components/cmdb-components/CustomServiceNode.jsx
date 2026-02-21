@@ -16,8 +16,7 @@ import {
   Layers
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
 export default function CustomServiceNode({ data, id }) {
   const parentService = data.parentService || null;
