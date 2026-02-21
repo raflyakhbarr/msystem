@@ -286,3 +286,213 @@ export const saveServiceEdgeHandles = async (handles, serviceId, workspaceId) =>
     console.error('Gagal menyimpan konfigurasi service edge ke database:', err);
   }
 };
+
+// ==================== TRANSFORM HELPERS FOR SHARED VIEW ====================
+
+/**
+ * Transform items and groups to ReactFlow nodes (simplified version for shared view)
+ */
+export const transformItemsToNodes = (items, groups) => {
+  const flowNodes = [];
+
+  // Build servicesMap from items (services are already included in each item)
+  const servicesMap = {};
+  items.forEach(item => {
+    servicesMap[item.id] = item.services || [];
+  });
+
+  // Create group nodes
+  groups.forEach((group) => {
+    const groupItems = items
+      .filter(item => item.group_id === group.id)
+      .sort((a, b) => (a.order_in_group || 0) - (b.order_in_group || 0));
+
+    const dimensions = calculateGroupDimensions(group.id, groupItems, servicesMap);
+
+    const groupPos = group.position
+      ? { x: group.position.x, y: group.position.y }
+      : { x: Math.random() * 300, y: Math.random() * 200 };
+
+    const groupNodeId = `group-${group.id}`;
+
+    flowNodes.push({
+      id: groupNodeId,
+      type: 'group',
+      position: groupPos,
+      data: {
+        name: group.name,
+        description: group.description,
+        color: group.color,
+        itemCount: groupItems.length,
+        width: dimensions.width,
+        height: dimensions.height,
+        rowHeights: dimensions.rowHeights,
+      },
+      style: {
+        width: dimensions.width,
+        height: dimensions.height,
+        zIndex: 0,
+      },
+      draggable: false,
+    });
+
+    // Create item nodes in group
+    groupItems.forEach((item, index) => {
+      const itemServices = servicesMap[item.id] || [];
+      const serviceCount = itemServices.length;
+      const itemHeight = dimensions.getItemHeight
+        ? dimensions.getItemHeight(serviceCount)
+        : dimensions.baseItemHeight;
+
+      const row = Math.floor(index / dimensions.itemsPerRow);
+      const col = index % dimensions.itemsPerRow;
+
+      let relativeY = dimensions.padding + 40;
+      for (let r = 0; r < row; r++) {
+        relativeY += dimensions.rowHeights[r] + dimensions.gapY;
+      }
+
+      const relativeX = dimensions.padding + col * (dimensions.itemWidth + dimensions.gapX);
+
+      const itemNodeId = String(item.id);
+
+      flowNodes.push({
+        id: itemNodeId,
+        type: 'custom',
+        position: { x: relativeX, y: relativeY },
+        parentNode: groupNodeId,
+        extent: 'parent',
+        data: {
+          name: item.name,
+          type: item.type,
+          description: item.description,
+          status: item.status,
+          ip: item.ip,
+          category: item.category,
+          location: item.location,
+          groupId: group.id,
+          orderInGroup: item.order_in_group,
+          env_type: item.env_type,
+          services: itemServices,
+          storage: item.storage || null,
+        },
+        style: {
+          width: dimensions.itemWidth,
+          height: itemHeight,
+        },
+        draggable: false,
+      });
+    });
+  });
+
+  // Create ungrouped item nodes
+  const ungroupedItems = items.filter(item => !item.group_id);
+  ungroupedItems.forEach((item) => {
+    const pos = item.position
+      ? { x: item.position.x, y: item.position.y }
+      : { x: Math.random() * 400 + 600, y: Math.random() * 300 };
+
+    const itemNodeId = String(item.id);
+
+    flowNodes.push({
+      id: itemNodeId,
+      type: 'custom',
+      position: pos,
+      data: {
+        name: item.name,
+        type: item.type,
+        description: item.description,
+        status: item.status,
+        ip: item.ip,
+        category: item.category,
+        location: item.location,
+        env_type: item.env_type,
+        services: item.services || [],
+        storage: item.storage || null,
+      },
+      style: {
+        zIndex: 1,
+      },
+      draggable: false,
+    });
+  });
+
+  return flowNodes;
+};
+
+/**
+ * Transform connections to ReactFlow edges (simplified version for shared view)
+ */
+export const transformConnectionsToEdges = (connections, nodes) => {
+  const flowEdges = [];
+
+  connections.forEach((conn) => {
+    if (conn.source_group_id) return; // Skip group-to-item, process separately
+
+    const sourceNode = nodes.find(n => n.id === String(conn.source_id));
+
+    let targetNode, targetId, edgeId, isGroupConnection;
+
+    if (conn.target_id) {
+      targetNode = nodes.find(n => n.id === String(conn.target_id));
+      targetId = String(conn.target_id);
+      edgeId = `e${conn.source_id}-${conn.target_id}`;
+      isGroupConnection = false;
+    } else if (conn.target_group_id) {
+      targetNode = nodes.find(n => n.id === `group-${conn.target_group_id}`);
+      targetId = `group-${conn.target_group_id}`;
+      edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
+      isGroupConnection = true;
+    }
+
+    if (!sourceNode || !targetNode) return;
+
+    const handles = getBestHandlePositions(sourceNode, targetNode);
+
+    const edgeConfig = createEdgeConfig(
+      edgeId,
+      String(conn.source_id),
+      targetId,
+      handles.sourceHandle,
+      handles.targetHandle,
+      isGroupConnection,
+      isGroupConnection ? '#8b5cf6' : '#10b981',
+      false,
+      false
+    );
+
+    flowEdges.push(edgeConfig);
+  });
+
+  // Process group-to-item connections
+  connections.forEach((conn) => {
+    if (!conn.source_group_id || !conn.target_id) return;
+
+    const sourceNode = nodes.find(n => n.id === `group-${conn.source_group_id}`);
+    const targetNode = nodes.find(n => n.id === String(conn.target_id));
+
+    if (!sourceNode || !targetNode) return;
+
+    const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
+    const handles = getBestHandlePositions(sourceNode, targetNode);
+
+    flowEdges.push({
+      id: edgeId,
+      source: `group-${conn.source_group_id}`,
+      target: String(conn.target_id),
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      type: 'smoothstep',
+      markerEnd: { type: 'arrowclosed', color: '#8b5cf6' },
+      style: {
+        stroke: '#8b5cf6',
+        strokeWidth: 2.5,
+        strokeDasharray: '8,4',
+      },
+      zIndex: 8,
+      reconnectable: true,
+    });
+  });
+
+  return flowEdges;
+};

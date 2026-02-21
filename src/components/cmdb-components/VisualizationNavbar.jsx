@@ -2,7 +2,7 @@ import {
   Eye, Save, Plus, Layers, MousePointer2, Square,
   GitBranch, Download, Hand, Undo2, Redo2,
   ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table,
-  Map, Crosshair, Maximize2
+  Map, Crosshair, Maximize2, Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,6 +44,7 @@ export default function VisualizationNavbar({
   onOpenAddItem,
   onOpenManageGroups,
   onOpenExportModal,
+  onOpenShareModal,
   showTableDrawer,
   onToggleTableDrawer,
   showMiniMap,
@@ -143,6 +144,17 @@ export default function VisualizationNavbar({
               >
                 <Download />
                 <span className="hidden lg:inline ml-1">Export</span>
+              </Button>
+
+              <Button
+                onClick={onOpenShareModal}
+                title="Share Workspace"
+                variant="secondary"
+                size="sm"
+                disabled={!currentWorkspace}
+              >
+                <Share2 />
+                <span className="hidden lg:inline ml-1">Share</span>
               </Button>
 
               <Button

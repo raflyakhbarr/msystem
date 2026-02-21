@@ -46,6 +46,7 @@ import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
+import ShareModal from '@/components/cmdb-components/ShareModal';
 import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import StorageFormModal from '../../components/cmdb-components/StorageFormModal';
 import { toast } from 'sonner';
@@ -143,6 +144,7 @@ export default function CMDBVisualization() {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
   const [showStorageModal, setShowStorageModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const [itemFormData, setItemFormData] = useState(INITIAL_ITEM_FORM);
   const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
@@ -1849,6 +1851,7 @@ export default function CMDBVisualization() {
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
         onOpenExportModal={() => setShowExportModal(true)}
+        onOpenShareModal={() => setShowShareModal(true)}
         showTableDrawer={showTableDrawer}
         onToggleTableDrawer={toggleTableDrawer}
         workspaces={workspaces}
@@ -2295,6 +2298,12 @@ export default function CMDBVisualization() {
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
         onExport={exportVisualization}
+      />
+
+      <ShareModal
+        show={showShareModal}
+        workspaceId={currentWorkspace?.id}
+        onClose={() => setShowShareModal(false)}
       />
 
       <ServiceDetailDialog

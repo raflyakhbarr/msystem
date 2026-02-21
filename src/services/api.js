@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const CMDB_API_BASE_URL = import.meta.env.VITE_CMDB_API_BASE_URL;
+const CMDB_API_BASE_URL = import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001';
 
 const api = axios.create({
   baseURL: `${CMDB_API_BASE_URL}/api`,
@@ -103,5 +103,105 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ==================== SHARE LINK API ====================
+
+/**
+ * Generate a new share link for a workspace (requires auth)
+ */
+export const generateShareLink = async ({ workspace_id, expiration = 'never', password }) => {
+  const response = await api.post('/share/generate', {
+    workspace_id,
+    expiration,
+    password: password || undefined,
+  });
+  return response.data;
+};
+
+/**
+ * Verify password for a protected share link (public endpoint - no auth required)
+ */
+export const verifySharePassword = async (token, password) => {
+  const response = await fetch(`${CMDB_API_BASE_URL}/api/cmdb/shared/${token}/verify-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ token, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw error;
+  }
+
+  return response.json();
+};
+
+/**
+ * Get all share links for a workspace (requires auth)
+ */
+export const getWorkspaceShareLinks = async (workspaceId) => {
+  const response = await api.get(`/share/workspace/${workspaceId}`);
+  return response.data;
+};
+
+/**
+ * Get share link by ID (requires auth)
+ */
+export const getShareLink = async (id) => {
+  const response = await api.get(`/share/${id}`);
+  return response.data;
+};
+
+/**
+ * Update share link (requires auth)
+ */
+export const updateShareLink = async (id, updates) => {
+  const response = await api.put(`/share/${id}`, updates);
+  return response.data;
+};
+
+/**
+ * Delete share link (requires auth)
+ */
+export const deleteShareLink = async (id) => {
+  await api.delete(`/share/${id}`);
+};
+
+/**
+ * Get access logs for a share link (requires auth)
+ */
+export const getShareAccessLogs = async (id, limit = 50) => {
+  const response = await api.get(`/share/${id}/logs?limit=${limit}`);
+  return response.data;
+};
+
+/**
+ * Get share link stats (requires auth)
+ */
+export const getShareStats = async (id) => {
+  const response = await api.get(`/share/${id}/stats`);
+  return response.data;
+};
+
+/**
+ * Get shared CMDB data (public endpoint - no auth required)
+ */
+export const getSharedCmdb = async (token) => {
+  const response = await fetch(`${CMDB_API_BASE_URL}/api/cmdb/shared/${token}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw error;
+  }
+
+  return response.json();
+};
 
 export default api;

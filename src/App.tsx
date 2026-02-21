@@ -18,6 +18,7 @@ import CMDBItem from './pages/cmdb-pages/CMDBItem'
 import CMDBVisualization from './pages/cmdb-pages/CMDBVisualization'
 import { Toaster } from 'sonner'
 import CMDBDashboard from './pages/cmdb-pages/CMDBDashboard'
+import CMDBSharedView from './pages/cmdb-pages/CMDBSharedView'
 
 
 function App() {
@@ -220,7 +221,10 @@ function App() {
               )
             }
           />
-          
+
+          {/* Public shared view - no authentication required */}
+          <Route path="/cmdb/shared/:token" element={<CMDBSharedView />} />
+
           <Route
             path="/"
             element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />}
