@@ -198,10 +198,6 @@ export default function CMDBSharedView() {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-            <Button onClick={() => navigate('/cmdb')} className="w-full">
-              <Home className="w-4 h-4 mr-2" />
-              Back to CMDB
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -232,37 +228,20 @@ export default function CMDBSharedView() {
                     Protected
                   </Badge>
                 )}
-                {shareInfo?.expires_at && (
+                {/* {shareInfo?.expires_at && (
                   <Badge variant="secondary" className="gap-1">
                     <Calendar className="w-3 h-3" />
                     Expires: {new Date(shareInfo.expires_at).toLocaleDateString()}
                   </Badge>
-                )}
+                )} */}
               </div>
             </div>
-
-            <Button variant="outline" onClick={() => navigate('/cmdb')}>
-              <Home className="w-4 h-4 mr-2" />
-              Back to CMDB
-            </Button>
           </div>
         </div>
       </header>
 
-      {/* Read-only Banner */}
-      <div className="bg-blue-50 dark:bg-blue-950 border-b">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-              <Eye className="w-4 h-4" />
-              <span>This is a read-only view. You cannot make changes to this workspace.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Flow Canvas */}
-      <div style={{ height: 'calc(100vh - 120px)' }}>
+      <div style={{ height: 'calc(100vh - 80px)' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
