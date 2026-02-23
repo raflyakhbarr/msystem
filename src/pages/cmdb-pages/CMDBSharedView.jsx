@@ -28,7 +28,12 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSharedCmdb } from '@/services/api';
-import { transformItemsToNodes, transformConnectionsToEdges } from '../../utils/cmdb-utils/flowHelpers';
+import { transformItemsToNodes, transformConnectionsWithPropagation } from '../../utils/cmdb-utils/flowHelpers';
+import {
+  calculatePropagatedStatuses,
+  getStatusColor,
+  shouldShowCrossMarker
+} from '../../utils/cmdb-utils/statusPropagation';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import PasswordDialog from '../../components/cmdb-components/PasswordDialog';
@@ -48,9 +53,9 @@ export default function CMDBSharedView() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [shareInfo, setShareInfo] = useState(null);
+  const [edgeHandles, setEdgeHandles] = useState({});
 
   // Password protection
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
@@ -61,7 +66,6 @@ export default function CMDBSharedView() {
 
   // Fetch shared CMDB data
   const fetchSharedData = useCallback(async (password = null) => {
-    setLoading(true);
     setError(null);
 
     try {
@@ -73,20 +77,33 @@ export default function CMDBSharedView() {
       const transformedNodes = transformItemsToNodes(data.items, data.groups);
       setNodes(transformedNodes);
 
-      // Transform connections to edges
-      const transformedEdges = transformConnectionsToEdges(
+      // Transform edge_handles array to object format for efficient lookup
+      const edgeHandlesObject = {};
+      if (data.edge_handles && Array.isArray(data.edge_handles)) {
+        data.edge_handles.forEach(handle => {
+          edgeHandlesObject[handle.edge_id] = {
+            sourceHandle: handle.source_handle,
+            targetHandle: handle.target_handle
+          };
+        });
+      }
+
+      // Transform connections to edges WITH status propagation
+      const transformedEdges = transformConnectionsWithPropagation(
         data.connections,
-        transformedNodes
+        data.groupConnections || [],
+        data.items,
+        data.groups,
+        transformedNodes,
+        edgeHandlesObject
       );
       setEdges(transformedEdges);
 
       // Setup socket for real-time updates
       setupSocket(data.workspace_id, token);
 
-      setLoading(false);
     } catch (err) {
       console.error('Error fetching shared CMDB:', err);
-      setLoading(false);
 
       if (err.requires_password || err.error === 'Password required') {
         setShowPasswordDialog(true);
@@ -165,21 +182,6 @@ export default function CMDBSharedView() {
       }, 100);
     }
   }, [nodes]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
-        <Card className="w-96">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-center text-muted-foreground">Loading shared workspace...</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -274,7 +276,7 @@ export default function CMDBSharedView() {
           minZoom={0.2}
           maxZoom={2}
           defaultEdgeOptions={{
-            animated: true,
+            animated: false,
             style: { stroke: '#94a3b8', strokeWidth: 2 },
           }}
           nodesDraggable={false}

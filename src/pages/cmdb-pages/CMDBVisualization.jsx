@@ -2032,16 +2032,17 @@ export default function CMDBVisualization() {
                   targetHandle: newConnection.targetHandle,
                 }
               };
-              
+
               await saveEdgeHandle(
                 oldEdge.id,
                 newConnection.sourceHandle,
-                newConnection.targetHandle
+                newConnection.targetHandle,
+                currentWorkspace?.id
               );
-              
+
               setEdgeHandles(newEdgeHandles);
               setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
-            }, [edgeHandles, setEdges])}
+            }, [edgeHandles, setEdges, currentWorkspace?.id])}
             nodeTypes={nodeTypes}
             nodesDraggable={true}
             nodesConnectable={false}

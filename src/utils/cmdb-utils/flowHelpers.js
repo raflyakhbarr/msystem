@@ -1,5 +1,6 @@
 import { MarkerType } from 'reactflow';
 import api from '../../services/api';
+import { calculatePropagatedStatuses } from './statusPropagation';
 
 export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) => {
   const itemsPerRow = 3;
@@ -156,10 +157,9 @@ export const shouldShowCrossMarker = (status) => {
 };
 
 export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targetHandle, isGroupConnection, strokeColor, showCrossMarker, isHidden) => {
-  const edgeStyle = { 
-    stroke: strokeColor, 
+  const edgeStyle = {
+    stroke: strokeColor,
     strokeWidth: isGroupConnection ? 2.5 : 2,
-    strokeDasharray: isGroupConnection ? '8,4' : undefined,
     opacity: isHidden ? 0.2 : 1,
   };
 
@@ -220,20 +220,21 @@ export const loadEdgeHandles = async () => {
   }
 };
 
-export const saveEdgeHandles = async (handles) => {
+export const saveEdgeHandles = async (handles, workspaceId) => {
   try {
-    await api.post('/edge-handles/bulk', { edgeHandles: handles });
+    await api.post('/edge-handles/bulk', { edgeHandles: handles, workspace_id: workspaceId });
   } catch (err) {
     console.error('Gagal menyimpan konfigurasi edge ke database:', err);
   }
 };
 
-export const saveEdgeHandle = async (edgeId, sourceHandle, targetHandle) => {
+export const saveEdgeHandle = async (edgeId, sourceHandle, targetHandle, workspaceId) => {
   try {
-    await api.post('/edge-handles', { 
-      edgeId, 
-      sourceHandle, 
-      targetHandle 
+    await api.post('/edge-handles', {
+      edgeId,
+      sourceHandle,
+      targetHandle,
+      workspace_id: workspaceId
     });
   } catch (err) {
     console.error('Gagal menyimpan edge handle ke database:', err);
@@ -483,15 +484,230 @@ export const transformConnectionsToEdges = (connections, nodes) => {
       sourceHandle: handles.sourceHandle,
       targetHandle: handles.targetHandle,
       type: 'smoothstep',
-      markerEnd: { type: 'arrowclosed', color: '#8b5cf6' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#8b5cf6' },
       style: {
         stroke: '#8b5cf6',
         strokeWidth: 2.5,
-        strokeDasharray: '8,4',
       },
       zIndex: 8,
       reconnectable: true,
     });
+  });
+
+  return flowEdges;
+};
+
+/**
+ * Transform connections to edges WITH status propagation support
+ * Used in Share Mode where we need to show propagated status
+ */
+export const transformConnectionsWithPropagation = (
+  connections,
+  groupConnections,
+  items,
+  groups,
+  nodes,
+  edgeHandles = {}
+) => {
+  const flowEdges = [];
+
+  // Calculate propagated statuses untuk warna edge yang tepat
+  const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections);
+
+  // Process item-to-item and item-to-group connections
+  connections.forEach((conn) => {
+    if (conn.source_group_id) return; // Skip group-to-item, process separately
+
+    const sourceNode = nodes.find(n => n.id === String(conn.source_id));
+
+    let targetNode, targetId, edgeId, isGroupConnection;
+
+    if (conn.target_id) {
+      targetNode = nodes.find(n => n.id === String(conn.target_id));
+      targetId = String(conn.target_id);
+      edgeId = `e${conn.source_id}-${conn.target_id}`;
+      isGroupConnection = false;
+    } else if (conn.target_group_id) {
+      targetNode = nodes.find(n => n.id === `group-${conn.target_group_id}`);
+      targetId = `group-${conn.target_group_id}`;
+      edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
+      isGroupConnection = true;
+    }
+
+    if (!sourceNode || !targetNode) return;
+
+    // Gunakan status dari propagation calculation
+    const edgeStatusInfo = edgeStatuses[edgeId];
+
+    let strokeColor, showCrossMarker;
+
+    if (edgeStatusInfo) {
+      // Jika edge terpropagasi, gunakan propagated status
+      const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+      strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+      showCrossMarker = shouldShowCrossMarker(effectiveStatus);
+
+      // Untuk group connection, gunakan warna purple jika active
+      if (isGroupConnection && effectiveStatus === 'active') {
+        strokeColor = '#8b5cf6';
+      }
+    } else {
+      // Fallback ke logic default
+      const sourceItem = items.find(i => i.id === conn.source_id);
+      if (sourceItem) {
+        showCrossMarker = shouldShowCrossMarker(sourceItem.status);
+        strokeColor = getStatusColor(sourceItem.status);
+        if (isGroupConnection && sourceItem.status === 'active') {
+          strokeColor = '#8b5cf6';
+        }
+      } else {
+        strokeColor = isGroupConnection ? '#8b5cf6' : '#10b981';
+        showCrossMarker = false;
+      }
+    }
+
+    // Gunakan edgeHandles jika tersedia, fallback ke getBestHandlePositions
+    let sourceHandle, targetHandle;
+    if (edgeHandles[edgeId]) {
+      sourceHandle = edgeHandles[edgeId].sourceHandle;
+      targetHandle = edgeHandles[edgeId].targetHandle;
+    } else {
+      const handles = getBestHandlePositions(sourceNode, targetNode);
+      sourceHandle = handles.sourceHandle;
+      targetHandle = handles.targetHandle;
+    }
+
+    const edgeConfig = createEdgeConfig(
+      edgeId,
+      String(conn.source_id),
+      targetId,
+      sourceHandle,
+      targetHandle,
+      isGroupConnection,
+      strokeColor,
+      showCrossMarker,
+      false // isHidden
+    );
+
+    // Tambahkan info propagasi ke edge data
+    if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
+      edgeConfig.data = {
+        isPropagated: true,
+        propagatedFrom: edgeStatusInfo.propagatedFrom,
+        propagatedStatus: edgeStatusInfo.propagatedStatus,
+      };
+
+      edgeConfig.labelStyle = {
+        ...edgeConfig.labelStyle,
+        fontSize: 20,
+        fontWeight: 'bold',
+      };
+
+      if (showCrossMarker) {
+        edgeConfig.label = `✕`;
+      }
+    }
+
+    flowEdges.push(edgeConfig);
+  });
+
+  // Process group-to-item connections
+  connections.forEach((conn) => {
+    if (!conn.source_group_id || !conn.target_id) return;
+
+    const sourceNode = nodes.find(n => n.id === `group-${conn.source_group_id}`);
+    const targetNode = nodes.find(n => n.id === String(conn.target_id));
+
+    if (!sourceNode || !targetNode) return;
+
+    const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
+
+    // Gunakan edgeHandles jika tersedia, fallback ke getBestHandlePositions
+    let sourceHandle, targetHandle;
+    if (edgeHandles[edgeId]) {
+      sourceHandle = edgeHandles[edgeId].sourceHandle;
+      targetHandle = edgeHandles[edgeId].targetHandle;
+    } else {
+      const handles = getBestHandlePositions(sourceNode, targetNode);
+      sourceHandle = handles.sourceHandle;
+      targetHandle = handles.targetHandle;
+    }
+
+    flowEdges.push({
+      id: edgeId,
+      source: `group-${conn.source_group_id}`,
+      target: String(conn.target_id),
+      sourceHandle: sourceHandle,
+      targetHandle: targetHandle,
+      type: 'smoothstep',
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#8b5cf6' },
+      style: {
+        stroke: '#8b5cf6',
+        strokeWidth: 2.5,
+      },
+      zIndex: 8,
+      reconnectable: true,
+    });
+  });
+
+  // Process group-to-group connections
+  groupConnections.forEach((conn) => {
+    const edgeId = `ge${conn.source_id}-${conn.target_id}`;
+
+    const sourceNode = nodes.find(n => n.id === `group-${conn.source_id}`);
+    const targetNode = nodes.find(n => n.id === `group-${conn.target_id}`);
+
+    if (!sourceNode || !targetNode) return;
+
+    // Gunakan edgeHandles jika tersedia, fallback ke getBestHandlePositions
+    let sourceHandle, targetHandle;
+    if (edgeHandles[edgeId]) {
+      sourceHandle = edgeHandles[edgeId].sourceHandle;
+      targetHandle = edgeHandles[edgeId].targetHandle;
+    } else {
+      const handles = getBestHandlePositions(sourceNode, targetNode);
+      sourceHandle = handles.sourceHandle;
+      targetHandle = handles.targetHandle;
+    }
+
+    // Cek status group untuk menentukan warna
+    let strokeColor = '#94a3b8';
+    let showCrossMarker = false;
+
+    if (conn.source_id) {
+      const sourceGroup = groups.find(g => g.id === conn.source_id);
+      if (sourceGroup) {
+        const groupItems = items.filter(item => item.group_id === sourceGroup.id);
+        const hasIssue = groupItems.some(item =>
+          ['inactive', 'maintenance', 'decommissioned'].includes(item.status)
+        );
+
+        if (hasIssue) {
+          const statuses = groupItems.map(item => item.status);
+          if (statuses.includes('inactive') || statuses.includes('decommissioned')) {
+            strokeColor = getStatusColor('inactive', false);
+            showCrossMarker = shouldShowCrossMarker('inactive');
+          } else if (statuses.includes('maintenance')) {
+            strokeColor = getStatusColor('maintenance', false);
+            showCrossMarker = shouldShowCrossMarker('maintenance');
+          }
+        }
+      }
+    }
+
+    const edgeConfig = createEdgeConfig(
+      edgeId,
+      `group-${conn.source_id}`,
+      `group-${conn.target_id}`,
+      sourceHandle,
+      targetHandle,
+      true, // isGroupConnection
+      strokeColor,
+      showCrossMarker,
+      false // isHidden
+    );
+
+    flowEdges.push(edgeConfig);
   });
 
   return flowEdges;
