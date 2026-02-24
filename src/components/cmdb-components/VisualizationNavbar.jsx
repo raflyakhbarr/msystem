@@ -298,7 +298,7 @@ export default function VisualizationNavbar({
               </Button>
 
               {/* QUICK JUMP BUTTON */}
-              {onJumpToFirstNode && (
+              {/* {onJumpToFirstNode && (
                 <Button
                   onClick={onJumpToFirstNode}
                   variant="ghost"
@@ -309,10 +309,10 @@ export default function VisualizationNavbar({
                   <Crosshair size={14} />
                   <span className="hidden lg:inline ml-1">Jump</span>
                 </Button>
-              )}
+              )} */}
 
               {/* FIT VIEW BUTTON */}
-              {onFitView && (
+              {/* {onFitView && (
                 <Button
                   onClick={onFitView}
                   variant="ghost"
@@ -323,7 +323,7 @@ export default function VisualizationNavbar({
                   <Maximize2 size={14} />
                   <span className="hidden lg:inline ml-1">Fit View</span>
                 </Button>
-              )}
+              )} */}
             </div>
 
             <div className="h-8 w-px bg-border"></div>

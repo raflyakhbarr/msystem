@@ -230,10 +230,10 @@ export default function CMDBSharedView() {
 
       {/* Header with Animation */}
       <header
-        className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b sticky top-0 z-50 transition-all duration-500 ease-in-out ${
+        className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b z-50 transition-all duration-500 ease-in-out overflow-hidden ${
           showNavbar
-            ? 'opacity-100 translate-y-0'
-            : 'opacity-0 -translate-y-full pointer-events-none'
+            ? 'sticky top-0 opacity-100 max-h-[80px] translate-y-0'
+            : 'opacity-0 max-h-0 -translate-y-4 pointer-events-none'
         }`}
       >
         <div className="container mx-auto px-4 py-3">
@@ -294,7 +294,7 @@ export default function CMDBSharedView() {
       {/* Flow Canvas */}
       <div
         style={{
-          height: showNavbar ? 'calc(100vh - 80px)' : 'calc(100vh - 20px)',
+          height: showNavbar ? 'calc(100vh - 80px)' : '100vh',
           transition: 'height 500ms ease-in-out'
         }}
       >
