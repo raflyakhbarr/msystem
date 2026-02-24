@@ -5,6 +5,7 @@ import ReactFlow, {
   MiniMap,
   useNodesState,
   useEdgesState,
+  Panel,
 } from 'reactflow';
 import { io } from 'socket.io-client';
 import {
@@ -20,11 +21,13 @@ import { Button } from '@/components/ui/button';
 import {
   Lock,
   Eye,
+  EyeOff,
   Calendar,
   Users,
   AlertCircle,
   Share2,
-  Home
+  Home,
+  PanelTopClose
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSharedCmdb } from '@/services/api';
@@ -56,6 +59,9 @@ export default function CMDBSharedView() {
   const [error, setError] = useState(null);
   const [shareInfo, setShareInfo] = useState(null);
   const [edgeHandles, setEdgeHandles] = useState({});
+  const [showMiniMap, setShowMiniMap] = useState(true);
+  const [showNavbar, setShowNavbar] = useState(true);
+  const hasLoadedRef = useRef(false);
 
   // Password protection
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
@@ -174,11 +180,12 @@ export default function CMDBSharedView() {
     };
   }, [token]);
 
-  // Auto-fit view when nodes load
+  // Auto-fit view only on initial load
   useEffect(() => {
-    if (reactFlowInstance.current && nodes.length > 0) {
+    if (reactFlowInstance.current && nodes.length > 0 && !hasLoadedRef.current) {
       setTimeout(() => {
         reactFlowInstance.current.fitView({ padding: 0.2, duration: 800 });
+        hasLoadedRef.current = true;
       }, 100);
     }
   }, [nodes]);
@@ -205,9 +212,30 @@ export default function CMDBSharedView() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-900 border-b sticky top-0 z-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 relative">
+      {/* Floating Show Navbar Button - Partially Hidden */}
+      {!showNavbar && (
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 z-50 group">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setShowNavbar(true)}
+            className="shadow-xl gap-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md hover:bg-white dark:hover:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 transition-all duration-300 ease-out hover:scale-105 -translate-y-8 group-hover:translate-y-2"
+          >
+            <Eye className="w-4 h-4" />
+            <span className="text-sm font-medium">Show Menu</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Header with Animation */}
+      <header
+        className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b sticky top-0 z-50 transition-all duration-500 ease-in-out ${
+          showNavbar
+            ? 'opacity-100 translate-y-0'
+            : 'opacity-0 -translate-y-full pointer-events-none'
+        }`}
+      >
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -228,20 +256,48 @@ export default function CMDBSharedView() {
                     Protected
                   </Badge>
                 )}
-                {/* {shareInfo?.expires_at && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Calendar className="w-3 h-3" />
-                    Expires: {new Date(shareInfo.expires_at).toLocaleDateString()}
-                  </Badge>
-                )} */}
               </div>
+            </div>
+
+            {/* Right side - Actions */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMiniMap(!showMiniMap)}
+                className="h-8 w-8"
+                title={showMiniMap ? 'Hide MiniMap' : 'Show MiniMap'}
+              >
+                {showMiniMap ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </Button>
+
+              <div className="h-6 w-px bg-border mx-1" />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowNavbar(false)}
+                className="h-8 w-8"
+                title="Hide Navbar"
+              >
+                <PanelTopClose className="w-4 h-4"/>
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
       {/* Flow Canvas */}
-      <div style={{ height: 'calc(100vh - 80px)' }}>
+      <div
+        style={{
+          height: showNavbar ? 'calc(100vh - 80px)' : 'calc(100vh - 20px)',
+          transition: 'height 500ms ease-in-out'
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -251,7 +307,6 @@ export default function CMDBSharedView() {
           onInit={(instance) => {
             reactFlowInstance.current = instance;
           }}
-          fitView
           minZoom={0.2}
           maxZoom={2}
           defaultEdgeOptions={{
@@ -267,16 +322,18 @@ export default function CMDBSharedView() {
         >
           <Background />
           <Controls />
-          <MiniMap
-            nodeColor={(node) => {
-              switch (node.type) {
-                case 'group':
-                  return '#8b5cf6';
-                default:
-                  return '#3b82f6';
-              }
-            }}
-          />
+          {showMiniMap && (
+            <MiniMap
+              nodeColor={(node) => {
+                switch (node.type) {
+                  case 'group':
+                    return '#8b5cf6';
+                  default:
+                    return '#3b82f6';
+                }
+              }}
+            />
+          )}
         </ReactFlow>
       </div>
 
