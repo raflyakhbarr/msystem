@@ -162,7 +162,7 @@ export default function ServiceItemFormModal({
               <SelectContent>
                 <SelectItem value="none">
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Without Group</span>
+                    <span className="text-muted-foreground">Tanpa Group</span>
                   </div>
                 </SelectItem>
                 {groups && groups.length > 0 && groups.map((group) => (

@@ -7,7 +7,7 @@ import ReactFlow, {
   reconnectEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Plus, Link2, Trash2, Save, Layers, FolderOpen } from 'lucide-react';
+import { Plus, Link2, Trash2, Save, Layers } from 'lucide-react';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
@@ -786,8 +786,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
     handleCloseContextMenu();
     if (contextMenu.item) {
       handleDeleteItem(contextMenu.item.id);
+    } else if (contextMenu.group) {
+      handleDeleteGroup(contextMenu.group.id);
     }
-  }, [contextMenu, handleDeleteItem, handleCloseContextMenu]);
+  }, [contextMenu, handleDeleteItem, handleDeleteGroup, handleCloseContextMenu]);
 
   const handleContextMenuManageConnections = useCallback(() => {
     handleCloseContextMenu();
@@ -865,7 +867,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           onClick={handleOpenManageGroups}
           className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white"
         >
-          <FolderOpen size={16} />
+          <Layers size={16} />
           Manage Groups
         </Button>
 
@@ -1047,6 +1049,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         show={contextMenu.show}
         position={contextMenu.position}
         item={contextMenu.item}
+        group={contextMenu.group}
         onEdit={handleContextMenuEdit}
         onDelete={handleContextMenuDelete}
         onManageConnections={handleContextMenuManageConnections}

@@ -63,7 +63,7 @@ export default function ServiceConnectionModal({
     <Dialog open={show} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Manage Connections</DialogTitle>
+          <DialogTitle>Kelola Koneksi Service</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
@@ -75,17 +75,17 @@ export default function ServiceConnectionModal({
           <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="items">
-                To Items ({selectedConnections.length})
+                Ke Items ({selectedConnections.length})
               </TabsTrigger>
               <TabsTrigger value="groups">
-                To Groups ({selectedGroupConnections.length})
+                Ke Groups ({selectedGroupConnections.length})
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="items" className="flex-1 overflow-hidden flex flex-col mt-4 space-y-3">
               <Input
                 type="text"
-                placeholder="Search items..."
+                placeholder="Cari items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
