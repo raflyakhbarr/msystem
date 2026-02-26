@@ -1,10 +1,11 @@
-// Axios configuration for API requests
 import axios from 'axios';
+import { authManager } from '../context/AuthManager';
+import { hashPassword } from '../utils/hash';
 
-// API base URL from environment variables
-const API_BASE_URL = '';  // Empty string to use Vite proxy
+const API_BASE_URL = '';
 
-// Token renewal variables
+const TOKEN_ENDPOINT = import.meta.env.VITE_API_TOKEN_ENDPOINT;
+
 let isRefreshing = false;
 interface QueueItem {
   resolve: (value?: unknown) => void;
@@ -12,7 +13,6 @@ interface QueueItem {
 }
 let failedQueue: QueueItem[] = [];
 
-// Process the queue of failed requests
 const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach(prom => {
     if (error) {
@@ -21,21 +21,17 @@ const processQueue = (error: unknown, token: string | null = null) => {
       prom.resolve(token);
     }
   });
-  
+
   failedQueue = [];
 };
 
-// Silent token renewal function
 const renewToken = async () => {
-  // Get stored credentials
-  const username = localStorage.getItem('username');
-  const hashedPassword = localStorage.getItem('hashedPassword');
+  const { username, password } = authManager.getCredentials();
 
-  if (!username || !hashedPassword) {
+  if (!username || !password) {
     throw new Error('No stored credentials for token renewal');
   }
 
-  // Create a new axios instance for token renewal to avoid interceptor loops
   const renewalClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {
@@ -46,24 +42,15 @@ const renewToken = async () => {
     withCredentials: true,
   });
 
-  // Make silent login request
+  const hashedPassword = hashPassword(password);
+
   const response = await renewalClient.post(import.meta.env.VITE_API_TOKEN_ENDPOINT, {
     username,
     password: hashedPassword
   });
 
   if (response.data.token) {
-    // Update stored token
-    localStorage.setItem('token', response.data.token);
-
-    // Calculate new expiry time
-    const expiryTime = response.data.expiresIn ?
-      new Date().getTime() + (response.data.expiresIn * 1000) :
-      new Date().getTime() + (60 * 60 * 1000); // Default 1 hour
-    localStorage.setItem('tokenExpiry', expiryTime.toString());
-
-    // Track last renewal time for testing
-    localStorage.setItem('lastRenewal', new Date().getTime().toString());
+    authManager.updateToken(response.data.token, response.data.expired || null);
 
     return response.data.token;
   }
@@ -71,24 +58,31 @@ const renewToken = async () => {
   throw new Error('No token received from renewal');
 };
 
-// Check if token needs renewal
 const shouldRenewToken = () => {
-  const token = localStorage.getItem('token');
+  const token = authManager.getToken();
   if (!token) return false;
-  
-  // For testing: always renew every 2 minutes regardless of expiry
-  const lastRenewal = Number(localStorage.getItem('lastRenewal')) || 0;
-  const now = new Date().getTime();
-  
-  // Force renewal every 2 minutes for testing
-  if (now - lastRenewal >= 3 * 60 * 1000) {
-    return true;
+
+  const tokenExpiry = authManager.getTokenExpiry();
+  if (!tokenExpiry) return false;
+
+  try {
+    const [datePart, timePart] = tokenExpiry.split(' ');
+    const [day, month, year] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = timePart.split(':').map(Number);
+
+    const expiryDate = new Date(year, month - 1, day, hours, minutes, seconds);
+    const now = new Date();
+
+    const timeUntilExpiry = expiryDate.getTime() - now.getTime();
+
+    const twoMinutesInMs = 2 * 60 * 1000;
+
+    return timeUntilExpiry <= twoMinutesInMs && timeUntilExpiry > 0;
+  } catch {
+    return false;
   }
-  
-  return false;
 };
 
-// Create axios instance with default configuration
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -96,46 +90,35 @@ const apiClient = axios.create({
     'Accept': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
   },
-  withCredentials: true, // Include cookies if needed
+  withCredentials: true,
 });
 
-// Request interceptor to add auth token and handle renewal
 apiClient.interceptors.request.use(
   async (config) => {
-    const token = localStorage.getItem('token');
-    
+    const token = authManager.getToken();
+
     if (token) {
-      // Check if token needs renewal
       if (shouldRenewToken()) {
         if (!isRefreshing) {
           isRefreshing = true;
-          
+
           try {
             const newToken = await renewToken();
-            
-            // Update request header with new token
+
             config.headers.Authorization = `Bearer ${newToken}`;
-            
-            // Process the queue
+
             processQueue(null, newToken);
             isRefreshing = false;
           } catch (refreshError) {
-            // Refresh failed, clear storage and redirect to login
             processQueue(refreshError, null);
             isRefreshing = false;
-            
-            localStorage.removeItem('isAuthenticated');
-            localStorage.removeItem('user');
-            localStorage.removeItem('token');
-            localStorage.removeItem('username');
-            localStorage.removeItem('hashedPassword');
-            localStorage.removeItem('tokenExpiry');
-            
+
+            authManager.clearAuth();
+
             window.location.href = '/login';
             return Promise.reject(refreshError);
           }
         } else {
-          // If already refreshing, add this request to the queue
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
           }).then(token => {
@@ -146,11 +129,10 @@ apiClient.interceptors.request.use(
           });
         }
       } else {
-        // Token is still valid, use it
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
-    
+
     return config;
   },
   (error) => {
@@ -158,25 +140,23 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
-    
-    // Handle network errors
+
     if (!error.response) {
       throw new Error('Network error: Unable to connect to the server. Please check your internet connection.');
     }
-    
-    // Handle HTTP errors
+
     const { status, data } = error.response;
     let errorMessage = data?.message || `HTTP ${status}`;
-    
-    // If 401 and not already retried, try to refresh token
-    if (status === 401 && !originalRequest._retry) {
+
+    const isTokenEndpoint = originalRequest.url?.includes('/auth/token') ||
+                            originalRequest.url === TOKEN_ENDPOINT;
+    if (status === 401 && !originalRequest._retry && !isTokenEndpoint) {
       originalRequest._retry = true;
       
       if (!isRefreshing) {
@@ -185,33 +165,22 @@ apiClient.interceptors.response.use(
         try {
           const newToken = await renewToken();
           
-          // Retry the original request
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          
-          // Process the queue
           processQueue(null, newToken);
           isRefreshing = false;
           
           return apiClient(originalRequest);
         } catch (refreshError) {
-          // Refresh failed
           processQueue(refreshError, null);
           isRefreshing = false;
-          
-          // Clear storage and redirect
-          localStorage.removeItem('isAuthenticated');
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
-          localStorage.removeItem('username');
-          localStorage.removeItem('hashedPassword');
-          localStorage.removeItem('tokenExpiry');
-          
+
+          authManager.clearAuth();
+
           window.location.href = '/login';
-          
+
           return Promise.reject(refreshError);
         }
       } else {
-        // If already refreshing, add to queue
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         }).then(token => {
@@ -222,18 +191,14 @@ apiClient.interceptors.response.use(
         });
       }
     }
-    
-    // For other 401 cases, clear storage
+
     if (status === 401) {
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('username');
-      localStorage.removeItem('hashedPassword');
-      localStorage.removeItem('tokenExpiry');
-      errorMessage = 'Session expired. Please login again.';
+      if (!isTokenEndpoint) {
+        authManager.clearAuth();
+        errorMessage = 'Session expired. Please login again.';
+      }
     }
-    
+
     throw new Error(errorMessage);
   }
 );

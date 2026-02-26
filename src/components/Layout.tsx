@@ -13,32 +13,19 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Separator } from '@radix-ui/react-separator'
+import { useAuth } from '@/hooks/useAuth'
 
 function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { isAuthenticated } = useAuth()
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAuthenticated')
-    const token = localStorage.getItem('token')
-    
-    if (!isAuthenticated || !token) {
-      navigate('/login') 
+    if (!isAuthenticated) {
+      navigate('/login')
       return
     }
-    
-  }, [navigate])
-
-  useEffect(() => {
-    const handleStorageChange = () => {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        navigate('/login')
-      }
-    }
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
-  }, [navigate])
+  }, [isAuthenticated, navigate])
 
 
   const getBreadcrumbs = () => {

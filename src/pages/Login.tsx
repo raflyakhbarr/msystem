@@ -1,15 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginApi } from '../api/authApi'
 import {Eye, EyeClosed} from 'lucide-react'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input" 
-import { Label } from "@/components/ui/label" 
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Spinner } from '@/components/ui/spinner'
+import { useAuth } from '../hooks/useAuth'
 
-function Login({ setIsAuthenticated }) {
+function Login() {
+  const { login, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+  const hasNavigated = useRef(false)
+
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -18,9 +23,18 @@ function Login({ setIsAuthenticated }) {
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
 
-  const handleChange = (e) => {
+  useEffect(() => {
+    if (isAuthenticated && !hasNavigated.current) {
+      hasNavigated.current = true
+      navigate('/dashboard', { replace: true });
+    }
+    if (!isAuthenticated) {
+      hasNavigated.current = false
+    }
+  }, [isAuthenticated, navigate]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
@@ -28,32 +42,33 @@ function Login({ setIsAuthenticated }) {
     }))
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
-    
+
     if (!formData.username || !formData.password) {
       setError('Please fill in all fields')
       return
     }
-    
+
     setLoading(true)
     try {
       const response = await loginApi(formData.username, formData.password);
-      
+
       if (response.statusCode === 200 && response.message === "Login Berhasil") {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('user', JSON.stringify(response.data));
-        if (response.token) {
-          localStorage.setItem('token', response.token);
-        }
-        setIsAuthenticated(true);
-        navigate('/dashboard');
+        login(
+          formData.username,
+          formData.password,
+          response.token,
+          response.data,
+          response.expired || null
+        );
       } else {
         setError(response.message || 'Invalid credentials');
       }
     } catch (error) {
-      setError(error.message || 'Login failed. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Login failed. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false)
     }

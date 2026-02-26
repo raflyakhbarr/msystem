@@ -14,15 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-export type AccGroupFormData = {
-  id?: number;
-  namaGroup: string;
-  codeGroup: string | number;
-  idSistem: string | number | undefined;
-  isAdministrator: boolean;
-  status: boolean;
-};
+import type { AccGroupFormData } from "@/types/components";
 
 interface EditModalProps {
   showModal: boolean;
