@@ -1,11 +1,20 @@
 import React from 'react';
 import SystemComboBox from '../ComboBox/SystemComboBox';
-import {  Dialog,  DialogContent,  DialogHeader,  DialogTitle,} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import type { FiturItem } from '@/types/models';
+
+interface EditModalProps {
+  showModal: boolean;
+  formData: FiturItem | null;
+  setFormData: (data: FiturItem | null) => void;
+  setShowModal: (show: boolean) => void;
+  handleSubmit: (data: FiturItem | null) => void;
+}
 
 const EditModal = ({
   showModal,
@@ -13,7 +22,7 @@ const EditModal = ({
   setFormData,
   setShowModal,
   handleSubmit
-}) => {
+}: EditModalProps) => {
   const isEdit = formData && formData.id;
 
   const handleCloseForm = () => {
@@ -23,9 +32,9 @@ const EditModal = ({
     }
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    handleSubmit();
+    handleSubmit(formData);
   };
 
   return (
@@ -45,7 +54,7 @@ const EditModal = ({
                 <Input
                   type="text"
                   value={formData?.menu || ''}
-                  onChange={(e) => setFormData({...formData, menu: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData!, menu: e.target.value })}
                   placeholder="Enter menu name"
                   required
                 />
@@ -58,7 +67,7 @@ const EditModal = ({
                 <Input
                   type="text"
                   value={formData?.route || ''}
-                  onChange={(e) => setFormData({...formData, route: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData!, route: e.target.value })}
                   placeholder="Enter route"
                   required
                 />
@@ -71,7 +80,7 @@ const EditModal = ({
                 <Input
                   type="number"
                   value={formData?.urutan || ''}
-                  onChange={(e) => setFormData({...formData, urutan: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData!, urutan: e.target.value })}
                   placeholder="Enter order"
                   required
                 />
@@ -84,7 +93,7 @@ const EditModal = ({
                 <Input
                   type="text"
                   value={formData?.icon || ''}
-                  onChange={(e) => setFormData({...formData, icon: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData!, icon: e.target.value })}
                   placeholder="Enter icon filename (e.g., icon.png)"
                 />
               </FieldContent>
@@ -95,7 +104,7 @@ const EditModal = ({
               <FieldContent className="overflow-visible">
                 <SystemComboBox
                   value={typeof formData?.idSistem === 'number' ? formData.idSistem : undefined}
-                  onValueChange={(value) => setFormData({ ...formData, idSistem: value })}
+                  onValueChange={(value) => setFormData({ ...formData!, idSistem: value })}
                   placeholder="Select system..."
                   className="w-full"
                 />
@@ -108,7 +117,7 @@ const EditModal = ({
                 <Input
                   type="text"
                   value={formData?.showFiture || ''}
-                  onChange={(e) => setFormData({...formData, showFiture: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData!, showFiture: e.target.value })}
                   placeholder="Enter show feature value"
                 />
               </FieldContent>
@@ -120,7 +129,7 @@ const EditModal = ({
                   <Checkbox
                     id="status"
                     checked={formData?.status !== false}
-                    onCheckedChange={(checked) => setFormData({...formData, status: checked})}
+                    onCheckedChange={(checked) => setFormData({ ...formData!, status: Boolean(checked) })}
                   />
                   <Label htmlFor="status" className="text-sm cursor-pointer">
                     Active Status
