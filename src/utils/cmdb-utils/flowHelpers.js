@@ -156,7 +156,71 @@ export const shouldShowCrossMarker = (status) => {
   return ['inactive', 'maintenance', 'decommissioned'].includes(status);
 };
 
-export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targetHandle, isGroupConnection, strokeColor, showCrossMarker, isHidden) => {
+// Connection type definitions - must match backend
+export const CONNECTION_TYPES = {
+  // Original types
+  depends_on: { label: 'Depends On', color: '#3b82f6', default_direction: 'forward', description: 'Source depends on target untuk operasi normal' },
+  consumed_by: { label: 'Consumed By', color: '#f59e0b', default_direction: 'backward', description: 'Target consumes resources atau services dari source' },
+  connects_to: { label: 'Connects To', color: '#8b5cf6', default_direction: 'bidirectional', description: 'Koneksi jaringan dua arah antar item' },
+  contains: { label: 'Contains', color: '#10b981', default_direction: 'forward', description: 'Source berisi atau mengelola target' },
+  managed_by: { label: 'Managed By', color: '#a855f7', default_direction: 'forward', description: 'Source dikelola oleh target (jika manager target down, source affected)' },
+  data_flow_to: { label: 'Data Flow To', color: '#06b6d4', default_direction: 'forward', description: 'Data mengalir dari source ke target' },
+  backup_to: { label: 'Backup To', color: '#14b8a6', default_direction: 'forward', description: 'Source melakukan backup ke target' },
+
+  // Backup & Recovery
+  backed_up_by: { label: 'Backed Up By', color: '#14b8a6', default_direction: 'forward', description: 'Source di-backup oleh target (jika backup target down, source affected)' },
+
+  // Hosting & Infrastructure
+  hosted_on: { label: 'Hosted On', color: '#6366f1', default_direction: 'forward', description: 'Source di-hosting pada target' },
+  hosting: { label: 'Hosting', color: '#6366f1', default_direction: 'backward', description: 'Target meng-hosting source' },
+
+  // Licensing
+  licensed_by: { label: 'Licensed By', color: '#eab308', default_direction: 'forward', description: 'Source dilisensikan oleh target (jika license server down, source affected)' },
+  licensing: { label: 'Licensing', color: '#eab308', default_direction: 'backward', description: 'Source memberikan lisensi ke target' },
+
+  // Composition
+  part_of: { label: 'Part Of', color: '#a855f7', default_direction: 'forward', description: 'Source merupakan bagian dari target' },
+  comprised_of: { label: 'Comprised Of', color: '#a855f7', default_direction: 'forward', description: 'Source terdiri dari target (jika component down, source affected)' },
+
+  // General Relationship
+  related_to: { label: 'Related To', color: '#94a3b8', default_direction: 'bidirectional', description: 'Hubungan umum antar item' },
+
+  // Workflow/Process
+  preceding: { label: 'Preceding', color: '#f97316', default_direction: 'forward', description: 'Source berjalan sebelum target dalam workflow' },
+  succeeding: { label: 'Succeeding', color: '#f97316', default_direction: 'backward', description: 'Source berjalan setelah target dalam workflow' },
+
+  // Security
+  encrypted_by: { label: 'Encrypted By', color: '#be123c', default_direction: 'forward', description: 'Source di-enkripsi oleh target (jika encryption service down, source affected)' },
+  encrypting: { label: 'Encrypting', color: '#be123c', default_direction: 'backward', description: 'Source meng-enkripsi target' },
+  authenticated_by: { label: 'Authenticated By', color: '#059669', default_direction: 'forward', description: 'Source diautentikasi oleh target (jika auth server down, source affected)' },
+  authenticating: { label: 'Authenticating', color: '#059669', default_direction: 'backward', description: 'Source mengautentikasi target' },
+
+  // Monitoring
+  monitoring: { label: 'Monitoring', color: '#ec4899', default_direction: 'backward', description: 'Source memonitor target (jika monitored target down, monitoring service affected)' },
+  monitored_by: { label: 'Monitored By', color: '#ec4899', default_direction: 'forward', description: 'Source dimonitor oleh target (jika monitoring service down, source affected)' },
+
+  // Load Balancing & High Availability
+  load_balanced_by: { label: 'Load Balanced By', color: '#8b5cf6', default_direction: 'forward', description: 'Source traffic di-load-balance oleh target (jika LB down, source affected)' },
+  load_balancing: { label: 'Load Balancing', color: '#8b5cf6', default_direction: 'backward', description: 'Source melakukan load balancing untuk target' },
+  failing_over_to: { label: 'Failing Over To', color: '#ef4444', default_direction: 'forward', description: 'Source failover ke target jika terjadi kegagalan' },
+  failover_from: { label: 'Failover From', color: '#ef4444', default_direction: 'backward', description: 'Source menerima failover dari target' },
+
+  // Data Replication
+  replicating_to: { label: 'Replicating To', color: '#06b6d4', default_direction: 'backward', description: 'Source mereplikasi data ke target (jika replica down, source affected)' },
+  replicated_by: { label: 'Replicated By', color: '#06b6d4', default_direction: 'forward', description: 'Source direplikasi oleh target (jika master down, source affected)' },
+
+  // Proxy & Routing
+  proxying_for: { label: 'Proxying For', color: '#f59e0b', default_direction: 'backward', description: 'Source menjadi proxy untuk target (jika target down, proxy affected)' },
+  proxied_by: { label: 'Proxied By', color: '#f59e0b', default_direction: 'forward', description: 'Source diproxy oleh target (jika proxy down, source affected)' },
+  routed_through: { label: 'Routed Through', color: '#10b981', default_direction: 'forward', description: 'Source traffic dirouting melalui target (jika router down, source affected)' },
+  routing: { label: 'Routing', color: '#10b981', default_direction: 'backward', description: 'Source merouting traffic untuk target' },
+};
+
+export const getConnectionTypeInfo = (typeSlug) => {
+  return CONNECTION_TYPES[typeSlug] || CONNECTION_TYPES.depends_on;
+};
+
+export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targetHandle, isGroupConnection, strokeColor, showCrossMarker, isHidden, connectionType = null, connectionTypeLabel = null, showConnectionLabels = true) => {
   const edgeStyle = {
     stroke: strokeColor,
     strokeWidth: isGroupConnection ? 2.5 : 2,
@@ -175,19 +239,42 @@ export const createEdgeConfig = (edgeId, sourceId, targetId, sourceHandle, targe
     zIndex: isGroupConnection ? 8 : 10,
     reconnectable: true,
     hidden: isHidden,
+    data: {
+      connectionType: connectionType,
+      connectionTypeLabel: connectionTypeLabel,
+    },
   };
+
+  // Show connection type label if available and labels are enabled
+  if (connectionTypeLabel && !showCrossMarker && showConnectionLabels) {
+    edgeConfig.label = connectionTypeLabel;
+    edgeConfig.labelStyle = {
+      fill: strokeColor,
+      fontWeight: '500',
+      fontSize: 11,
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderRadius: '4px',
+      padding: '2px 6px',
+    };
+    edgeConfig.labelBgStyle = {
+      fill: 'rgba(255, 255, 255, 0.95)',
+      fillOpacity: 0.95,
+    };
+    edgeConfig.labelBgPadding = [4, 6];
+    edgeConfig.labelBgBorderRadius = 4;
+  }
 
   if (showCrossMarker) {
     edgeConfig.label = '✕';
-    edgeConfig.labelStyle = { 
-      fill: strokeColor, 
-      fontWeight: 'bold', 
+    edgeConfig.labelStyle = {
+      fill: strokeColor,
+      fontWeight: 'bold',
       fontSize: 25,
       background: 'white',
       borderRadius: '50%',
     };
-    edgeConfig.labelBgStyle = { 
-      fill: 'white', 
+    edgeConfig.labelBgStyle = {
+      fill: 'white',
       fillOpacity: 0,
     };
     edgeConfig.labelBgPadding = [8, 8];
@@ -450,6 +537,12 @@ export const transformConnectionsToEdges = (connections, nodes) => {
 
     const handles = getBestHandlePositions(sourceNode, targetNode);
 
+    // Get connection type info (ONLY for label, NOT for color)
+    const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+    // Use default green color for non-group connections (status-based color)
+    const strokeColor = isGroupConnection ? '#8b5cf6' : '#10b981';
+    const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
+
     const edgeConfig = createEdgeConfig(
       edgeId,
       String(conn.source_id),
@@ -457,9 +550,11 @@ export const transformConnectionsToEdges = (connections, nodes) => {
       handles.sourceHandle,
       handles.targetHandle,
       isGroupConnection,
-      isGroupConnection ? '#8b5cf6' : '#10b981',
+      strokeColor,
       false,
-      false
+      false,
+      conn.connection_type,
+      connectionTypeLabel
     );
 
     flowEdges.push(edgeConfig);
@@ -577,6 +672,10 @@ export const transformConnectionsWithPropagation = (
       targetHandle = handles.targetHandle;
     }
 
+    // Get connection type info
+    const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+    const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
+
     const edgeConfig = createEdgeConfig(
       edgeId,
       String(conn.source_id),
@@ -586,12 +685,15 @@ export const transformConnectionsWithPropagation = (
       isGroupConnection,
       strokeColor,
       showCrossMarker,
-      false // isHidden
+      false, // isHidden
+      conn.connection_type,
+      connectionTypeLabel
     );
 
     // Tambahkan info propagasi ke edge data
     if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
       edgeConfig.data = {
+        ...edgeConfig.data,
         isPropagated: true,
         propagatedFrom: edgeStatusInfo.propagatedFrom,
         propagatedStatus: edgeStatusInfo.propagatedStatus,

@@ -1,10 +1,16 @@
 /**
  * Utility untuk menghitung propagasi status secara recursive
- * Status dari parent node akan merambat ke semua child/dependent nodes
+ * Status dari dependency akan merambat ke semua dependent nodes
  */
+
+import { CONNECTION_TYPES } from './flowHelpers';
 
 /**
  * Build dependency graph dari connections
+ * Graph structure: { nodeId: { dependencies: Set, dependents: Set } }
+ * - dependencies: nodes yang node ini bergantung padanya (jika dependency bermasalah, node ini terpengaruh)
+ * - dependents: nodes yang bergantung pada node ini (jika node ini bermasalah, dependent terpengaruh)
+ *
  * @param {Array} connections - Array koneksi item-to-item dan item-to-group
  * @param {Array} groupConnections - Array koneksi group-to-group
  * @returns {Object} Graph dengan struktur { nodeId: { dependencies: Set, dependents: Set } }
@@ -37,11 +43,31 @@ export const buildDependencyGraph = (connections, groupConnections) => {
       ensureNode(sourceId);
       ensureNode(targetId);
 
-      // Source -> Target (source depends on target? atau target depends on source?)
-      // Kita anggap: source mempengaruhi target (arrow arah)
-      // Jadi jika source bermasalah, target akan terpengaruh
-      graph[sourceId].dependents.add(targetId);
-      graph[targetId].dependencies.add(sourceId);
+      // Dapatkan tipe koneksi untuk menentukan arah propagasi
+      const connType = conn.connection_type || 'depends_on';
+      const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
+      const direction = connectionInfo.default_direction || 'forward';
+
+      if (direction === 'forward') {
+        // Forward (depends_on, contains, dll): Source bergantung pada Target
+        // Jika Target bermasalah → Source terpengaruh
+        // Source adalah dependent, Target adalah dependency
+        graph[sourceId].dependencies.add(targetId); // Source depends on Target
+        graph[targetId].dependents.add(sourceId);   // Target affects Source
+      } else if (direction === 'backward') {
+        // Backward (consumed_by, managed_by, dll): Target bergantung pada Source
+        // Jika Source bermasalah → Target terpengaruh
+        // Target adalah dependent, Source adalah dependency
+        graph[targetId].dependencies.add(sourceId); // Target depends on Source
+        graph[sourceId].dependents.add(targetId);   // Source affects Target
+      } else {
+        // Bidirectional (connects_to, related_to): Saling bergantung
+        // Jika salah satu bermasalah → yang lain terpengaruh
+        graph[sourceId].dependencies.add(targetId); // Source depends on Target
+        graph[targetId].dependents.add(sourceId);   // Target affects Source
+        graph[targetId].dependencies.add(sourceId); // Target depends on Source
+        graph[sourceId].dependents.add(targetId);   // Source affects Target
+      }
     }
   });
 
@@ -199,34 +225,102 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     if (!targetId) return;
 
     const sourceStatus = getNodeStatus(sourceId);
-    const isPropagated = affectedNodesMap.has(targetId);
-    
+    const targetStatus = getNodeStatus(targetId);
+
+    // Dapatkan tipe koneksi untuk menentukan node mana yang dicek status propagasinya
+    const connType = conn.connection_type || 'depends_on';
+    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
+    const direction = connectionInfo.default_direction || 'forward';
+
+    // Tentukan node mana yang merupakan dependent (yang terpengaruh)
+    // dan node mana yang merupakan dependency (yang mempengaruhi)
+    let dependentId, dependencyId;
+
+    if (direction === 'forward') {
+      // Forward (depends_on): Source bergantung pada Target
+      dependentId = sourceId;
+      dependencyId = targetId;
+    } else if (direction === 'backward') {
+      // Backward (consumed_by): Target bergantung pada Source
+      dependentId = targetId;
+      dependencyId = sourceId;
+    } else {
+      // Bidirectional: Keduanya bisa terpengaruh, cek keduanya
+      dependentId = null; // Special case
+      dependencyId = null;
+    }
+
     let propagatedStatus = null;
     let propagatedFrom = null;
+    let isPropagated = false;
+    let effectiveEdgeStatus = sourceStatus; // Default
 
-    if (isPropagated) {
-      // Ambil status terburuk dari semua sources yang mempengaruhi
-      const affectingSources = affectedNodesMap.get(targetId);
-      const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-      
-      let worstStatus = 'active';
-      affectingSources.forEach(({ status }) => {
-        if (priorities[status] > priorities[worstStatus]) {
-          worstStatus = status;
-        }
-      });
-      
-      propagatedStatus = worstStatus;
-      propagatedFrom = affectingSources.map(s => s.sourceId);
+    if (direction === 'bidirectional') {
+      // Untuk bidirectional, cek apakah salah satu node terpengaruh oleh node lain
+      const sourceAffected = affectedNodesMap.has(sourceId);
+      const targetAffected = affectedNodesMap.has(targetId);
+
+      if (sourceAffected || targetAffected) {
+        isPropagated = true;
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+
+        // Collect semua affecting sources
+        let allAffecting = [];
+        if (sourceAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(sourceId));
+        if (targetAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(targetId));
+
+        // Ambil status terburuk
+        let worstStatus = 'active';
+        allAffecting.forEach(({ status, sourceId: affSourceId }) => {
+          if (priorities[status] > priorities[worstStatus]) {
+            worstStatus = status;
+          }
+        });
+
+        propagatedStatus = worstStatus;
+        propagatedFrom = allAffecting.map(s => s.sourceId);
+        effectiveEdgeStatus = worstStatus;
+      } else {
+        // Tidak ada propagasi, gunakan status terburuk dari source/target
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+        effectiveEdgeStatus = priorities[sourceStatus] > priorities[targetStatus] ? sourceStatus : targetStatus;
+      }
+    } else {
+      // Untuk forward/backward, cek apakah dependent terpengaruh oleh dependency (atau node lain)
+      const dependentAffected = affectedNodesMap.has(dependentId);
+
+      if (dependentAffected) {
+        isPropagated = true;
+        const affectingSources = affectedNodesMap.get(dependentId);
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+
+        let worstStatus = 'active';
+        affectingSources.forEach(({ status }) => {
+          if (priorities[status] > priorities[worstStatus]) {
+            worstStatus = status;
+          }
+        });
+
+        propagatedStatus = worstStatus;
+        propagatedFrom = affectingSources.map(s => s.sourceId);
+        effectiveEdgeStatus = worstStatus;
+      } else {
+        // Tidak ada propagasi, edge menunjukkan status dependency
+        effectiveEdgeStatus = dependencyId === targetId ? targetStatus : sourceStatus;
+      }
     }
 
     edgeStatuses[edgeId] = {
       sourceId,
       targetId,
       sourceStatus,
+      targetStatus,
       propagatedStatus,
       propagatedFrom,
       isPropagated,
+      effectiveEdgeStatus,
+      connectionType: connType,
+      direction,
     };
   });
 
@@ -239,33 +333,50 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
 
     const sourceStatus = getNodeStatus(sourceId);
-    const isPropagated = affectedNodesMap.has(targetId);
-    
+    const targetStatus = getNodeStatus(targetId);
+
+    // Group-to-item connections: Group affects items (group is dependency)
+    const dependentId = targetId; // Item depends on group
+    const dependencyId = sourceId; // Group affects item
+
+    const dependentAffected = affectedNodesMap.has(dependentId);
+
     let propagatedStatus = null;
     let propagatedFrom = null;
+    let isPropagated = false;
+    let effectiveEdgeStatus = sourceStatus;
 
-    if (isPropagated) {
-      const affectingSources = affectedNodesMap.get(targetId);
+    if (dependentAffected) {
+      isPropagated = true;
+      const affectingSources = affectedNodesMap.get(dependentId);
       const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-      
+
       let worstStatus = 'active';
       affectingSources.forEach(({ status }) => {
         if (priorities[status] > priorities[worstStatus]) {
           worstStatus = status;
         }
       });
-      
+
       propagatedStatus = worstStatus;
       propagatedFrom = affectingSources.map(s => s.sourceId);
+      effectiveEdgeStatus = worstStatus;
+    } else {
+      // Tidak ada propagasi, edge menunjukkan status dependency (group)
+      effectiveEdgeStatus = sourceStatus;
     }
 
     edgeStatuses[edgeId] = {
       sourceId,
       targetId,
       sourceStatus,
+      targetStatus,
       propagatedStatus,
       propagatedFrom,
       isPropagated,
+      effectiveEdgeStatus,
+      connectionType: 'group_to_item',
+      direction: 'forward',
     };
   });
 
@@ -276,33 +387,50 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     const edgeId = `group-e${conn.source_id}-${conn.target_id}`;
 
     const sourceStatus = getNodeStatus(sourceId);
-    const isPropagated = affectedNodesMap.has(targetId);
-    
+    const targetStatus = getNodeStatus(targetId);
+
+    // Group-to-group connections: Source group affects target group
+    const dependentId = targetId; // Target depends on source
+    const dependencyId = sourceId; // Source affects target
+
+    const dependentAffected = affectedNodesMap.has(dependentId);
+
     let propagatedStatus = null;
     let propagatedFrom = null;
+    let isPropagated = false;
+    let effectiveEdgeStatus = sourceStatus;
 
-    if (isPropagated) {
-      const affectingSources = affectedNodesMap.get(targetId);
+    if (dependentAffected) {
+      isPropagated = true;
+      const affectingSources = affectedNodesMap.get(dependentId);
       const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-      
+
       let worstStatus = 'active';
       affectingSources.forEach(({ status }) => {
         if (priorities[status] > priorities[worstStatus]) {
           worstStatus = status;
         }
       });
-      
+
       propagatedStatus = worstStatus;
       propagatedFrom = affectingSources.map(s => s.sourceId);
+      effectiveEdgeStatus = worstStatus;
+    } else {
+      // Tidak ada propagasi, edge menunjukkan status dependency (source group)
+      effectiveEdgeStatus = sourceStatus;
     }
 
     edgeStatuses[edgeId] = {
       sourceId,
       targetId,
       sourceStatus,
+      targetStatus,
       propagatedStatus,
       propagatedFrom,
       isPropagated,
+      effectiveEdgeStatus,
+      connectionType: 'group_to_group',
+      direction: 'forward',
     };
   });
 

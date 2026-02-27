@@ -1,16 +1,17 @@
 import { useCallback } from 'react';
-import { 
-  calculateGroupDimensions, 
+import {
+  calculateGroupDimensions,
   getBestHandlePositions,
-  createEdgeConfig 
+  createEdgeConfig,
+  getConnectionTypeInfo
 } from '../../utils/cmdb-utils/flowHelpers';
-import { 
+import {
   calculatePropagatedStatuses,
   getStatusColor,
-  shouldShowCrossMarker 
+  shouldShowCrossMarker
 } from '../../utils/cmdb-utils/statusPropagation';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -177,11 +178,14 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       // Gunakan status dari propagation calculation
       const edgeStatusInfo = edgeStatuses[edgeId];
-      
+
+      // Get connection type info (ONLY for label, NOT for color)
+      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+
       if (edgeStatusInfo) {
-        // Jika edge terpropagasi, gunakan propagated status
-        const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
-        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+        // Gunakan effectiveEdgeStatus yang sudah memperhitungkan arah koneksi
+        const effectiveStatus = edgeStatusInfo.effectiveEdgeStatus || edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.isPropagated);
         showCrossMarker = shouldShowCrossMarker(effectiveStatus);
 
         // Untuk group connection, gunakan warna purple jika active
@@ -215,6 +219,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         targetHandle = handles.targetHandle;
       }
 
+      const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
+
       const edgeConfig = createEdgeConfig(
         edgeId,
         String(conn.source_id),
@@ -224,23 +230,27 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         isGroupConnection,
         strokeColor,
         showCrossMarker,
-        isEdgeHidden
+        isEdgeHidden,
+        conn.connection_type,
+        connectionTypeLabel,
+        showConnectionLabels
       );
 
       // Tambahkan info propagasi ke edge data
       if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
         edgeConfig.data = {
+          ...edgeConfig.data,
           isPropagated: true,
           propagatedFrom: edgeStatusInfo.propagatedFrom,
           propagatedStatus: edgeStatusInfo.propagatedStatus,
         };
-        
+
         edgeConfig.labelStyle = {
           ...edgeConfig.labelStyle,
           fontSize: 20,
           fontWeight: 'bold',
         };
-        
+
         if (showCrossMarker) {
           edgeConfig.label = `✕`;
         }
@@ -267,10 +277,10 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       let showCrossMarker = false;
 
       if (edgeStatusInfo) {
-        const effectiveStatus = edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
-        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.propagatedStatus);
+        const effectiveStatus = edgeStatusInfo.effectiveEdgeStatus || edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.isPropagated);
         showCrossMarker = shouldShowCrossMarker(effectiveStatus);
-        
+
         if (effectiveStatus === 'active') {
           strokeColor = '#8b5cf6';
         }
@@ -430,7 +440,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     });
 
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels]);
 
   return { transformToFlowData };
 };

@@ -2,7 +2,7 @@ import {
   Eye, Save, Plus, Layers, MousePointer2, Square,
   GitBranch, Download, Hand, Undo2, Redo2,
   ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table,
-  Map, Crosshair, Maximize2, Share2
+  Map, Crosshair, Maximize2, Share2, Tag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,7 +18,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 export default function VisualizationNavbar({
   draggedNode,
   selectionMode,
-  highlightMode, 
+  highlightMode,
   highlightedNodeId,
   selectedForHiding,
   hiddenNodes,
@@ -49,6 +49,8 @@ export default function VisualizationNavbar({
   onToggleTableDrawer,
   showMiniMap,
   onToggleMiniMap,
+  showConnectionLabels = true,
+  onToggleConnectionLabels,
   workspaces,
   currentWorkspace,
   onSwitchWorkspace,
@@ -295,6 +297,18 @@ export default function VisualizationNavbar({
               >
                 <Map size={14} />
                 <span className="hidden lg:inline ml-1">MiniMap</span>
+              </Button>
+
+              {/* CONNECTION LABELS TOGGLE BUTTON */}
+              <Button
+                onClick={onToggleConnectionLabels}
+                variant={showConnectionLabels ? "default" : "ghost"}
+                size="sm"
+                title={showConnectionLabels ? "Sembunyikan Label Relasi" : "Tampilkan Label Relasi"}
+                disabled={!currentWorkspace}
+              >
+                <Tag size={14} />
+                <span className="hidden lg:inline ml-1">Label</span>
               </Button>
 
               {/* QUICK JUMP BUTTON */}

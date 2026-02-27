@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
+import api from '../../services/api';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,236 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  ArrowUpRight, ArrowDownRight, Link2, Layers, Shield, TrendingUp, RefreshCw, ArrowRight,
+  Server, Key, Puzzle, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap,
+  Database, Workflow, Route, Search, Check
+} from 'lucide-react';
+
+// Helper function to get icon for connection type
+function getConnectionIcon(iconName) {
+  const icons = {
+    'arrow-up-right': <ArrowUpRight className="h-4 w-4" />,
+    'arrow-down-right': <ArrowDownRight className="h-4 w-4" />,
+    'link': <Link2 className="h-4 w-4" />,
+    'layers': <Layers className="h-4 w-4" />,
+    'shield': <Shield className="h-4 w-4" />,
+    'trending-up': <TrendingUp className="h-4 w-4" />,
+    'refresh-cw': <RefreshCw className="h-4 w-4" />,
+    'server': <Server className="h-4 w-4" />,
+    'key': <Key className="h-4 w-4" />,
+    'puzzle': <Puzzle className="h-4 w-4" />,
+    'arrow-up': <ArrowUp className="h-4 w-4" />,
+    'arrow-down': <ArrowDown className="h-4 w-4" />,
+    'lock': <Lock className="h-4 w-4" />,
+    'shield-check': <ShieldCheck className="h-4 w-4" />,
+    'eye': <Eye className="h-4 w-4" />,
+    'scale': <Scale className="h-4 w-4" />,
+    'zap': <Zap className="h-4 w-4" />,
+    'database': <Database className="h-4 w-4" />,
+    'workflow': <Workflow className="h-4 w-4" />,
+    'route': <Route className="h-4 w-4" />,
+  };
+  return icons[iconName] || <ArrowRight className="h-4 w-4" />;
+}
+
+// Connection Preview Component
+function ConnectionPreview({ connectionType, sourceItem }) {
+  const getArrowDirection = () => {
+    switch (connectionType.default_direction) {
+      case 'forward':
+        return '→';
+      case 'backward':
+        return '←';
+      case 'bidirectional':
+        return '↔';
+      default:
+        return '→';
+    }
+  };
+
+  const getArrowIcon = () => {
+    switch (connectionType.default_direction) {
+      case 'forward':
+        return <ArrowUpRight className="h-5 w-5" />;
+      case 'backward':
+        return <ArrowDownRight className="h-5 w-5 rotate-180" />;
+      case 'bidirectional':
+        return <div className="relative h-5 w-5"><ArrowRight className="h-5 w-5 absolute" /><ArrowRight className="h-5 w-5 absolute rotate-180" /></div>;
+      default:
+        return <ArrowRight className="h-5 w-5" />;
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-4 py-4">
+      {/* Source Node */}
+      <div className="flex flex-col items-center">
+        <div
+          className="w-16 h-12 rounded-lg border-2 flex items-center justify-center text-xs font-medium"
+          style={{
+            borderColor: connectionType.color,
+            backgroundColor: `${connectionType.color}20`
+          }}
+        >
+          {sourceItem?.name?.slice(0, 8) || 'Source'}
+        </div>
+        <span className="text-xs text-muted-foreground mt-1">Source</span>
+      </div>
+
+      {/* Connection Arrow */}
+      <div
+        className="flex items-center justify-center gap-1 px-3 py-1 rounded-full text-white font-medium"
+        style={{ backgroundColor: connectionType.color }}
+      >
+        {getArrowDirection()}
+        <span className="text-xs ml-1">{connectionType.label}</span>
+      </div>
+
+      {/* Target Node */}
+      <div className="flex flex-col items-center">
+        <div
+          className="w-16 h-12 rounded-lg border-2 border-gray-400 bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-medium"
+        >
+          Target
+        </div>
+        <span className="text-xs text-muted-foreground mt-1">Target</span>
+      </div>
+    </div>
+  );
+}
+
+// Searchable Connection Type Selector Component
+function ConnectionTypeSelector({
+  value,
+  onChange,
+  connectionTypes,
+  placeholder = "Pilih tipe koneksi",
+  size = "default",
+  className = ""
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const selectedType = connectionTypes.find(ct => ct.type_slug === value);
+
+  const filteredTypes = connectionTypes.filter(ct => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      ct.label.toLowerCase().includes(searchLower) ||
+      ct.type_slug.toLowerCase().includes(searchLower) ||
+      (ct.description && ct.description.toLowerCase().includes(searchLower))
+    );
+  });
+
+  const sizeClasses = size === "small" ? "h-7 text-xs" : "";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          className={`w-full justify-between ${sizeClasses} ${className}`}
+        >
+          {selectedType ? (
+            <div className="flex items-center gap-2">
+              {getConnectionIcon(selectedType.icon)}
+              <span>{selectedType.label}</span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <div className="p-3">
+          <div className="flex items-center gap-2 border-b pb-2">
+            <Search size={16} className="text-muted-foreground" />
+            <Input
+              placeholder="Cari tipe koneksi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </div>
+        </div>
+        <ScrollArea className={size === "small" ? "h-[200px]" : "h-[300px]"}>
+          <div className="p-1">
+            {filteredTypes.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Tidak ada tipe koneksi ditemukan
+              </div>
+            ) : (
+              filteredTypes.map((ct) => (
+                <button
+                  key={ct.id}
+                  onClick={() => {
+                    onChange(ct.type_slug);
+                    setOpen(false);
+                    setSearchQuery('');
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
+                >
+                  {getConnectionIcon(ct.icon)}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
+                      {value === ct.type_slug && (
+                        <Check size={14} className="text-primary ml-auto" />
+                      )}
+                    </div>
+                    {ct.description && size !== "small" && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {ct.description}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Mini Connection Preview Component (for individual items)
+function MiniConnectionPreview({ connectionType, sourceName, targetName }) {
+  const getArrowDirection = () => {
+    switch (connectionType.default_direction) {
+      case 'forward':
+        return '→';
+      case 'backward':
+        return '←';
+      case 'bidirectional':
+        return '↔';
+      default:
+        return '→';
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="max-w-16 truncate" title={sourceName}>{sourceName}</span>
+      <div
+        className="flex items-center gap-1 px-2 py-0.5 rounded text-white font-medium"
+        style={{ backgroundColor: connectionType.color }}
+        title={connectionType.label}
+      >
+        {getArrowDirection()}
+      </div>
+      <span className="max-w-16 truncate" title={targetName}>{targetName}</span>
+    </div>
+  );
+}
 
 export default function ConnectionModal({
   show,
@@ -23,9 +254,79 @@ export default function ConnectionModal({
   onSave,
   onToggleConnection,
   onToggleGroupConnection,
+  onConnectionTypeChange,
+  selectedConnectionType,
+  existingConnectionTypes = {},
 }) {
   const [connectionSearch, setConnectionSearch] = useState('');
   const [connectionTargetType, setConnectionTargetType] = useState('item');
+  const [connectionTypes, setConnectionTypes] = useState([]);
+  const [selectedType, setSelectedType] = useState(selectedConnectionType || 'depends_on');
+  const [itemConnectionTypes, setItemConnectionTypes] = useState({});
+
+  useEffect(() => {
+    const fetchConnectionTypes = async () => {
+      try {
+        const response = await api.get('/cmdb/connection-types');
+        setConnectionTypes(response.data);
+      } catch (error) {
+        console.error('Failed to fetch connection types:', error);
+      }
+    };
+
+    if (show) {
+      fetchConnectionTypes();
+    }
+  }, [show]);
+
+  useEffect(() => {
+    if (selectedConnectionType) {
+      setSelectedType(selectedConnectionType);
+    }
+  }, [selectedConnectionType]);
+
+  // Initialize item connection types when selectedConnections change
+  useEffect(() => {
+    setItemConnectionTypes(prev => {
+      const newTypes = { ...prev };
+      selectedConnections.forEach(itemId => {
+        if (!newTypes[itemId]) {
+          newTypes[itemId] = selectedConnectionType || 'depends_on';
+        }
+      });
+      // Remove types for items that are no longer selected
+      Object.keys(newTypes).forEach(itemId => {
+        if (!selectedConnections.includes(Number(itemId))) {
+          delete newTypes[itemId];
+        }
+      });
+      console.log('itemConnectionTypes updated:', newTypes);
+      return newTypes;
+    });
+  }, [selectedConnections, selectedConnectionType]);
+
+  // Load existing connection types when modal opens
+  useEffect(() => {
+    if (show && Object.keys(existingConnectionTypes).length > 0) {
+      setItemConnectionTypes(existingConnectionTypes);
+    }
+  }, [show, existingConnectionTypes]);
+
+  const handleTypeChange = (typeSlug) => {
+    setSelectedType(typeSlug);
+    if (onConnectionTypeChange) {
+      onConnectionTypeChange(typeSlug);
+    }
+  };
+
+  const handleItemTypeChange = (itemId, typeSlug) => {
+    setItemConnectionTypes(prev => ({
+      ...prev,
+      [itemId]: typeSlug
+    }));
+  };
+
+  const selectedConnectionTypeData = connectionTypes.find(ct => ct.type_slug === selectedType);
 
   if (!show || !selectedItem) return null;
 
@@ -68,6 +369,35 @@ export default function ConnectionModal({
             </p>
           </div>
 
+          {/* Default Connection Type for New Connections */}
+          <div className="space-y-3 p-3 border rounded-lg border-dashed">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Default Tipe Koneksi (untuk koneksi baru):
+              </label>
+              <ConnectionTypeSelector
+                value={selectedType}
+                onChange={handleTypeChange}
+                connectionTypes={connectionTypes}
+                placeholder="Pilih tipe koneksi"
+              />
+            </div>
+
+            {/* Visual Preview for Default Type */}
+            {selectedConnectionTypeData && (
+              <div className="p-3 border rounded-lg bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">VISUALISASI DEFAULT:</p>
+                <ConnectionPreview
+                  connectionType={selectedConnectionTypeData}
+                  sourceItem={selectedItem}
+                />
+                <p className="text-xs text-muted-foreground mt-2 italic">
+                  {selectedConnectionTypeData.description}
+                </p>
+              </div>
+            )}
+          </div>
+
           <Tabs value={connectionTargetType} onValueChange={setConnectionTargetType}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="item">
@@ -81,22 +411,58 @@ export default function ConnectionModal({
             <TabsContent value="item" className="space-y-3 mt-4">
               {selectedItems.length > 0 && (
                 <div className="p-3 border rounded-lg bg-blue-50 border-blue-500 dark:text-black">
-                  <p className="font-semibold text-sm mb-2">Items Terpilih</p>
-                  {selectedItems.map((item) => (
-                    <div
-                      key={`selected-${item.id}`}
-                      className="flex items-center justify-between py-1"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          checked={true}
-                          onCheckedChange={() => onToggleConnection(item.id)}
-                        />
-                        {getTypeIcon(item.type)}
-                        <span className="text-sm font-medium">{item.name}</span>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="font-semibold text-sm mb-3">Items Terpilih ({selectedItems.length})</p>
+                  <div className="space-y-3">
+                    {selectedItems.map((item) => {
+                      const itemTypeId = itemConnectionTypes[item.id] || 'depends_on';
+                      const itemTypeInfo = connectionTypes.find(ct => ct.type_slug === itemTypeId);
+
+                      return (
+                        <div
+                          key={`selected-${item.id}`}
+                          className="p-3 bg-white rounded-lg border border-blue-200 dark:border-blue-800 dark:bg-gray-800"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1">
+                              <Checkbox
+                                checked={true}
+                                onCheckedChange={() => onToggleConnection(item.id)}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  {getTypeIcon(item.type)}
+                                  <span className="text-sm font-medium">{item.name}</span>
+                                </div>
+
+                                {/* Connection Type Selector for this item */}
+                                <div className="flex items-center gap-2 flex-1">
+                                  <label className="text-xs text-muted-foreground whitespace-nowrap">Tipe:</label>
+                                  <ConnectionTypeSelector
+                                    value={itemTypeId}
+                                    onChange={(value) => handleItemTypeChange(item.id, value)}
+                                    connectionTypes={connectionTypes}
+                                    placeholder="Pilih tipe"
+                                    size="small"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Mini Visualization */}
+                            {itemTypeInfo && (
+                              <div className="flex-shrink-0">
+                                <MiniConnectionPreview
+                                  connectionType={itemTypeInfo}
+                                  sourceName={selectedItem?.name || 'Source'}
+                                  targetName={item.name}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -201,7 +567,7 @@ export default function ConnectionModal({
             <Button variant="secondary" onClick={onClose}>
               Batal
             </Button>
-            <Button onClick={onSave}>
+            <Button onClick={() => onSave(itemConnectionTypes)}>
               Simpan ({selectedConnections.length + selectedGroupConnections.length})
             </Button>
           </div>

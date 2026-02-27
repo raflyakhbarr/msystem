@@ -28,6 +28,20 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import 'reactflow/dist/style.css';
 import { io } from 'socket.io-client';
 import { Square } from 'lucide-react';
@@ -41,8 +55,10 @@ import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
 import NodeContextMenu from '../../components/cmdb-components/NodeContextMenu';
+import EdgeContextMenu from '../../components/cmdb-components/EdgeContextMenu';
 import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
+import QuickConnectionModal from '../../components/cmdb-components/QuickConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
@@ -52,8 +68,9 @@ import StorageFormModal from '../../components/cmdb-components/StorageFormModal'
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { MousePointer2, GitBranch, Link, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
+import { MousePointer2, GitBranch, Link, Pencil, Trash2, Eye, EyeOff, Search, ChevronsUpDown } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
 import { useAutoSave } from '../../hooks/cmdb-hooks/useAutoSave';
 import { useNodeRelationships } from '../../hooks/cmdb-hooks/useNodeRelationship'
@@ -132,6 +149,46 @@ export default function CMDBVisualization() {
   const [hoverPosition, setHoverPosition] = useState(null);
 
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
+
+  // Helper function to get default direction for connection type
+  const getConnectionDirection = (typeSlug) => {
+    const directions = {
+      'depends_on': 'forward',
+      'consumed_by': 'backward',
+      'connects_to': 'bidirectional',
+      'contains': 'forward',
+      'managed_by': 'forward',
+      'data_flow_to': 'forward',
+      'backup_to': 'forward',
+      'backed_up_by': 'forward',
+      'hosted_on': 'forward',
+      'hosting': 'backward',
+      'licensed_by': 'forward',
+      'licensing': 'backward',
+      'part_of': 'forward',
+      'comprised_of': 'forward',
+      'related_to': 'bidirectional',
+      'preceding': 'forward',
+      'succeeding': 'backward',
+      'encrypted_by': 'forward',
+      'encrypting': 'backward',
+      'authenticated_by': 'forward',
+      'authenticating': 'backward',
+      'monitoring': 'backward',
+      'monitored_by': 'forward',
+      'load_balanced_by': 'forward',
+      'load_balancing': 'backward',
+      'failing_over_to': 'forward',
+      'failover_from': 'backward',
+      'replicating_to': 'backward',
+      'replicated_by': 'forward',
+      'proxying_for': 'backward',
+      'proxied_by': 'forward',
+      'routed_through': 'forward',
+      'routing': 'backward',
+    };
+    return directions[typeSlug] || 'forward';
+  };
   const [showVisibilityPanel, setShowVisibilityPanel] = useState(false);
   const [selectionMode, setSelectionMode] = useState('freeroam');
   const [isSelecting, setIsSelecting] = useState(false);
@@ -146,6 +203,19 @@ export default function CMDBVisualization() {
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // Quick Connection Modal states
+  const [showQuickConnectionModal, setShowQuickConnectionModal] = useState(false);
+  const [quickConnectionSource, setQuickConnectionSource] = useState(null);
+  const [quickConnectionTarget, setQuickConnectionTarget] = useState(null);
+
+  // Connection labels visibility
+  const [showConnectionLabels, setShowConnectionLabels] = useState(true);
+
+  // Edge Context Menu states
+  const [edgeContextMenu, setEdgeContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, edge: null });
+  const [quickConnectionMode, setQuickConnectionMode] = useState('create'); // 'create' or 'edit'
+  const [quickConnectionExistingType, setQuickConnectionExistingType] = useState(null);
+
   const [itemFormData, setItemFormData] = useState(INITIAL_ITEM_FORM);
   const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
   const [editItemMode, setEditItemMode] = useState(false);
@@ -159,6 +229,8 @@ export default function CMDBVisualization() {
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
+  const [selectedConnectionType, setSelectedConnectionType] = useState('depends_on');
+  const [itemConnectionTypes, setItemConnectionTypes] = useState({});
 
   const [showMiniMap, setShowMiniMap] = useState(() => {
     const saved = localStorage.getItem('cmdb-minimap-enabled');
@@ -187,7 +259,7 @@ export default function CMDBVisualization() {
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services);
+  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -891,77 +963,219 @@ export default function CMDBVisualization() {
 
   const handleOpenConnectionModal = useCallback((item) => {
     setSelectedItemForConnection(item);
-    
+    setSelectedConnectionType('depends_on'); // Reset to default
+
     const existingItemConns = connections
       .filter(conn => conn.source_id === item.id && conn.target_id)
       .map(conn => conn.target_id);
-    
+
     const existingGroupConns = connections
       .filter(conn => conn.source_id === item.id && conn.target_group_id)
       .map(conn => conn.target_group_id);
-    
+
     setSelectedConnections(existingItemConns);
     setSelectedGroupConnections(existingGroupConns);
+
+    // Load existing connection types for each selected item
+    const existingTypes = {};
+    connections
+      .filter(conn => conn.source_id === item.id && conn.target_id)
+      .forEach(conn => {
+        existingTypes[conn.target_id] = conn.connection_type || 'depends_on';
+      });
+
+    setItemConnectionTypes(existingTypes);
     setShowConnectionModal(true);
   }, [connections]);
 
-  const handleSaveConnections = useCallback(async () => {
-  if (!selectedItemForConnection || !currentWorkspace) return;
-  
-  try {
-    const currentItemConns = connections
-      .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id)
-      .map(conn => conn.target_id);
+  const handleConnectionTypeChange = useCallback((typeSlug) => {
+    setSelectedConnectionType(typeSlug);
+  }, []);
 
-    const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
-    const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
+  const handleSaveConnections = useCallback(async (connectionTypes = {}) => {
+    if (!selectedItemForConnection || !currentWorkspace) return;
 
-    for (const targetId of itemsToAdd) {
-      await api.post('/cmdb/connections', {
-        source_id: selectedItemForConnection.id,
-        target_id: targetId,
-        workspace_id: currentWorkspace.id // TAMBAHKAN INI
-      });
+    try {
+      console.log('=== Saving Connections ===');
+      console.log('Source:', selectedItemForConnection.name);
+      console.log('Selected targets:', selectedConnections);
+      console.log('Connection types:', connectionTypes);
+
+      // SIMPLER & MORE ROBUST APPROACH:
+      // Delete all existing connections for this source, then add back the selected ones
+      const existingConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id);
+
+      console.log('Existing connections to remove:', existingConns.length);
+
+      // Remove all existing item-to-item connections for this source
+      for (const conn of existingConns) {
+        console.log(`Deleting connection: ${selectedItemForConnection.name} -> ${conn.target_id}`);
+        await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${conn.target_id}`);
+      }
+
+      // Add back all selected connections with their types
+      for (const targetId of selectedConnections) {
+        const connectionType = connectionTypes[targetId] || selectedConnectionType;
+        console.log(`Adding connection: ${selectedItemForConnection.name} -> ${targetId} (type: ${connectionType})`);
+        await api.post('/cmdb/connections', {
+          source_id: selectedItemForConnection.id,
+          target_id: targetId,
+          workspace_id: currentWorkspace.id,
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType)
+        });
+      }
+
+      // Handle group connections (remove all, then add back)
+      const existingGroupConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id);
+
+      console.log('Existing group connections to remove:', existingGroupConns.length);
+
+      for (const conn of existingGroupConns) {
+        await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${conn.target_group_id}`);
+      }
+
+      for (const groupId of selectedGroupConnections) {
+        await api.post('/cmdb/connections/to-group', {
+          source_id: selectedItemForConnection.id,
+          target_group_id: groupId,
+          workspace_id: currentWorkspace.id
+        });
+      }
+
+      console.log('✓ All operations completed, fetching fresh data...');
+      await fetchAll();
+      console.log('✓ Fetch completed, closing modal');
+      setShowConnectionModal(false);
+    } catch (err) {
+      console.error('Save error:', err);
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-
-    for (const targetId of itemsToRemove) {
-      await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${targetId}`);
-    }
-
-    const currentGroupConns = connections
-      .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id)
-      .map(conn => conn.target_group_id);
-
-    const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
-    const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
-
-    for (const groupId of groupsToAdd) {
-      await api.post('/cmdb/connections/to-group', {
-        source_id: selectedItemForConnection.id,
-        target_group_id: groupId,
-        workspace_id: currentWorkspace.id // TAMBAHKAN INI
-      });
-    }
-
-    for (const groupId of groupsToRemove) {
-      await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
-    }
-
-    await fetchAll();
-    setShowConnectionModal(false);
-  } catch (err) {
-    console.error(err);
-    toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-  }
-}, [connections, selectedItemForConnection, selectedConnections, selectedGroupConnections, currentWorkspace, fetchAll]);
+  }, [selectedItemForConnection, selectedConnections, selectedGroupConnections, selectedConnectionType, currentWorkspace, fetchAll]);
 
   const handleToggleConnection = (targetId) => {
-    setSelectedConnections(prev => 
-      prev.includes(targetId) 
+    setSelectedConnections(prev =>
+      prev.includes(targetId)
         ? prev.filter(id => id !== targetId)
         : [...prev, targetId]
     );
   };
+
+  // Handler for drag-to-connect (Quick Connection Modal)
+  const handleConnect = useCallback((connection) => {
+    // Find source and target items from the nodes/items data
+    const sourceItem = items.find(item => item.id === Number(connection.source));
+    const targetItem = items.find(item => item.id === Number(connection.target));
+
+    if (sourceItem && targetItem) {
+      // Check if connection already exists
+      const existingConn = connections.find(
+        conn => conn.source_id === Number(connection.source) && conn.target_id === Number(connection.target)
+      );
+
+      if (existingConn) {
+        toast.error('Koneksi sudah ada!');
+        return;
+      }
+
+      setQuickConnectionSource(sourceItem);
+      setQuickConnectionTarget(targetItem);
+      setQuickConnectionMode('create');
+      setQuickConnectionExistingType(null);
+      setShowQuickConnectionModal(true);
+    }
+  }, [items, connections]);
+
+  const handleSaveQuickConnection = useCallback(async (connectionType) => {
+    if (!quickConnectionSource || !quickConnectionTarget || !currentWorkspace) return;
+
+    try {
+      if (quickConnectionMode === 'edit') {
+        // Update existing connection
+        await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType)
+        });
+        toast.success('Tipe koneksi berhasil diubah!');
+      } else {
+        // Create new connection
+        await api.post('/cmdb/connections', {
+          source_id: quickConnectionSource.id,
+          target_id: quickConnectionTarget.id,
+          workspace_id: currentWorkspace.id,
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType)
+        });
+        toast.success('Koneksi berhasil dibuat!');
+      }
+
+      setShowQuickConnectionModal(false);
+      setQuickConnectionMode('create');
+      setQuickConnectionExistingType(null);
+      await fetchAll();
+    } catch (err) {
+      console.error('Quick connection error:', err);
+      const errorMsg = quickConnectionMode === 'edit'
+        ? 'Gagal mengubah tipe koneksi: '
+        : 'Gagal membuat koneksi: ';
+      toast.error(errorMsg + (err.response?.data?.error || err.message));
+    }
+  }, [quickConnectionSource, quickConnectionTarget, currentWorkspace, fetchAll, quickConnectionMode]);
+
+  // Edge Context Menu handlers
+  const handleEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Prevent context menu on pane click
+    if (!edge) return;
+
+    const sourceNode = nodes.find(n => n.id === edge.source);
+    const targetNode = nodes.find(n => n.id === edge.target);
+
+    setEdgeContextMenu({
+      show: true,
+      position: { x: event.clientX, y: event.clientY },
+      edge,
+      sourceNode,
+      targetNode,
+    });
+  }, [nodes]);
+
+  const closeEdgeContextMenu = useCallback(() => {
+    setEdgeContextMenu(prev => ({ ...prev, show: false }));
+  }, []);
+
+  const handleDeleteEdge = useCallback(async () => {
+    if (!edgeContextMenu.edge) return;
+
+    try {
+      await api.delete(`/cmdb/connections/${edgeContextMenu.edge.source}/${edgeContextMenu.edge.target}`);
+      toast.success('Koneksi berhasil dihapus');
+      await fetchAll();
+    } catch (err) {
+      console.error('Delete connection error:', err);
+      toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
+    }
+  }, [edgeContextMenu.edge, fetchAll]);
+
+  const handleEditEdge = useCallback(() => {
+    if (!edgeContextMenu.edge) return;
+
+    const edge = edgeContextMenu.edge;
+    const sourceItem = items.find(item => item.id === Number(edge.source));
+    const targetItem = items.find(item => item.id === Number(edge.target));
+
+    if (sourceItem && targetItem) {
+      setQuickConnectionSource(sourceItem);
+      setQuickConnectionTarget(targetItem);
+      setQuickConnectionMode('edit');
+      setQuickConnectionExistingType(edge.data?.connectionType || 'depends_on');
+      setShowQuickConnectionModal(true);
+    }
+  }, [edgeContextMenu.edge, items]);
 
   const handleToggleGroupConnection = (groupId) => {
     setSelectedGroupConnections(prev => 
@@ -1865,6 +2079,8 @@ export default function CMDBVisualization() {
         hideViewAllOption={true}
         showMiniMap={showMiniMap}
         onToggleMiniMap={() => setShowMiniMap(prev => !prev)}
+        showConnectionLabels={showConnectionLabels}
+        onToggleConnectionLabels={() => setShowConnectionLabels(prev => !prev)}
         onJumpToFirstNode={handleJumpToFirstNode}
         onFitView={handleFitView}
       />
@@ -2021,6 +2237,7 @@ export default function CMDBVisualization() {
               }
             }, [selectionMode, highlightMode, highlightedNodeId, clearHighlight, highlightNode])}
             onNodeContextMenu={handleNodeContextMenu}
+            onEdgeContextMenu={handleEdgeContextMenu}
             onNodeDragStart={onNodeDragStart}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
@@ -2043,9 +2260,10 @@ export default function CMDBVisualization() {
               setEdgeHandles(newEdgeHandles);
               setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
             }, [edgeHandles, setEdges, currentWorkspace?.id])}
+            onConnect={handleConnect}
             nodeTypes={nodeTypes}
             nodesDraggable={true}
-            nodesConnectable={false}
+            nodesConnectable={true}
             elementsSelectable={true}
             connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
             connectionLineType="smoothstep"
@@ -2097,6 +2315,18 @@ export default function CMDBVisualization() {
             onManageGroupConnections={handleContextManageGroupConnections}
             onToggleVisibility={handleContextToggleVisibility}
             onClose={closeContextMenu}
+          />
+
+          {/* Edge Context Menu */}
+          <EdgeContextMenu
+            show={edgeContextMenu.show}
+            position={edgeContextMenu.position}
+            edge={edgeContextMenu.edge}
+            sourceNode={edgeContextMenu.sourceNode}
+            targetNode={edgeContextMenu.targetNode}
+            onEdit={handleEditEdge}
+            onDelete={handleDeleteEdge}
+            onClose={closeEdgeContextMenu}
           />
 
           {/* Selection Rectangle */}
@@ -2257,6 +2487,9 @@ export default function CMDBVisualization() {
         onSave={handleSaveConnections}
         onToggleConnection={handleToggleConnection}
         onToggleGroupConnection={handleToggleGroupConnection}
+        onConnectionTypeChange={handleConnectionTypeChange}
+        selectedConnectionType={selectedConnectionType}
+        existingConnectionTypes={itemConnectionTypes}
       />
 
       <GroupModal
@@ -2305,6 +2538,20 @@ export default function CMDBVisualization() {
         show={showShareModal}
         workspaceId={currentWorkspace?.id}
         onClose={() => setShowShareModal(false)}
+      />
+
+      <QuickConnectionModal
+        show={showQuickConnectionModal}
+        sourceItem={quickConnectionSource}
+        targetItem={quickConnectionTarget}
+        onClose={() => {
+          setShowQuickConnectionModal(false);
+          setQuickConnectionMode('create');
+          setQuickConnectionExistingType(null);
+        }}
+        onSave={handleSaveQuickConnection}
+        mode={quickConnectionMode}
+        existingConnectionType={quickConnectionExistingType}
       />
 
       <ServiceDetailDialog
