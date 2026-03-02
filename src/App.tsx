@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from "@/components/Theme-provider"
-import { useState, useEffect } from 'react'
+import { useAuth } from './hooks/useAuth'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
@@ -19,39 +19,18 @@ import CMDBVisualization from './pages/cmdb-pages/CMDBVisualization'
 import { Toaster } from 'sonner'
 import CMDBDashboard from './pages/cmdb-pages/CMDBDashboard'
 import CMDBSharedView from './pages/cmdb-pages/CMDBSharedView'
+import { AuthProvider } from './context/AuthProvider'
 
-
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const token = localStorage.getItem('token');
-    const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
-    return !!token && isAuthInStorage;
-  });
-
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'token' || e.key === 'isAuthenticated') {
-        const token = localStorage.getItem('token');
-        const isAuthInStorage = localStorage.getItem('isAuthenticated') === 'true';
-        setIsAuthenticated(!!token && isAuthInStorage);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
 
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-    <Router>
+    <>
       <div className="App h-screen overflow-hidden">
         <Routes>
           <Route
             path="/login"
-            element={<Login setIsAuthenticated={setIsAuthenticated} />}
+            element={<Login />}
           />
           <Route
             path="/dashboard"
@@ -235,7 +214,18 @@ function App() {
         richColors
         position="top-center"
       />
-    </Router>
+    </>
+  )
+}
+
+function App() {
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <AuthProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

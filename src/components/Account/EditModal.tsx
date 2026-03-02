@@ -10,12 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-export type AccountFormData = {
-  id?: number;
-  nipp: string;
-  email: string;
-};
+import type { AccountFormData } from "@/types/components";
 
 interface EditModalProps {
   showModal: boolean;

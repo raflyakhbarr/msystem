@@ -1,25 +1,21 @@
 "use client"
 import * as React from "react"
-import {  Command, Server, Link, Users, SquareStack, User, Braces, LayoutDashboard, GitFork, BookOpen} from "lucide-react"
+import {  Command, Server, Link, Users, SquareStack, User, Braces, LayoutDashboard, GitFork,} from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,} from "@/components/ui/sidebar"
+import { authManager } from "@/context/AuthManager"
 
 const getUserData = () => {
-  const username = localStorage.getItem('username')
-  const userDataString = localStorage.getItem('user')
+  const user = authManager.getUser()
+  const username = authManager.getState().username
   let userData = { name: username || '', email: '', avatar: '' }
 
-  if (userDataString) {
-    try {
-      const parsedUser = JSON.parse(userDataString)
-      userData = {
-        name: username || '',
-        email: parsedUser.email || '',
-        avatar: parsedUser.avatar || ''
-      }
-    } catch (error) {
-      console.error("Failed to parse user data", error)
+  if (user) {
+    userData = {
+      name: username || '',
+      email: (user.email as string) || '',
+      avatar: (user.avatar as string) || ''
     }
   }
 
@@ -100,9 +96,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = getUserData()
 
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated')
-    localStorage.removeItem('user')
-    localStorage.removeItem('token')
+    authManager.clearAuth()
     window.location.href = '/login'
   }
 
