@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   ArrowUpRight, ArrowDownRight, Link2, Layers, Shield, TrendingUp, RefreshCw, ArrowRight,
   Server, Key, Puzzle, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap,
@@ -125,7 +127,7 @@ function ConnectionTypeSelector({
   size = "default",
   className = ""
 }) {
-  const [open, setOpen] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const selectedType = connectionTypes.find(ct => ct.type_slug === value);
@@ -142,73 +144,72 @@ function ConnectionTypeSelector({
   const sizeClasses = size === "small" ? "h-7 text-xs" : "";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          className={`w-full justify-between ${sizeClasses} ${className}`}
-        >
-          {selectedType ? (
-            <div className="flex items-center gap-2">
-              {getConnectionIcon(selectedType.icon)}
-              <span>{selectedType.label}</span>
-            </div>
-          ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <div className="p-3">
-          <div className="flex items-center gap-2 border-b pb-2">
-            <Search size={16} className="text-muted-foreground" />
-            <Input
-              placeholder="Cari tipe koneksi..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
+    <>
+      <Button
+        variant="outline"
+        className={`w-full justify-between ${sizeClasses} ${className}`}
+        onClick={() => setShowDialog(true)}
+      >
+        {selectedType ? (
+          <div className="flex items-center gap-2">
+            {getConnectionIcon(selectedType.icon)}
+            <span>{selectedType.label}</span>
           </div>
-        </div>
-        <ScrollArea className={size === "small" ? "h-[200px]" : "h-[300px]"}>
-          <div className="p-1">
-            {filteredTypes.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Tidak ada tipe koneksi ditemukan
-              </div>
-            ) : (
-              filteredTypes.map((ct) => (
-                <button
-                  key={ct.id}
-                  onClick={() => {
-                    onChange(ct.type_slug);
-                    setOpen(false);
-                    setSearchQuery('');
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-                >
-                  {getConnectionIcon(ct.icon)}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
-                      {value === ct.type_slug && (
-                        <Check size={14} className="text-primary ml-auto" />
-                      )}
-                    </div>
+        ) : (
+          <span className="text-muted-foreground">{placeholder}</span>
+        )}
+      </Button>
+
+      {/* Separate Dialog for Connection Type Selection */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
+          </DialogHeader>
+          <Command shouldFilter={false}>
+            <div className="p-3 border-b">
+              <CommandInput
+                placeholder="Cari tipe koneksi..."
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+              />
+            </div>
+            <CommandList style={{ maxHeight: size === 'small' ? '200px' : '400px', overflowY: 'auto' }}>
+              <CommandEmpty>
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  Tidak ada tipe koneksi ditemukan
+                </div>
+              </CommandEmpty>
+              <CommandGroup>
+                {filteredTypes.map((ct) => (
+                  <CommandItem
+                    key={ct.id}
+                    value={ct.type_slug}
+                    onSelect={() => {
+                      onChange(ct.type_slug);
+                      setShowDialog(false);
+                      setSearchQuery('');
+                    }}
+                    className="cursor-pointer"
+                  >
+                    {getConnectionIcon(ct.icon)}
+                    <span className={`font-medium ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
+                    {value === ct.type_slug && (
+                      <Check size={14} className="text-primary ml-auto" />
+                    )}
                     {ct.description && size !== "small" && (
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate ml-2">
                         {ct.description}
                       </p>
                     )}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

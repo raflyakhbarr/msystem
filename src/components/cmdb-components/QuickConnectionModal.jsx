@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { getConnectionTypeInfo, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import {
   Server,
@@ -41,8 +43,8 @@ export default function QuickConnectionModal({
   existingConnectionType = null,
 }) {
   const [selectedType, setSelectedType] = useState('depends_on');
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (show) {
@@ -108,7 +110,8 @@ export default function QuickConnectionModal({
   });
 
   return (
-    <Dialog open={show} onOpenChange={onClose}>
+    <>
+      <Dialog open={show} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{mode === 'edit' ? 'Edit Tipe Koneksi' : 'Buat Koneksi Baru'}</DialogTitle>
@@ -184,82 +187,23 @@ export default function QuickConnectionModal({
               Pilih Tipe Koneksi
             </Label>
 
-            <Popover open={isOpen} onOpenChange={setIsOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className="w-full justify-between"
-                  id="connection-type"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: connectionTypeInfo.color }}
-                    />
-                    <span>{connectionTypeInfo.label}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground ml-2">
-                    {connectionTypeInfo.default_direction === 'forward' ? '→' : connectionTypeInfo.default_direction === 'backward' ? '←' : '↔'}
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0" align="start">
-                <div className="p-3">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Search size={16} className="text-muted-foreground" />
-                    <Input
-                      placeholder="Cari tipe koneksi..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                  </div>
-                </div>
-                <ScrollArea className="h-[300px]">
-                  <div className="p-1">
-                    {filteredConnectionTypes.length === 0 ? (
-                      <div className="py-6 text-center text-sm text-muted-foreground">
-                        Tidak ada tipe koneksi ditemukan
-                      </div>
-                    ) : (
-                      filteredConnectionTypes.map(([key, type]) => (
-                        <button
-                          key={key}
-                          onClick={() => {
-                            setSelectedType(key);
-                            setIsOpen(false);
-                            setSearchQuery('');
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-                        >
-                          <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: type.color }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">{type.label}</span>
-                              <span className="text-xs text-muted-foreground">
-                                ({type.default_direction === 'forward' ? '→' : type.default_direction === 'backward' ? '←' : '↔'})
-                              </span>
-                              {selectedType === key && (
-                                <Check size={14} className="text-primary ml-auto" />
-                              )}
-                            </div>
-                            {type.description && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {type.description}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
-              </PopoverContent>
-            </Popover>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              id="connection-type"
+              onClick={() => setShowTypeSelector(true)}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: connectionTypeInfo.color }}
+                />
+                <span>{connectionTypeInfo.label}</span>
+              </div>
+              <span className="text-xs text-muted-foreground ml-2">
+                {connectionTypeInfo.default_direction === 'forward' ? '→' : connectionTypeInfo.default_direction === 'backward' ? '←' : '↔'}
+              </span>
+            </Button>
 
             {/* Connection Type Description */}
             <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-3">
@@ -281,5 +225,66 @@ export default function QuickConnectionModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Separate Dialog for Connection Type Selection */}
+    <Dialog open={showTypeSelector} onOpenChange={setShowTypeSelector}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
+        </DialogHeader>
+        <Command shouldFilter={false}>
+          <div className="p-3 border-b">
+            <CommandInput
+              placeholder="Cari tipe koneksi..."
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+            />
+          </div>
+          <CommandList style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            <CommandEmpty>
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Tidak ada tipe koneksi ditemukan
+              </div>
+            </CommandEmpty>
+            <CommandGroup>
+              {filteredConnectionTypes.map(([key, type]) => (
+                <CommandItem
+                  key={key}
+                  value={key}
+                  onSelect={() => {
+                    setSelectedType(key);
+                    setShowTypeSelector(false);
+                    setSearchQuery('');
+                  }}
+                  className="cursor-pointer"
+                >
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0 mr-3"
+                    style={{ backgroundColor: type.color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{type.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({type.default_direction === 'forward' ? '→' : type.default_direction === 'backward' ? '←' : '↔'})
+                      </span>
+                    </div>
+                    {type.description && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {type.description}
+                      </p>
+                    )}
+                  </div>
+                  {selectedType === key && (
+                    <Check size={14} className="text-primary ml-auto" />
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
