@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '@/components/Theme-provider'
+import { authManager } from '@/context/AuthManager'
 
 function Settings() {
   const [passwordForm, setPasswordForm] = useState({
@@ -12,7 +13,8 @@ function Settings() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAuthenticated')
+    // Use authManager instead of localStorage
+    const isAuthenticated = authManager.isAuthenticated()
     if (!isAuthenticated) {
       navigate('/login')
       return

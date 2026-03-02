@@ -1,4 +1,4 @@
-import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, } from 'recharts'      
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, } from 'recharts'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +8,7 @@ import { fetchMenu } from "@/api/menuApi"
 import { fetchMenuGroup } from "@/api/menugroupApi"
 import { fetchAccounts } from "@/api/accountApi"
 import { fetchFitur } from "@/api/fiturApi"
+import { authManager } from '@/context/AuthManager'
 
 interface DashboardStats {
   systems: number
@@ -77,20 +78,15 @@ function Dashboard() {
 
   useEffect(() => {
     setMounted(true)
-    const userDataString = localStorage.getItem('user')
-    const username = localStorage.getItem('username')
+    // Use authManager instead of localStorage
+    const user = authManager.getUser()
+    const username = authManager.getState().username
 
-    if (userDataString) {
-      try {
-        const parsedUser = JSON.parse(userDataString)
-        setUser({
-          username: username || 'User',
-          name: parsedUser.username || username || 'User'
-        })
-      } catch (error) {
-        console.error("Failed to parse user data", error)
-        setUser({ username: username || 'User' })
-      }
+    if (user) {
+      setUser({
+        username: username || 'User',
+        name: (user.username as string) || username || 'User'
+      })
     } else if (username) {
       setUser({ username })
     }

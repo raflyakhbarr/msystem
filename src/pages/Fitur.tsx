@@ -4,8 +4,8 @@ import { fetchAllSystems} from '../api/SystemApi.ts';
 import { useApiData } from '../hooks/useApiData.ts';
 import { useCrudForm } from '../hooks/useCrudForm.ts';
 import DataTable from '../components/common/DataTable.tsx';
-import ActionsCell from '../components/Fitur/ActionsCell.jsx';
-import EditModal from '../components/Fitur/EditModal.jsx';
+import ActionsCell from '../components/Fitur/ActionsCell.tsx';
+import EditModal from '../components/Fitur/EditModal.tsx';
 import DetailsModal from '../components/Fitur/DetailsModal.tsx';
 import type { DataItem, SystemItem, FiturItem, Column } from '@/types';
 

@@ -7,8 +7,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { type SystemItem } from '@/api/SystemApi';
-import { type FiturItem } from '@/api/fiturApi';
+import { type SystemItem } from '@/types'
+import { type FiturItem } from '@/types';
 
 interface DetailsModalProps {
   showModal: boolean;

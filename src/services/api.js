@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { authManager } from '../context/AuthManager';
+import { hashPassword } from '../utils/hash';
 
 const CMDB_API_BASE_URL = import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001';
 
@@ -10,10 +12,10 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Add token to all requests
+// Add token to all requests using authManager (in-memory auth)
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = authManager.getToken();
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -36,7 +38,7 @@ api.interceptors.request.use(
         console.error('[API Request] Failed to parse token:', e);
       }
     } else {
-      console.warn('[API Request] No token found in localStorage for:', config.url);
+      console.warn('[API Request] No token found in authManager for:', config.url);
     }
 
     return config;
@@ -46,7 +48,7 @@ api.interceptors.request.use(
   }
 );
 
-// Handle 401 responses
+// Handle 401 responses - use authManager for token renewal
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -56,11 +58,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // Try to get fresh token
-      const username = localStorage.getItem('username');
-      const hashedPassword = localStorage.getItem('hashedPassword');
+      // Try to get fresh token from authManager
+      const { username, password } = authManager.getCredentials();
 
-      if (username && hashedPassword) {
+      if (username && password) {
         try {
           // Build full URL for token endpoint
           const tokenEndpoint = import.meta.env.VITE_API_TOKEN_ENDPOINT.startsWith('http')
@@ -74,13 +75,15 @@ api.interceptors.response.use(
             headers: { 'Content-Type': 'application/json' }
           });
 
+          const hashedPassword = hashPassword(password);
           const response = await authClient.post(
             tokenEndpoint,
             { username, password: hashedPassword }
           );
 
           if (response.data.token) {
-            localStorage.setItem('token', response.data.token);
+            // Update token in authManager
+            authManager.updateToken(response.data.token, response.data.expired || null);
             console.log('[Token Refresh] New token received');
 
             // Retry original request with new token
@@ -89,13 +92,13 @@ api.interceptors.response.use(
           }
         } catch (refreshError) {
           console.error('[Token Refresh] Failed:', refreshError.response?.data || refreshError.message);
-          localStorage.clear();
+          authManager.clearAuth();
           window.location.href = '/login';
           return Promise.reject(refreshError);
         }
       } else {
-        console.error('[Token Refresh] No credentials found in localStorage');
-        localStorage.clear();
+        console.error('[Token Refresh] No credentials found in authManager');
+        authManager.clearAuth();
         window.location.href = '/login';
       }
     }
