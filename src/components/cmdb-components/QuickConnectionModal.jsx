@@ -31,6 +31,7 @@ import {
   ArrowRightLeft,
   Search,
   Check,
+  Layers,
 } from 'lucide-react';
 
 export default function QuickConnectionModal({
@@ -55,10 +56,19 @@ export default function QuickConnectionModal({
 
   if (!sourceItem || !targetItem) return null;
 
-  const getItemIcon = (type) => {
+  // Helper function to check if item is a group
+  const isGroup = (item) => item && item.color !== undefined;
+
+  const getItemIcon = (item) => {
     const iconProps = { size: 32, className: 'text-foreground' };
 
-    switch (type) {
+    // Check if it's a group
+    if (isGroup(item)) {
+      return <Layers {...iconProps} />;
+    }
+
+    // Otherwise it's an item
+    switch (item.type) {
       case 'server': return <Server {...iconProps} />;
       case 'database': return <Database {...iconProps} />;
       case 'switch': return <Network {...iconProps} />;
@@ -70,14 +80,24 @@ export default function QuickConnectionModal({
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'bg-green-500 border-green-600';
-      case 'inactive': return 'bg-red-500 border-red-600';
-      case 'maintenance': return 'bg-yellow-500 border-yellow-600';
-      case 'decommissioned': return 'bg-gray-500 border-gray-600';
-      default: return 'bg-gray-500 border-gray-600';
+  const getDisplayColor = (item) => {
+    // For groups, use their color
+    if (isGroup(item)) {
+      return `border-2` + ` style={{ borderColor: '${item.color}' }}`;
     }
+
+    // For items, use status color
+    const statusColor = {
+      'active': 'bg-green-500 border-green-600',
+      'inactive': 'bg-red-500 border-red-600',
+      'maintenance': 'bg-yellow-500 border-yellow-600',
+      'decommissioned': 'bg-gray-500 border-gray-600',
+    };
+    return statusColor[item.status] || 'bg-gray-500 border-gray-600';
+  };
+
+  const getItemTypeLabel = (item) => {
+    return isGroup(item) ? 'Group' : (item.type || 'Item');
   };
 
   const connectionTypeInfo = getConnectionTypeInfo(selectedType);
@@ -127,12 +147,15 @@ export default function QuickConnectionModal({
             <div className="flex items-center justify-center gap-4">
               {/* Source Item */}
               <div className="flex flex-col items-center gap-2">
-                <div className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${getStatusColor(sourceItem.status)}`}>
-                  {getItemIcon(sourceItem.type)}
+                <div
+                  className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${isGroup(sourceItem) ? '' : getDisplayColor(sourceItem)}`}
+                  style={isGroup(sourceItem) ? { borderColor: sourceItem.color, backgroundColor: `${sourceItem.color}20` } : {}}
+                >
+                  {getItemIcon(sourceItem)}
                 </div>
                 <div className="text-center">
                   <div className="font-semibold text-sm">{sourceItem.name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{sourceItem.type}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(sourceItem)}</div>
                 </div>
               </div>
 
@@ -151,12 +174,15 @@ export default function QuickConnectionModal({
 
               {/* Target Item */}
               <div className="flex flex-col items-center gap-2">
-                <div className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${getStatusColor(targetItem.status)}`}>
-                  {getItemIcon(targetItem.type)}
+                <div
+                  className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${isGroup(targetItem) ? '' : getDisplayColor(targetItem)}`}
+                  style={isGroup(targetItem) ? { borderColor: targetItem.color, backgroundColor: `${targetItem.color}20` } : {}}
+                >
+                  {getItemIcon(targetItem)}
                 </div>
                 <div className="text-center">
                   <div className="font-semibold text-sm">{targetItem.name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{targetItem.type}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(targetItem)}</div>
                 </div>
               </div>
             </div>

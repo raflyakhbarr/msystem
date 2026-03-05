@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
+import { Layers } from 'lucide-react';
+import api from '../../services/api';
+import { ConnectionTypeSelector, MiniConnectionPreview } from './ConnectionModal';
 
 export default function GroupConnectionModal({
   show,
@@ -22,9 +25,96 @@ export default function GroupConnectionModal({
   onSave,
   onToggleGroupConnection,
   onToggleItemConnection,
+  selectedConnectionType = 'depends_on',
+  onConnectionTypeChange,
+  existingGroupConnectionTypes = {},
+  existingItemConnectionTypes = {},
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [connectionTargetType, setConnectionTargetType] = useState('group');
+  const [connectionTypes, setConnectionTypes] = useState([]);
+  const [groupConnectionTypes, setGroupConnectionTypes] = useState({});
+  const [itemConnectionTypes, setItemConnectionTypes] = useState({});
+
+  useEffect(() => {
+    const fetchConnectionTypes = async () => {
+      try {
+        const response = await api.get('/cmdb/connection-types');
+        setConnectionTypes(response.data);
+      } catch (error) {
+        console.error('Failed to fetch connection types:', error);
+      }
+    };
+
+    if (show) {
+      fetchConnectionTypes();
+    }
+  }, [show]);
+
+  // Load existing connection types when modal opens
+  useEffect(() => {
+    if (show && Object.keys(existingGroupConnectionTypes).length > 0) {
+      setGroupConnectionTypes(existingGroupConnectionTypes);
+    }
+  }, [show, existingGroupConnectionTypes]);
+
+  useEffect(() => {
+    if (show && Object.keys(existingItemConnectionTypes).length > 0) {
+      setItemConnectionTypes(existingItemConnectionTypes);
+    }
+  }, [show, existingItemConnectionTypes]);
+
+  // Update group connection types when selectedGroupConnections change
+  useEffect(() => {
+    setGroupConnectionTypes(prev => {
+      const newTypes = { ...prev };
+      selectedGroupConnections.forEach(groupId => {
+        if (!newTypes[groupId]) {
+          newTypes[groupId] = selectedConnectionType || 'depends_on';
+        }
+      });
+      // Remove types for groups that are no longer selected
+      Object.keys(newTypes).forEach(groupId => {
+        if (!selectedGroupConnections.includes(Number(groupId))) {
+          delete newTypes[groupId];
+        }
+      });
+      return newTypes;
+    });
+  }, [selectedGroupConnections, selectedConnectionType]);
+
+  // Update item connection types when selectedItemConnections change
+  useEffect(() => {
+    setItemConnectionTypes(prev => {
+      const newTypes = { ...prev };
+      selectedItemConnections.forEach(itemId => {
+        if (!newTypes[itemId]) {
+          newTypes[itemId] = selectedConnectionType || 'depends_on';
+        }
+      });
+      // Remove types for items that are no longer selected
+      Object.keys(newTypes).forEach(itemId => {
+        if (!selectedItemConnections.includes(Number(itemId))) {
+          delete newTypes[itemId];
+        }
+      });
+      return newTypes;
+    });
+  }, [selectedItemConnections, selectedConnectionType]);
+
+  const handleGroupTypeChange = (groupId, typeSlug) => {
+    setGroupConnectionTypes(prev => ({
+      ...prev,
+      [groupId]: typeSlug
+    }));
+  };
+
+  const handleItemTypeChange = (itemId, typeSlug) => {
+    setItemConnectionTypes(prev => ({
+      ...prev,
+      [itemId]: typeSlug
+    }));
+  };
 
   if (!show || !selectedGroup) return null;
 
@@ -70,25 +160,62 @@ export default function GroupConnectionModal({
 
             <TabsContent value="group" className="space-y-3 mt-4">
               {selectedGroupConnections.length > 0 && (
-                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500">
-                  <p className="font-semibold text-sm mb-2">Groups Terhubung</p>
-                  {selectedGroupConnections.map((groupId) => {
-                    const group = groups.find(g => g.id === groupId);
-                    return group ? (
-                      <div
-                        key={`selected-${groupId}`}
-                        className="flex items-center justify-between py-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={true}
-                            onCheckedChange={() => onToggleGroupConnection(groupId)}
-                          />
-                          <span className="font-medium">{group.name}</span>
+                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500 dark:text-black">
+                  <p className="font-semibold text-sm mb-3">Groups Terhubung ({selectedGroupConnections.length})</p>
+                  <div className="space-y-3">
+                    {selectedGroupConnections.map((groupId) => {
+                      const group = groups.find(g => g.id === groupId);
+                      const groupTypeId = groupConnectionTypes[groupId] || 'depends_on';
+                      const groupTypeInfo = connectionTypes.find(ct => ct.type_slug === groupTypeId);
+
+                      if (!group) return null;
+
+                      return (
+                        <div
+                          key={`selected-${groupId}`}
+                          className="p-3 bg-white rounded-lg border border-blue-200 dark:border-blue-800 dark:bg-gray-800"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1">
+                              <Checkbox
+                                checked={true}
+                                onCheckedChange={() => onToggleGroupConnection(groupId)}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Layers className="h-4 w-4 text-blue-600" />
+                                  <span className="text-sm font-medium">{group.name}</span>
+                                </div>
+
+                                {/* Connection Type Selector for this group */}
+                                <div className="flex items-center gap-2 flex-1">
+                                  <label className="text-xs text-muted-foreground whitespace-nowrap">Tipe:</label>
+                                  <ConnectionTypeSelector
+                                    value={groupTypeId}
+                                    onChange={(value) => handleGroupTypeChange(groupId, value)}
+                                    connectionTypes={connectionTypes}
+                                    placeholder="Pilih tipe"
+                                    size="small"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Mini Visualization */}
+                            {groupTypeInfo && (
+                              <div className="flex-shrink-0">
+                                <MiniConnectionPreview
+                                  connectionType={groupTypeInfo}
+                                  sourceName={selectedGroup?.name || 'Source'}
+                                  targetName={group.name}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : null;
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -141,26 +268,62 @@ export default function GroupConnectionModal({
 
             <TabsContent value="item" className="space-y-3 mt-4">
               {selectedItemConnections.length > 0 && (
-                <div className="p-3 border rounded-lg bg-green-50 border-green-500">
-                  <p className="font-semibold text-sm mb-2">Items Terhubung</p>
-                  {selectedItemConnections.map((itemId) => {
-                    const item = items.find(i => i.id === itemId);
-                    return item ? (
-                      <div
-                        key={`selected-item-${itemId}`}
-                        className="flex items-center justify-between py-1"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={true}
-                            onCheckedChange={() => onToggleItemConnection(itemId)}
-                          />
-                          {getTypeIcon(item.type)}
-                          <span className="text-sm font-medium">{item.name}</span>
+                <div className="p-3 border rounded-lg bg-green-50 border-green-500 dark:text-black">
+                  <p className="font-semibold text-sm mb-3">Items Terhubung ({selectedItemConnections.length})</p>
+                  <div className="space-y-3">
+                    {selectedItemConnections.map((itemId) => {
+                      const item = items.find(i => i.id === itemId);
+                      const itemTypeId = itemConnectionTypes[itemId] || 'depends_on';
+                      const itemTypeInfo = connectionTypes.find(ct => ct.type_slug === itemTypeId);
+
+                      if (!item) return null;
+
+                      return (
+                        <div
+                          key={`selected-item-${itemId}`}
+                          className="p-3 bg-white rounded-lg border border-green-200 dark:border-green-800 dark:bg-gray-800"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1">
+                              <Checkbox
+                                checked={true}
+                                onCheckedChange={() => onToggleItemConnection(itemId)}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  {getTypeIcon(item.type)}
+                                  <span className="text-sm font-medium">{item.name}</span>
+                                </div>
+
+                                {/* Connection Type Selector for this item */}
+                                <div className="flex items-center gap-2 flex-1">
+                                  <label className="text-xs text-muted-foreground whitespace-nowrap">Tipe:</label>
+                                  <ConnectionTypeSelector
+                                    value={itemTypeId}
+                                    onChange={(value) => handleItemTypeChange(itemId, value)}
+                                    connectionTypes={connectionTypes}
+                                    placeholder="Pilih tipe"
+                                    size="small"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Mini Visualization */}
+                            {itemTypeInfo && (
+                              <div className="flex-shrink-0">
+                                <MiniConnectionPreview
+                                  connectionType={itemTypeInfo}
+                                  sourceName={selectedGroup?.name || 'Source'}
+                                  targetName={item.name}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : null;
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -209,7 +372,7 @@ export default function GroupConnectionModal({
             <Button variant="secondary" onClick={onClose}>
               Batal
             </Button>
-            <Button onClick={onSave}>
+            <Button onClick={() => onSave(groupConnectionTypes, itemConnectionTypes)}>
               Simpan Koneksi ({selectedGroupConnections.length + selectedItemConnections.length})
             </Button>
           </div>

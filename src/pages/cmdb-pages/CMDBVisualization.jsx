@@ -231,6 +231,11 @@ export default function CMDBVisualization() {
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
   const [selectedConnectionType, setSelectedConnectionType] = useState('depends_on');
   const [itemConnectionTypes, setItemConnectionTypes] = useState({});
+  // Connection types for group-to-item and item-to-group connections
+  const [itemToGroupConnectionTypes, setItemToGroupConnectionTypes] = useState({});
+  // Connection types for group-to-group and group-to-item connections (from group modal)
+  const [groupToGroupConnectionTypes, setGroupToGroupConnectionTypes] = useState({});
+  const [groupToItemConnectionTypes, setGroupToItemConnectionTypes] = useState({});
 
   const [showMiniMap, setShowMiniMap] = useState(() => {
     const saved = localStorage.getItem('cmdb-minimap-enabled');
@@ -989,6 +994,16 @@ export default function CMDBVisualization() {
       });
 
     setItemConnectionTypes(existingTypes);
+
+    // Load existing connection types for each selected group
+    const existingGroupTypes = {};
+    connections
+      .filter(conn => conn.source_id === item.id && conn.target_group_id)
+      .forEach(conn => {
+        existingGroupTypes[conn.target_group_id] = conn.connection_type || 'depends_on';
+      });
+
+    setItemToGroupConnectionTypes(existingGroupTypes);
     setShowConnectionModal(true);
   }, [connections]);
 
@@ -996,14 +1011,22 @@ export default function CMDBVisualization() {
     setSelectedConnectionType(typeSlug);
   }, []);
 
-  const handleSaveConnections = useCallback(async (connectionTypes = {}) => {
+  const handleItemToGroupTypeChange = useCallback((groupId, typeSlug) => {
+    setItemToGroupConnectionTypes(prev => ({
+      ...prev,
+      [groupId]: typeSlug
+    }));
+  }, []);
+
+  const handleSaveConnections = useCallback(async (itemConnTypes = {}, groupConnTypes = {}) => {
     if (!selectedItemForConnection || !currentWorkspace) return;
 
     try {
       console.log('=== Saving Connections ===');
       console.log('Source:', selectedItemForConnection.name);
       console.log('Selected targets:', selectedConnections);
-      console.log('Connection types:', connectionTypes);
+      console.log('Item connection types:', itemConnTypes);
+      console.log('Group connection types:', groupConnTypes);
 
       // SIMPLER & MORE ROBUST APPROACH:
       // Delete all existing connections for this source, then add back the selected ones
@@ -1020,7 +1043,7 @@ export default function CMDBVisualization() {
 
       // Add back all selected connections with their types
       for (const targetId of selectedConnections) {
-        const connectionType = connectionTypes[targetId] || selectedConnectionType;
+        const connectionType = itemConnTypes[targetId] || selectedConnectionType;
         console.log(`Adding connection: ${selectedItemForConnection.name} -> ${targetId} (type: ${connectionType})`);
         await api.post('/cmdb/connections', {
           source_id: selectedItemForConnection.id,
@@ -1042,10 +1065,13 @@ export default function CMDBVisualization() {
       }
 
       for (const groupId of selectedGroupConnections) {
+        const connectionType = groupConnTypes[groupId] || selectedConnectionType;
         await api.post('/cmdb/connections/to-group', {
           source_id: selectedItemForConnection.id,
           target_group_id: groupId,
-          workspace_id: currentWorkspace.id
+          workspace_id: currentWorkspace.id,
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType)
         });
       }
 
@@ -1057,7 +1083,7 @@ export default function CMDBVisualization() {
       console.error('Save error:', err);
       toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-  }, [selectedItemForConnection, selectedConnections, selectedGroupConnections, selectedConnectionType, currentWorkspace, fetchAll]);
+  }, [selectedItemForConnection, selectedConnections, selectedGroupConnections, selectedConnectionType, currentWorkspace, fetchAll, getConnectionDirection]);
 
   const handleToggleConnection = (targetId) => {
     setSelectedConnections(prev =>
@@ -1069,65 +1095,158 @@ export default function CMDBVisualization() {
 
   // Handler for drag-to-connect (Quick Connection Modal)
   const handleConnect = useCallback((connection) => {
-    // Find source and target items from the nodes/items data
-    const sourceItem = items.find(item => item.id === Number(connection.source));
-    const targetItem = items.find(item => item.id === Number(connection.target));
+    // Detect if source or target is a group
+    const isSourceGroup = String(connection.source).startsWith('group-');
+    const isTargetGroup = String(connection.target).startsWith('group-');
 
-    if (sourceItem && targetItem) {
-      // Check if connection already exists
-      const existingConn = connections.find(
-        conn => conn.source_id === Number(connection.source) && conn.target_id === Number(connection.target)
-      );
+    let sourceItem, targetItem, sourceGroup, targetGroup;
 
-      if (existingConn) {
-        toast.error('Koneksi sudah ada!');
-        return;
-      }
-
-      setQuickConnectionSource(sourceItem);
-      setQuickConnectionTarget(targetItem);
-      setQuickConnectionMode('create');
-      setQuickConnectionExistingType(null);
-      setShowQuickConnectionModal(true);
+    if (isSourceGroup) {
+      const sourceGroupId = Number(String(connection.source).replace('group-', ''));
+      sourceGroup = groups.find(g => g.id === sourceGroupId);
+    } else {
+      sourceItem = items.find(item => item.id === Number(connection.source));
     }
-  }, [items, connections]);
+
+    if (isTargetGroup) {
+      const targetGroupId = Number(String(connection.target).replace('group-', ''));
+      targetGroup = groups.find(g => g.id === targetGroupId);
+    } else {
+      targetItem = items.find(item => item.id === Number(connection.target));
+    }
+
+    // Check if we have valid source and target
+    if ((!sourceItem && !sourceGroup) || (!targetItem && !targetGroup)) {
+      return;
+    }
+
+    // Check if connection already exists
+    let existingConn = null;
+    if (sourceItem && targetItem) {
+      // Item-to-item
+      existingConn = connections.find(
+        conn => conn.source_id === sourceItem.id && conn.target_id === targetItem.id
+      );
+    } else if (sourceItem && targetGroup) {
+      // Item-to-group
+      existingConn = connections.find(
+        conn => conn.source_id === sourceItem.id && conn.target_group_id === targetGroup.id
+      );
+    } else if (sourceGroup && targetItem) {
+      // Group-to-item
+      existingConn = connections.find(
+        conn => conn.source_group_id === sourceGroup.id && conn.target_id === targetItem.id
+      );
+    } else if (sourceGroup && targetGroup) {
+      // Group-to-group - not supported in quick connection yet
+      toast.info('Gunakan Group Connection Modal untuk koneksi group-to-group');
+      return;
+    }
+
+    if (existingConn) {
+      toast.error('Koneksi sudah ada!');
+      return;
+    }
+
+    // Set source and target (can be item or group)
+    setQuickConnectionSource(sourceItem || sourceGroup);
+    setQuickConnectionTarget(targetItem || targetGroup);
+    setQuickConnectionMode('create');
+    setQuickConnectionExistingType(null);
+    setShowQuickConnectionModal(true);
+  }, [items, connections, groups]);
 
   const handleSaveQuickConnection = useCallback(async (connectionType) => {
     if (!quickConnectionSource || !quickConnectionTarget || !currentWorkspace) return;
 
     try {
+      // Detect if source or target is a group
+      const isSourceGroup = quickConnectionSource.color !== undefined; // Groups have color property
+      const isTargetGroup = quickConnectionTarget.color !== undefined;
+
       if (quickConnectionMode === 'edit') {
         // Update existing connection
-        await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
-          workspace_id: currentWorkspace.id,
-          connection_type: connectionType,
-          direction: getConnectionDirection(connectionType)
-        });
-        toast.success('Tipe koneksi berhasil diubah!');
+        if (!isSourceGroup && !isTargetGroup) {
+          // Item-to-item
+          await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Tipe koneksi berhasil diubah!');
+        } else if (isSourceGroup && !isTargetGroup) {
+          // Group-to-item
+          await api.put(`/cmdb/connections/from-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Tipe koneksi group-to-item berhasil diubah!');
+        } else if (!isSourceGroup && isTargetGroup) {
+          // Item-to-group
+          await api.put(`/cmdb/connections/to-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Tipe koneksi item-to-group berhasil diubah!');
+        } else {
+          toast.error('Edit koneksi group-to-group: Gunakan Group Connection Modal.');
+        }
       } else {
         // Create new connection
-        await api.post('/cmdb/connections', {
-          source_id: quickConnectionSource.id,
-          target_id: quickConnectionTarget.id,
-          workspace_id: currentWorkspace.id,
-          connection_type: connectionType,
-          direction: getConnectionDirection(connectionType)
-        });
-        toast.success('Koneksi berhasil dibuat!');
+        if (isSourceGroup && isTargetGroup) {
+          // Group-to-group - use group connection endpoint
+          await api.post('/groups/connections', {
+            source_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Koneksi group-to-group berhasil dibuat!');
+        } else if (isSourceGroup && !isTargetGroup) {
+          // Group-to-item
+          await api.post('/cmdb/connections/from-group', {
+            source_group_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Koneksi group-to-item berhasil dibuat!');
+        } else if (!isSourceGroup && isTargetGroup) {
+          // Item-to-group
+          await api.post('/cmdb/connections/to-group', {
+            source_id: quickConnectionSource.id,
+            target_group_id: quickConnectionTarget.id,
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Koneksi item-to-group berhasil dibuat!');
+        } else {
+          // Item-to-item
+          await api.post('/cmdb/connections', {
+            source_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType,
+            direction: getConnectionDirection(connectionType)
+          });
+          toast.success('Koneksi berhasil dibuat!');
+        }
       }
 
-      setShowQuickConnectionModal(false);
-      setQuickConnectionMode('create');
-      setQuickConnectionExistingType(null);
       await fetchAll();
+      setShowQuickConnectionModal(false);
+      setQuickConnectionSource(null);
+      setQuickConnectionTarget(null);
     } catch (err) {
-      console.error('Quick connection error:', err);
-      const errorMsg = quickConnectionMode === 'edit'
-        ? 'Gagal mengubah tipe koneksi: '
-        : 'Gagal membuat koneksi: ';
-      toast.error(errorMsg + (err.response?.data?.error || err.message));
+      console.error('Save connection error:', err);
+      toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [quickConnectionSource, quickConnectionTarget, currentWorkspace, fetchAll, quickConnectionMode]);
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, getConnectionDirection]);
 
   // Edge Context Menu handlers
   const handleEdgeContextMenu = useCallback((event, edge) => {
@@ -1157,7 +1276,31 @@ export default function CMDBVisualization() {
     if (!edgeContextMenu.edge) return;
 
     try {
-      await api.delete(`/cmdb/connections/${edgeContextMenu.edge.source}/${edgeContextMenu.edge.target}`);
+      // Deteksi apakah koneksi group-to-item, item-to-group, atau group-to-group
+      const isGroupToItem = String(edgeContextMenu.edge.source).startsWith('group-');
+      const isItemToGroup = String(edgeContextMenu.edge.target).startsWith('group-');
+      const isGroupToGroup = isGroupToItem && isItemToGroup;
+
+      let deleteUrl;
+      if (isGroupToGroup) {
+        // Group-to-group: DELETE /api/groups/connections/:sourceId/:targetId
+        const sourceGroupId = String(edgeContextMenu.edge.source).replace('group-', '');
+        const targetGroupId = String(edgeContextMenu.edge.target).replace('group-', '');
+        deleteUrl = `/groups/connections/${sourceGroupId}/${targetGroupId}`;
+      } else if (isGroupToItem) {
+        // Group-to-item: DELETE /api/cmdb/connections/from-group/:sourceGroupId/:targetId
+        const sourceGroupId = String(edgeContextMenu.edge.source).replace('group-', '');
+        deleteUrl = `/cmdb/connections/from-group/${sourceGroupId}/${edgeContextMenu.edge.target}`;
+      } else if (isItemToGroup) {
+        // Item-to-group: DELETE /api/cmdb/connections/to-group/:sourceId/:targetGroupId
+        const targetGroupId = String(edgeContextMenu.edge.target).replace('group-', '');
+        deleteUrl = `/cmdb/connections/to-group/${edgeContextMenu.edge.source}/${targetGroupId}`;
+      } else {
+        // Item-to-item: DELETE /api/cmdb/connections/:sourceId/:targetId
+        deleteUrl = `/cmdb/connections/${edgeContextMenu.edge.source}/${edgeContextMenu.edge.target}`;
+      }
+
+      await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
       await fetchAll();
     } catch (err) {
@@ -1170,8 +1313,99 @@ export default function CMDBVisualization() {
     if (!edgeContextMenu.edge) return;
 
     const edge = edgeContextMenu.edge;
-    const sourceItem = items.find(item => item.id === Number(edge.source));
-    const targetItem = items.find(item => item.id === Number(edge.target));
+
+    // Deteksi tipe koneksi
+    const isGroupToItem = String(edge.source).startsWith('group-');
+    const isItemToGroup = String(edge.target).startsWith('group-');
+    const isGroupToGroup = isGroupToItem && isItemToGroup;
+
+    let sourceItem, targetItem, sourceGroup, targetGroup;
+    let connectionType = edge.data?.connectionType || 'depends_on';
+
+    if (isGroupToGroup) {
+      // Group-to-group - gunakan Group Connection Modal
+      const sourceGroupId = Number(String(edge.source).replace('group-', ''));
+      sourceGroup = groups.find(g => g.id === sourceGroupId);
+      if (sourceGroup) {
+        toast.info('Membuka Group Connection Modal untuk edit koneksi group-to-group.');
+        // Set state langsung tanpa memanggil handleOpenGroupConnectionModal
+        setSelectedGroupForConnection(sourceGroup);
+        setSelectedConnectionType('depends_on');
+
+        // Load existing connections
+        const existingGroupConns = groupConnections
+          .filter(conn => conn.source_id === sourceGroup.id)
+          .map(conn => conn.target_id);
+        const existingItemConns = connections
+          .filter(conn => conn.source_group_id === sourceGroup.id)
+          .map(conn => conn.target_id);
+
+        setSelectedGroupToGroupConnections(existingGroupConns);
+        setSelectedGroupToItemConnections(existingItemConns);
+
+        // Load existing connection types
+        const existingGroupTypes = {};
+        groupConnections
+          .filter(conn => conn.source_id === sourceGroup.id)
+          .forEach(conn => {
+            existingGroupTypes[conn.target_id] = conn.connection_type || 'depends_on';
+          });
+        setGroupToGroupConnectionTypes(existingGroupTypes);
+
+        const existingItemTypes = {};
+        connections
+          .filter(conn => conn.source_group_id === sourceGroup.id)
+          .forEach(conn => {
+            existingItemTypes[conn.target_id] = conn.connection_type || 'depends_on';
+          });
+        setGroupToItemConnectionTypes(existingItemTypes);
+
+        setShowGroupConnectionModal(true);
+      }
+      return;
+    }
+
+    if (isGroupToItem) {
+      // source is group, target is item
+      const sourceGroupId = Number(String(edge.source).replace('group-', ''));
+      const targetId = Number(edge.target);
+      sourceGroup = groups.find(g => g.id === sourceGroupId);
+      targetItem = items.find(item => item.id === targetId);
+      if (!sourceGroup || !targetItem) {
+        toast.error('Source group atau target item tidak ditemukan!');
+        return;
+      }
+      // Open Quick Connection Modal for group-to-item
+      setQuickConnectionSource(sourceGroup);
+      setQuickConnectionTarget(targetItem);
+      setQuickConnectionMode('edit');
+      setQuickConnectionExistingType(connectionType);
+      setShowQuickConnectionModal(true);
+      return;
+    }
+
+    if (isItemToGroup) {
+      // source is item, target is group
+      const sourceId = Number(edge.source);
+      const targetGroupId = Number(String(edge.target).replace('group-', ''));
+      sourceItem = items.find(item => item.id === sourceId);
+      targetGroup = groups.find(g => g.id === targetGroupId);
+      if (!sourceItem || !targetGroup) {
+        toast.error('Source item atau target group tidak ditemukan!');
+        return;
+      }
+      // Open Quick Connection Modal for item-to-group
+      setQuickConnectionSource(sourceItem);
+      setQuickConnectionTarget(targetGroup);
+      setQuickConnectionMode('edit');
+      setQuickConnectionExistingType(connectionType);
+      setShowQuickConnectionModal(true);
+      return;
+    }
+
+    // Handle item-to-item connections
+    sourceItem = items.find(item => item.id === Number(edge.source));
+    targetItem = items.find(item => item.id === Number(edge.target));
 
     if (sourceItem && targetItem) {
       setQuickConnectionSource(sourceItem);
@@ -1180,51 +1414,119 @@ export default function CMDBVisualization() {
       setQuickConnectionExistingType(edge.data?.connectionType || 'depends_on');
       setShowQuickConnectionModal(true);
     }
-  }, [edgeContextMenu.edge, items]);
+  }, [edgeContextMenu.edge, items, groups, groupConnections, connections]);
 
   const handleToggleGroupConnection = (groupId) => {
-    setSelectedGroupConnections(prev => 
-      prev.includes(groupId)
+    setSelectedGroupConnections(prev => {
+      const isSelected = prev.includes(groupId);
+      const newSelection = isSelected
         ? prev.filter(id => id !== groupId)
-        : [...prev, groupId]
-    );
+        : [...prev, groupId];
+
+      // Update connection types - add default when selecting, remove when deselecting
+      setItemToGroupConnectionTypes(prevTypes => {
+        const newTypes = { ...prevTypes };
+        if (!isSelected) {
+          // Adding group - set default connection type
+          newTypes[groupId] = selectedConnectionType || 'depends_on';
+        } else {
+          // Removing group - delete its connection type
+          delete newTypes[groupId];
+        }
+        return newTypes;
+      });
+
+      return newSelection;
+    });
   };
 
   const handleOpenGroupConnectionModal = (group) => {
     setSelectedGroupForConnection(group);
-    
+    setSelectedConnectionType('depends_on'); // Reset to default
+
     const existingGroupConns = groupConnections
       .filter(conn => conn.source_id === group.id)
       .map(conn => conn.target_id);
-    
+
     const existingItemConns = connections
       .filter(conn => conn.source_group_id === group.id)
       .map(conn => conn.target_id);
-    
+
     setSelectedGroupToGroupConnections(existingGroupConns);
-    setSelectedGroupToItemConnections(existingItemConns); // TAMBAHKAN INI
+    setSelectedGroupToItemConnections(existingItemConns);
+
+    // Load existing connection types for group-to-group connections
+    const existingGroupTypes = {};
+    groupConnections
+      .filter(conn => conn.source_id === group.id)
+      .forEach(conn => {
+        existingGroupTypes[conn.target_id] = conn.connection_type || 'depends_on';
+      });
+    setGroupToGroupConnectionTypes(existingGroupTypes);
+
+    // Load existing connection types for group-to-item connections
+    const existingItemTypes = {};
+    connections
+      .filter(conn => conn.source_group_id === group.id)
+      .forEach(conn => {
+        existingItemTypes[conn.target_id] = conn.connection_type || 'depends_on';
+      });
+    setGroupToItemConnectionTypes(existingItemTypes);
+
     setShowGroupConnectionModal(true);
   };
 
   const handleToggleGroupToGroupConnection = (targetGroupId) => {
-    setSelectedGroupToGroupConnections(prev =>
-      prev.includes(targetGroupId)
+    setSelectedGroupToGroupConnections(prev => {
+      const isSelected = prev.includes(targetGroupId);
+      const newSelection = isSelected
         ? prev.filter(id => id !== targetGroupId)
-        : [...prev, targetGroupId]
-    );
+        : [...prev, targetGroupId];
+
+      // Update connection types
+      setGroupToGroupConnectionTypes(prevTypes => {
+        const newTypes = { ...prevTypes };
+        if (!isSelected) {
+          // Adding group - set default connection type
+          newTypes[targetGroupId] = selectedConnectionType || 'depends_on';
+        } else {
+          // Removing group - delete its connection type
+          delete newTypes[targetGroupId];
+        }
+        return newTypes;
+      });
+
+      return newSelection;
+    });
   };
 
   const handleToggleGroupToItemConnection = (targetItemId) => {
-    setSelectedGroupToItemConnections(prev =>
-      prev.includes(targetItemId)
+    setSelectedGroupToItemConnections(prev => {
+      const isSelected = prev.includes(targetItemId);
+      const newSelection = isSelected
         ? prev.filter(id => id !== targetItemId)
-        : [...prev, targetItemId]
-    );
+        : [...prev, targetItemId];
+
+      // Update connection types
+      setGroupToItemConnectionTypes(prevTypes => {
+        const newTypes = { ...prevTypes };
+        if (!isSelected) {
+          // Adding item - set default connection type
+          newTypes[targetItemId] = selectedConnectionType || 'depends_on';
+        } else {
+          // Removing item - delete its connection type
+          delete newTypes[targetItemId];
+        }
+        return newTypes;
+      });
+
+      return newSelection;
+    });
   };
 
-  const handleSaveGroupConnections = async () => {
-  if (!currentWorkspace) return;
-  
+  const handleSaveGroupConnections = async (groupConnTypes = {}, itemConnTypes = {}) => {
+  if (!currentWorkspace || !selectedGroupForConnection) return;
+
   try {
     const currentGroupConns = groupConnections
       .filter(conn => conn.source_id === selectedGroupForConnection.id)
@@ -1234,10 +1536,13 @@ export default function CMDBVisualization() {
     const groupsToRemove = currentGroupConns.filter(id => !selectedGroupToGroupConnections.includes(id));
 
     for (const targetId of groupsToAdd) {
+      const connectionType = groupConnTypes[targetId] || 'depends_on';
       await api.post('/groups/connections', {
         source_id: selectedGroupForConnection.id,
         target_id: targetId,
-        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+        workspace_id: currentWorkspace.id,
+        connection_type: connectionType,
+        direction: getConnectionDirection(connectionType)
       });
     }
 
@@ -1253,10 +1558,13 @@ export default function CMDBVisualization() {
     const itemsToRemove = currentItemConns.filter(id => !selectedGroupToItemConnections.includes(id));
 
     for (const targetId of itemsToAdd) {
+      const connectionType = itemConnTypes[targetId] || 'depends_on';
       await api.post('/cmdb/connections/from-group', {
         source_group_id: selectedGroupForConnection.id,
         target_id: targetId,
-        workspace_id: currentWorkspace.id // TAMBAHKAN INI
+        workspace_id: currentWorkspace.id,
+        connection_type: connectionType,
+        direction: getConnectionDirection(connectionType)
       });
     }
 
@@ -2495,6 +2803,8 @@ export default function CMDBVisualization() {
         onConnectionTypeChange={handleConnectionTypeChange}
         selectedConnectionType={selectedConnectionType}
         existingConnectionTypes={itemConnectionTypes}
+        itemToGroupConnectionTypes={itemToGroupConnectionTypes}
+        onItemToGroupTypeChange={handleItemToGroupTypeChange}
       />
 
       <GroupModal
@@ -2531,6 +2841,10 @@ export default function CMDBVisualization() {
         onToggleConnection={handleToggleGroupToGroupConnection}
         onToggleGroupConnection={handleToggleGroupToGroupConnection}
         onToggleItemConnection={handleToggleGroupToItemConnection}
+        selectedConnectionType={selectedConnectionType}
+        onConnectionTypeChange={handleConnectionTypeChange}
+        existingGroupConnectionTypes={groupToGroupConnectionTypes}
+        existingItemConnectionTypes={groupToItemConnectionTypes}
       />
 
       <ExportModal
