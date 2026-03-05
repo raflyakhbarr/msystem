@@ -102,6 +102,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             env_type: item.env_type,
             services: itemServices,
             storage: item.storage || null,
+            alias: item.alias || '',
+            port: item.port || '',
           },
           style: {
             width: dimensions.itemWidth,
@@ -142,7 +144,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           location: item.location,
           env_type: item.env_type,
           services: itemServices,
-          storage: item.storage || null, // Tambahkan storage
+          storage: item.storage || null,
+          alias: item.alias || '',
+          port: item.port || '',
         },
         style: {
           zIndex: 1,

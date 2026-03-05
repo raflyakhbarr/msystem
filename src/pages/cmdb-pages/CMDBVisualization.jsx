@@ -530,7 +530,9 @@ export default function CMDBVisualization() {
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
       services: servicesWithPreview,
-      storage: item.storage || null,  // ← Tambahkan storage
+      storage: item.storage || null,
+      alias: item.alias || '',
+      port: item.port || '',
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);
@@ -742,7 +744,9 @@ export default function CMDBVisualization() {
       group_id: item.group_id || null,
       env_type: item.env_type || 'fisik',
       services: servicesWithPreview,
-      storage: item.storage || null,  // ← Tambahkan storage
+      storage: item.storage || null,
+      alias: item.alias || '',
+      port: item.port || '',
     });
     setCurrentItemId(item.id);
     setEditItemMode(true);

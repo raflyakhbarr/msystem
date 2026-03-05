@@ -123,6 +123,32 @@ export default function ItemFormModal({
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="alias">Alias</Label>
+              <Input
+                id="alias"
+                name="alias"
+                type="text"
+                placeholder="domain.co.id"
+                value={formData.alias || ''}
+                onChange={onInputChange}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="port">Port</Label>
+              <Input
+                id="port"
+                name="port"
+                type="number"
+                placeholder="8080"
+                value={formData.port || ''}
+                onChange={onInputChange}
+                min="1"
+                max="65535"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="category">Kategori</Label>
               <Select
                 value={formData.category}

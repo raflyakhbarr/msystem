@@ -97,22 +97,36 @@ export default function CustomNode({ data, id }) {
                   <div className="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1.5">
                     <span className="font-semibold text-muted-foreground">Nama:</span>
                     <span className="text-foreground">{data.name || '—'}</span>
-                    
+
                     <span className="font-semibold text-muted-foreground">IP Address:</span>
                     <span className="text-foreground font-mono text-xs">{data.ip || '—'}</span>
-                    
+
+                    {data.alias && (
+                      <>
+                        <span className="font-semibold text-muted-foreground">Alias:</span>
+                        <span className="text-foreground font-mono text-xs">{data.alias}</span>
+                      </>
+                    )}
+
+                    {data.port && (
+                      <>
+                        <span className="font-semibold text-muted-foreground">Port:</span>
+                        <span className="text-foreground font-mono text-xs">{data.port}</span>
+                      </>
+                    )}
+
                     <span className="font-semibold text-muted-foreground">Tipe:</span>
                     <span className="text-foreground capitalize">{data.type || '—'}</span>
-                    
+
                     <span className="font-semibold text-muted-foreground">Kategori:</span>
                     <span className="text-foreground capitalize">{data.category || '—'}</span>
-                    
+
                     <span className="font-semibold text-muted-foreground">Lokasi:</span>
                     <span className="text-foreground">{data.location || '—'}</span>
-                    
+
                     <span className="font-semibold text-muted-foreground">Tipe Env:</span>
                     <span className="text-foreground capitalize">{data.env_type || '—'}</span>
-                    
+
                     <span className="font-semibold text-muted-foreground">Status:</span>
                     <span>
                       <span className={`px-1.5 py-0.5 rounded text-xs ${getStatusColor(data.status)}`}>

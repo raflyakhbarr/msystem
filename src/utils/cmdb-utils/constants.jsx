@@ -42,6 +42,8 @@ export const INITIAL_ITEM_FORM = {
   description: '',
   status: 'active',
   ip: '',
+  alias: '',
+  port: '',
   category: 'internal',
   location: '',
   group_id: null,
