@@ -49,6 +49,9 @@ class AuthManager {
   }
 
   setAuth(token: string, user: UserData, username: string, password: string, tokenExpiry: string | null = null) {
+    console.log('🔑 [AuthManager] Token SET:', token);
+    console.log('🔑 [AuthManager] Token Expiry:', tokenExpiry);
+    console.log('🔑 [AuthManager] User:', username);
     this.state = {
       token,
       user,

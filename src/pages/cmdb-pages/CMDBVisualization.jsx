@@ -1099,6 +1099,7 @@ export default function CMDBVisualization() {
       if (quickConnectionMode === 'edit') {
         // Update existing connection
         await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+          workspace_id: currentWorkspace.id,
           connection_type: connectionType,
           direction: getConnectionDirection(connectionType)
         });

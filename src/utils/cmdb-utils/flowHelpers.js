@@ -157,63 +157,292 @@ export const shouldShowCrossMarker = (status) => {
 };
 
 // Connection type definitions - must match backend
+// Using explicit propagation rules instead of forward/backward
+// Propagation rules:
+//   - 'target_to_source': If TARGET is down, SOURCE is affected
+//   - 'source_to_target': If SOURCE is down, TARGET is affected
+//   - 'both': Both affect each other (bidirectional)
 export const CONNECTION_TYPES = {
-  // Original types
-  depends_on: { label: 'Depends On', color: '#3b82f6', default_direction: 'forward', description: 'Source depends on target untuk operasi normal' },
-  consumed_by: { label: 'Consumed By', color: '#f59e0b', default_direction: 'backward', description: 'Target consumes resources atau services dari source' },
-  connects_to: { label: 'Connects To', color: '#8b5cf6', default_direction: 'bidirectional', description: 'Koneksi jaringan dua arah antar item' },
-  contains: { label: 'Contains', color: '#10b981', default_direction: 'forward', description: 'Source berisi atau mengelola target' },
-  managed_by: { label: 'Managed By', color: '#a855f7', default_direction: 'forward', description: 'Source dikelola oleh target (jika manager target down, source affected)' },
-  data_flow_to: { label: 'Data Flow To', color: '#06b6d4', default_direction: 'forward', description: 'Data mengalir dari source ke target' },
-  backup_to: { label: 'Backup To', color: '#14b8a6', default_direction: 'forward', description: 'Source melakukan backup ke target' },
+  // ==================== DEPENDENCY RELATIONSHIPS ====================
+  depends_on: {
+    label: 'Depends On',
+    color: '#3b82f6',
+    propagation: 'target_to_source',
+    description: 'Source depends on target. Jika target down, source affected.',
+    short_desc: 'Source → needs → Target'
+  },
 
-  // Backup & Recovery
-  backed_up_by: { label: 'Backed Up By', color: '#14b8a6', default_direction: 'forward', description: 'Source di-backup oleh target (jika backup target down, source affected)' },
+  // ==================== RESOURCE CONSUMPTION ====================
+  consumed_by: {
+    label: 'Consumed By',
+    color: '#f59e0b',
+    propagation: 'source_to_target',
+    description: 'Source consumes resources/services dari target. Jika source down, target tidak terpakai. Jika target down, source affected.',
+    short_desc: 'Source → consumes → Target'
+  },
 
-  // Hosting & Infrastructure
-  hosted_on: { label: 'Hosted On', color: '#6366f1', default_direction: 'forward', description: 'Source di-hosting pada target' },
-  hosting: { label: 'Hosting', color: '#6366f1', default_direction: 'backward', description: 'Target meng-hosting source' },
+  // ==================== CONNECTIVITY ====================
+  connects_to: {
+    label: 'Connects To',
+    color: '#8b5cf6',
+    propagation: 'both',
+    description: 'Koneksi jaringan dua arah. Saling mempengaruhi.',
+    short_desc: 'Source ↔ connects ↔ Target'
+  },
 
-  // Licensing
-  licensed_by: { label: 'Licensed By', color: '#eab308', default_direction: 'forward', description: 'Source dilisensikan oleh target (jika license server down, source affected)' },
-  licensing: { label: 'Licensing', color: '#eab308', default_direction: 'backward', description: 'Source memberikan lisensi ke target' },
+  // ==================== CONTAINMENT ====================
+  contains: {
+    label: 'Contains',
+    color: '#10b981',
+    propagation: 'source_to_target',
+    description: 'Source berisi/mengelola target. Jika container (source) down, content (target) affected.',
+    short_desc: 'Source → contains → Target'
+  },
 
-  // Composition
-  part_of: { label: 'Part Of', color: '#a855f7', default_direction: 'forward', description: 'Source merupakan bagian dari target' },
-  comprised_of: { label: 'Comprised Of', color: '#a855f7', default_direction: 'forward', description: 'Source terdiri dari target (jika component down, source affected)' },
+  // ==================== MANAGEMENT ====================
+  managed_by: {
+    label: 'Managed By',
+    color: '#a855f7',
+    propagation: 'target_to_source',
+    description: 'Source dikelola oleh target. Jika manager (target) down, source affected.',
+    short_desc: 'Source ← managed by ← Target'
+  },
 
-  // General Relationship
-  related_to: { label: 'Related To', color: '#94a3b8', default_direction: 'bidirectional', description: 'Hubungan umum antar item' },
+  // ==================== DATA FLOW ====================
+  data_flow_to: {
+    label: 'Data Flow To',
+    color: '#06b6d4',
+    propagation: 'source_to_target',
+    description: 'Data mengalir dari source ke target. Jika source down, flow ke target terhenti. Target affected.',
+    short_desc: 'Source → data → Target'
+  },
 
-  // Workflow/Process
-  preceding: { label: 'Preceding', color: '#f97316', default_direction: 'forward', description: 'Source berjalan sebelum target dalam workflow' },
-  succeeding: { label: 'Succeeding', color: '#f97316', default_direction: 'backward', description: 'Source berjalan setelah target dalam workflow' },
+  // ==================== BACKUP & RECOVERY ====================
+  backup_to: {
+    label: 'Backup To',
+    color: '#14b8a6',
+    propagation: 'source_to_target',
+    description: 'Source melakukan backup ke target. Jika backup server (target) down, source tidak bisa backup. Source affected.',
+    short_desc: 'Source → backs up to → Target'
+  },
 
-  // Security
-  encrypted_by: { label: 'Encrypted By', color: '#be123c', default_direction: 'forward', description: 'Source di-enkripsi oleh target (jika encryption service down, source affected)' },
-  encrypting: { label: 'Encrypting', color: '#be123c', default_direction: 'backward', description: 'Source meng-enkripsi target' },
-  authenticated_by: { label: 'Authenticated By', color: '#059669', default_direction: 'forward', description: 'Source diautentikasi oleh target (jika auth server down, source affected)' },
-  authenticating: { label: 'Authenticating', color: '#059669', default_direction: 'backward', description: 'Source mengautentikasi target' },
+  backed_up_by: {
+    label: 'Backed Up By',
+    color: '#14b8a6',
+    propagation: 'target_to_source',
+    description: 'Source di-backup oleh target. Jika backup server (target) down, source affected.',
+    short_desc: 'Source ← backed up by ← Target'
+  },
 
-  // Monitoring
-  monitoring: { label: 'Monitoring', color: '#ec4899', default_direction: 'backward', description: 'Source memonitor target (jika monitored target down, monitoring service affected)' },
-  monitored_by: { label: 'Monitored By', color: '#ec4899', default_direction: 'forward', description: 'Source dimonitor oleh target (jika monitoring service down, source affected)' },
+  // ==================== HOSTING & INFRASTRUCTURE ====================
+  hosted_on: {
+    label: 'Hosted On',
+    color: '#6366f1',
+    propagation: 'target_to_source',
+    description: 'Source di-hosting pada target. Jika host (target) down, source affected.',
+    short_desc: 'Source ← hosted on ← Target'
+  },
 
-  // Load Balancing & High Availability
-  load_balanced_by: { label: 'Load Balanced By', color: '#8b5cf6', default_direction: 'forward', description: 'Source traffic di-load-balance oleh target (jika LB down, source affected)' },
-  load_balancing: { label: 'Load Balancing', color: '#8b5cf6', default_direction: 'backward', description: 'Source melakukan load balancing untuk target' },
-  failing_over_to: { label: 'Failing Over To', color: '#ef4444', default_direction: 'forward', description: 'Source failover ke target jika terjadi kegagalan' },
-  failover_from: { label: 'Failover From', color: '#ef4444', default_direction: 'backward', description: 'Source menerima failover dari target' },
+  hosting: {
+    label: 'Hosting',
+    color: '#6366f1',
+    propagation: 'source_to_target',
+    description: 'Source meng-hosting target. Jika host (source) down, target affected.',
+    short_desc: 'Source → hosts → Target'
+  },
 
-  // Data Replication
-  replicating_to: { label: 'Replicating To', color: '#06b6d4', default_direction: 'backward', description: 'Source mereplikasi data ke target (jika replica down, source affected)' },
-  replicated_by: { label: 'Replicated By', color: '#06b6d4', default_direction: 'forward', description: 'Source direplikasi oleh target (jika master down, source affected)' },
+  // ==================== LICENSING ====================
+  licensed_by: {
+    label: 'Licensed By',
+    color: '#eab308',
+    propagation: 'target_to_source',
+    description: 'Source dilisensikan oleh target. Jika license server (target) down, source affected.',
+    short_desc: 'Source ← licensed by ← Target'
+  },
 
-  // Proxy & Routing
-  proxying_for: { label: 'Proxying For', color: '#f59e0b', default_direction: 'backward', description: 'Source menjadi proxy untuk target (jika target down, proxy affected)' },
-  proxied_by: { label: 'Proxied By', color: '#f59e0b', default_direction: 'forward', description: 'Source diproxy oleh target (jika proxy down, source affected)' },
-  routed_through: { label: 'Routed Through', color: '#10b981', default_direction: 'forward', description: 'Source traffic dirouting melalui target (jika router down, source affected)' },
-  routing: { label: 'Routing', color: '#10b981', default_direction: 'backward', description: 'Source merouting traffic untuk target' },
+  licensing: {
+    label: 'Licensing',
+    color: '#eab308',
+    propagation: 'source_to_target',
+    description: 'Source memberikan lisensi ke target. Jika license server (source) down, target affected.',
+    short_desc: 'Source → licenses → Target'
+  },
+
+  // ==================== COMPOSITION ====================
+  part_of: {
+    label: 'Part Of',
+    color: '#a855f7',
+    propagation: 'target_to_source',
+    description: 'Source merupakan bagian dari target. Jika whole (target) down, part (source) affected.',
+    short_desc: 'Source ← part of ← Target'
+  },
+
+  comprised_of: {
+    label: 'Comprised Of',
+    color: '#a855f7',
+    propagation: 'source_to_target',
+    description: 'Source terdiri dari target. Jika component (target) down, source affected.',
+    short_desc: 'Source → comprised of → Target'
+  },
+
+  // ==================== GENERAL RELATIONSHIP ====================
+  related_to: {
+    label: 'Related To',
+    color: '#94a3b8',
+    propagation: 'both',
+    description: 'Hubungan umum antar item. Saling mempengaruhi.',
+    short_desc: 'Source ↔ related ↔ Target'
+  },
+
+  // ==================== WORKFLOW/PROCESS ====================
+  preceding: {
+    label: 'Preceding',
+    color: '#f97316',
+    propagation: 'source_to_target',
+    description: 'Source berjalan sebelum target dalam workflow. Jika source down, target terhenti.',
+    short_desc: 'Source → precedes → Target'
+  },
+
+  succeeding: {
+    label: 'Succeeding',
+    color: '#f97316',
+    propagation: 'target_to_source',
+    description: 'Source berjalan setelah target dalam workflow. Jika target down, source terhenti.',
+    short_desc: 'Source ← succeeds ← Target'
+  },
+
+  // ==================== SECURITY ====================
+  encrypted_by: {
+    label: 'Encrypted By',
+    color: '#be123c',
+    propagation: 'target_to_source',
+    description: 'Source di-enkripsi oleh target. Jika encryption service (target) down, source affected.',
+    short_desc: 'Source ← encrypted by ← Target'
+  },
+
+  encrypting: {
+    label: 'Encrypting',
+    color: '#be123c',
+    propagation: 'source_to_target',
+    description: 'Source meng-enkripsi target. Jika encryption service (source) down, target affected.',
+    short_desc: 'Source → encrypts → Target'
+  },
+
+  authenticated_by: {
+    label: 'Authenticated By',
+    color: '#059669',
+    propagation: 'target_to_source',
+    description: 'Source diautentikasi oleh target. Jika auth server (target) down, source affected.',
+    short_desc: 'Source ← authenticated by ← Target'
+  },
+
+  authenticating: {
+    label: 'Authenticating',
+    color: '#059669',
+    propagation: 'source_to_target',
+    description: 'Source mengautentikasi target. Jika auth service (source) down, target affected.',
+    short_desc: 'Source → authenticates → Target'
+  },
+
+  // ==================== MONITORING ====================
+  monitored_by: {
+    label: 'Monitored By',
+    color: '#ec4899',
+    propagation: 'target_to_source',
+    description: 'Source dimonitor oleh target. Jika monitoring service (target) down, source affected.',
+    short_desc: 'Source ← monitored by ← Target'
+  },
+
+  monitoring: {
+    label: 'Monitoring',
+    color: '#ec4899',
+    propagation: 'source_to_target',
+    description: 'Source memonitor target. Jika monitoring service (source) down, target affected.',
+    short_desc: 'Source → monitors → Target'
+  },
+
+  // ==================== LOAD BALANCING & HIGH AVAILABILITY ====================
+  load_balanced_by: {
+    label: 'Load Balanced By',
+    color: '#8b5cf6',
+    propagation: 'target_to_source',
+    description: 'Source traffic di-load-balance oleh target. Jika LB (target) down, source affected.',
+    short_desc: 'Source ← load balanced by ← Target'
+  },
+
+  load_balancing: {
+    label: 'Load Balancing',
+    color: '#8b5cf6',
+    propagation: 'source_to_target',
+    description: 'Source melakukan load balancing untuk target. Jika LB (source) down, target affected.',
+    short_desc: 'Source → load balances → Target'
+  },
+
+  failing_over_to: {
+    label: 'Failing Over To',
+    color: '#ef4444',
+    propagation: 'source_to_target',
+    description: 'Source failover ke target jika terjadi kegagalan. Target adalah backup.',
+    short_desc: 'Source → fails over to → Target'
+  },
+
+  failover_from: {
+    label: 'Failover From',
+    color: '#ef4444',
+    propagation: 'target_to_source',
+    description: 'Source menerima failover dari target. Source adalah backup.',
+    short_desc: 'Source ← fails over from ← Target'
+  },
+
+  // ==================== DATA REPLICATION ====================
+  replicating_to: {
+    label: 'Replicating To',
+    color: '#06b6d4',
+    propagation: 'source_to_target',
+    description: 'Source mereplikasi data ke target. Jika source (master) down, replica (target) outdated. Target affected.',
+    short_desc: 'Source → replicates to → Target'
+  },
+
+  replicated_by: {
+    label: 'Replicated By',
+    color: '#06b6d4',
+    propagation: 'target_to_source',
+    description: 'Source direplikasi oleh target. Jika target (master) down, source affected.',
+    short_desc: 'Source ← replicated by ← Target'
+  },
+
+  // ==================== PROXY & ROUTING ====================
+  proxying_for: {
+    label: 'Proxying For',
+    color: '#f59e0b',
+    propagation: 'source_to_target',
+    description: 'Source menjadi proxy untuk target. Jika proxy (source) down, target affected.',
+    short_desc: 'Source → proxies → Target'
+  },
+
+  proxied_by: {
+    label: 'Proxied By',
+    color: '#f59e0b',
+    propagation: 'target_to_source',
+    description: 'Source diproxy oleh target. Jika proxy (target) down, source affected.',
+    short_desc: 'Source ← proxied by ← Target'
+  },
+
+  routed_through: {
+    label: 'Routed Through',
+    color: '#10b981',
+    propagation: 'target_to_source',
+    description: 'Source traffic dirouting melalui target. Jika router (target) down, source affected.',
+    short_desc: 'Source ← routed through ← Target'
+  },
+
+  routing: {
+    label: 'Routing',
+    color: '#10b981',
+    propagation: 'source_to_target',
+    description: 'Source merouting traffic untuk target. Jika router (source) down, target affected.',
+    short_desc: 'Source → routes → Target'
+  },
 };
 
 export const getConnectionTypeInfo = (typeSlug) => {

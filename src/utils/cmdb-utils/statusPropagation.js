@@ -46,27 +46,33 @@ export const buildDependencyGraph = (connections, groupConnections) => {
       // Dapatkan tipe koneksi untuk menentukan arah propagasi
       const connType = conn.connection_type || 'depends_on';
       const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-      const direction = connectionInfo.default_direction || 'forward';
+      const propagation = connectionInfo.propagation || 'target_to_source';
 
-      if (direction === 'forward') {
-        // Forward (depends_on, contains, dll): Source bergantung pada Target
-        // Jika Target bermasalah → Source terpengaruh
-        // Source adalah dependent, Target adalah dependency
-        graph[sourceId].dependencies.add(targetId); // Source depends on Target
-        graph[targetId].dependents.add(sourceId);   // Target affects Source
-      } else if (direction === 'backward') {
-        // Backward (consumed_by, managed_by, dll): Target bergantung pada Source
-        // Jika Source bermasalah → Target terpengaruh
-        // Target adalah dependent, Source adalah dependency
-        graph[targetId].dependencies.add(sourceId); // Target depends on Source
-        graph[sourceId].dependents.add(targetId);   // Source affects Target
-      } else {
-        // Bidirectional (connects_to, related_to): Saling bergantung
+      // ✅ EXPLICIT PROPAGATION RULES (bukan forward/backward yang membingungkan)
+      if (propagation === 'target_to_source') {
+        // Target affects Source
+        // Jika TARGET bermasalah → SOURCE terpengaruh
+        // Source bergantung pada target
+        // Example: depends_on (source depends on target)
+        graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
+        graph[targetId].dependents.add(sourceId);   // Target → affects → Source
+
+      } else if (propagation === 'source_to_target') {
+        // Source affects Target
+        // Jika SOURCE bermasalah → TARGET terpengaruh
+        // Target bergantung pada source
+        // Example: contains (container affects content), consumed_by (consumer affects provider)
+        graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
+        graph[sourceId].dependents.add(targetId);   // Source → affects → Target
+
+      } else if (propagation === 'both') {
+        // Bidirectional: Saling mempengaruhi
         // Jika salah satu bermasalah → yang lain terpengaruh
-        graph[sourceId].dependencies.add(targetId); // Source depends on Target
-        graph[targetId].dependents.add(sourceId);   // Target affects Source
-        graph[targetId].dependencies.add(sourceId); // Target depends on Source
-        graph[sourceId].dependents.add(targetId);   // Source affects Target
+        // Example: connects_to, related_to
+        graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
+        graph[targetId].dependents.add(sourceId);   // Target → affects → Source
+        graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
+        graph[sourceId].dependents.add(targetId);   // Source → affects → Target
       }
     }
   });
@@ -227,21 +233,21 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     const sourceStatus = getNodeStatus(sourceId);
     const targetStatus = getNodeStatus(targetId);
 
-    // Dapatkan tipe koneksi untuk menentukan node mana yang dicek status propagasinya
+    // Dapatkan tipe koneksi untuk menentukan arah propagasi
     const connType = conn.connection_type || 'depends_on';
     const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-    const direction = connectionInfo.default_direction || 'forward';
+    const propagation = connectionInfo.propagation || 'target_to_source';
 
     // Tentukan node mana yang merupakan dependent (yang terpengaruh)
     // dan node mana yang merupakan dependency (yang mempengaruhi)
     let dependentId, dependencyId;
 
-    if (direction === 'forward') {
-      // Forward (depends_on): Source bergantung pada Target
+    if (propagation === 'target_to_source') {
+      // Target affects Source (source depends on target)
       dependentId = sourceId;
       dependencyId = targetId;
-    } else if (direction === 'backward') {
-      // Backward (consumed_by): Target bergantung pada Source
+    } else if (propagation === 'source_to_target') {
+      // Source affects Target (target depends on source)
       dependentId = targetId;
       dependencyId = sourceId;
     } else {
@@ -255,7 +261,7 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     let isPropagated = false;
     let effectiveEdgeStatus = sourceStatus; // Default
 
-    if (direction === 'bidirectional') {
+    if (propagation === 'both') {
       // Untuk bidirectional, cek apakah salah satu node terpengaruh oleh node lain
       const sourceAffected = affectedNodesMap.has(sourceId);
       const targetAffected = affectedNodesMap.has(targetId);
@@ -286,7 +292,7 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
         effectiveEdgeStatus = priorities[sourceStatus] > priorities[targetStatus] ? sourceStatus : targetStatus;
       }
     } else {
-      // Untuk forward/backward, cek apakah dependent terpengaruh oleh dependency (atau node lain)
+      // Untuk source_to_target atau target_to_source, cek apakah dependent terpengaruh oleh dependency (atau node lain)
       const dependentAffected = affectedNodesMap.has(dependentId);
 
       if (dependentAffected) {
@@ -320,7 +326,7 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
       isPropagated,
       effectiveEdgeStatus,
       connectionType: connType,
-      direction,
+      propagation,
     };
   });
 

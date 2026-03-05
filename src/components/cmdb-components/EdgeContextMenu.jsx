@@ -39,12 +39,12 @@ export default function EdgeContextMenu({
   const glassSize = (radius + 40) * 2;
 
   const getDirectionIcon = () => {
-    switch (connectionType.default_direction) {
-      case 'forward':
-        return <ArrowRight className="h-3 w-3" />;
-      case 'backward':
+    switch (connectionType.propagation) {
+      case 'target_to_source':
         return <ArrowLeft className="h-3 w-3" />;
-      case 'bidirectional':
+      case 'source_to_target':
+        return <ArrowRight className="h-3 w-3" />;
+      case 'both':
         return <ArrowRightLeft className="h-3 w-3" />;
       default:
         return <ArrowRight className="h-3 w-3" />;

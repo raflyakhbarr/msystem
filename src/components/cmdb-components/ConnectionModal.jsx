@@ -55,12 +55,12 @@ function getConnectionIcon(iconName) {
 // Connection Preview Component
 function ConnectionPreview({ connectionType, sourceItem }) {
   const getArrowDirection = () => {
-    switch (connectionType.default_direction) {
-      case 'forward':
-        return '→';
-      case 'backward':
+    switch (connectionType.propagation) {
+      case 'target_to_source':
         return '←';
-      case 'bidirectional':
+      case 'source_to_target':
+        return '→';
+      case 'both':
         return '↔';
       default:
         return '→';
@@ -68,12 +68,12 @@ function ConnectionPreview({ connectionType, sourceItem }) {
   };
 
   const getArrowIcon = () => {
-    switch (connectionType.default_direction) {
-      case 'forward':
-        return <ArrowUpRight className="h-5 w-5" />;
-      case 'backward':
+    switch (connectionType.propagation) {
+      case 'target_to_source':
         return <ArrowDownRight className="h-5 w-5 rotate-180" />;
-      case 'bidirectional':
+      case 'source_to_target':
+        return <ArrowUpRight className="h-5 w-5" />;
+      case 'both':
         return <div className="relative h-5 w-5"><ArrowRight className="h-5 w-5 absolute" /><ArrowRight className="h-5 w-5 absolute rotate-180" /></div>;
       default:
         return <ArrowRight className="h-5 w-5" />;
@@ -216,12 +216,12 @@ function ConnectionTypeSelector({
 // Mini Connection Preview Component (for individual items)
 function MiniConnectionPreview({ connectionType, sourceName, targetName }) {
   const getArrowDirection = () => {
-    switch (connectionType.default_direction) {
-      case 'forward':
-        return '→';
-      case 'backward':
+    switch (connectionType.propagation) {
+      case 'target_to_source':
         return '←';
-      case 'bidirectional':
+      case 'source_to_target':
+        return '→';
+      case 'both':
         return '↔';
       default:
         return '→';

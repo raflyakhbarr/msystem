@@ -83,12 +83,15 @@ export default function QuickConnectionModal({
   const connectionTypeInfo = getConnectionTypeInfo(selectedType);
 
   const getArrowIcon = () => {
-    switch (connectionTypeInfo.default_direction) {
-      case 'forward':
-        return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
-      case 'backward':
+    switch (connectionTypeInfo.propagation) {
+      case 'target_to_source':
+        // Target affects source - arrow points to source
         return <ArrowLeft size={28} style={{ color: connectionTypeInfo.color }} />;
-      case 'bidirectional':
+      case 'source_to_target':
+        // Source affects target - arrow points to target
+        return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
+      case 'both':
+        // Bidirectional - double arrow
         return <ArrowRightLeft size={28} style={{ color: connectionTypeInfo.color }} />;
       default:
         return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
@@ -161,19 +164,19 @@ export default function QuickConnectionModal({
               </div>
             </div>
 
-            {/* Description based on arrow direction */}
+            {/* Description based on propagation rule */}
             <div className="mt-4 text-center text-sm text-muted-foreground">
-              {connectionTypeInfo.default_direction === 'forward' && (
+              {connectionTypeInfo.propagation === 'target_to_source' && (
                 <span>
                   <strong>{sourceItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{targetItem.name}</strong>
                 </span>
               )}
-              {connectionTypeInfo.default_direction === 'backward' && (
+              {connectionTypeInfo.propagation === 'source_to_target' && (
                 <span>
                   <strong>{targetItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{sourceItem.name}</strong>
                 </span>
               )}
-              {connectionTypeInfo.default_direction === 'bidirectional' && (
+              {connectionTypeInfo.propagation === 'both' && (
                 <span>
                   <strong>{sourceItem.name}</strong> dan <strong>{targetItem.name}</strong> memiliki hubungan {connectionTypeInfo.label.toLowerCase()}
                 </span>
@@ -201,7 +204,7 @@ export default function QuickConnectionModal({
                 <span>{connectionTypeInfo.label}</span>
               </div>
               <span className="text-xs text-muted-foreground ml-2">
-                {connectionTypeInfo.default_direction === 'forward' ? '→' : connectionTypeInfo.default_direction === 'backward' ? '←' : '↔'}
+                {connectionTypeInfo.propagation === 'target_to_source' ? '←' : connectionTypeInfo.propagation === 'source_to_target' ? '→' : '↔'}
               </span>
             </Button>
 
@@ -266,7 +269,7 @@ export default function QuickConnectionModal({
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{type.label}</span>
                       <span className="text-xs text-muted-foreground">
-                        ({type.default_direction === 'forward' ? '→' : type.default_direction === 'backward' ? '←' : '↔'})
+                        ({type.propagation === 'target_to_source' ? '←' : type.propagation === 'source_to_target' ? '→' : '↔'})
                       </span>
                     </div>
                     {type.description && (
