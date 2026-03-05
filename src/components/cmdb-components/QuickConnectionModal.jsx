@@ -84,16 +84,13 @@ export default function QuickConnectionModal({
 
   const getArrowIcon = () => {
     switch (connectionTypeInfo.propagation) {
-      case 'target_to_source':
-        // Target affects source - arrow points to source
-        return <ArrowLeft size={28} style={{ color: connectionTypeInfo.color }} />;
-      case 'source_to_target':
-        // Source affects target - arrow points to target
-        return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
       case 'both':
         // Bidirectional - double arrow
         return <ArrowRightLeft size={28} style={{ color: connectionTypeInfo.color }} />;
+      case 'target_to_source':
+      case 'source_to_target':
       default:
+        // Selalu arrow ke kanan (source → target) untuk semua tipe kecuali 'both'
         return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
     }
   };
@@ -173,7 +170,7 @@ export default function QuickConnectionModal({
               )}
               {connectionTypeInfo.propagation === 'source_to_target' && (
                 <span>
-                  <strong>{targetItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{sourceItem.name}</strong>
+                  <strong>{sourceItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{targetItem.name}</strong>
                 </span>
               )}
               {connectionTypeInfo.propagation === 'both' && (
@@ -204,7 +201,7 @@ export default function QuickConnectionModal({
                 <span>{connectionTypeInfo.label}</span>
               </div>
               <span className="text-xs text-muted-foreground ml-2">
-                {connectionTypeInfo.propagation === 'target_to_source' ? '←' : connectionTypeInfo.propagation === 'source_to_target' ? '→' : '↔'}
+                {connectionTypeInfo.propagation === 'both' ? '↔' : '→'}
               </span>
             </Button>
 
@@ -269,7 +266,7 @@ export default function QuickConnectionModal({
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{type.label}</span>
                       <span className="text-xs text-muted-foreground">
-                        ({type.propagation === 'target_to_source' ? '←' : type.propagation === 'source_to_target' ? '→' : '↔'})
+                        ({type.propagation === 'both' ? '↔' : '→'})
                       </span>
                     </div>
                     {type.description && (

@@ -177,8 +177,8 @@ export const CONNECTION_TYPES = {
     label: 'Consumed By',
     color: '#f59e0b',
     propagation: 'source_to_target',
-    description: 'Source consumes resources/services dari target. Jika source down, target tidak terpakai. Jika target down, source affected.',
-    short_desc: 'Source → consumes → Target'
+    description: 'Source dikonsumsi oleh target (source = provider, target = consumer). Target mengkonsumsi resources/services dari source. Jika source (provider) down, target (consumer) affected karena tidak bisa mengakses resources.',
+    short_desc: 'Source (Provider) → consumed by → Target (Consumer)'
   },
 
   // ==================== CONNECTIVITY ====================

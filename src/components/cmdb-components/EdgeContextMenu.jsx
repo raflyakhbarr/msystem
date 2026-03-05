@@ -39,13 +39,12 @@ export default function EdgeContextMenu({
   const glassSize = (radius + 40) * 2;
 
   const getDirectionIcon = () => {
+    // Selalu arrow ke kanan (source → target) untuk semua tipe kecuali 'both'
     switch (connectionType.propagation) {
-      case 'target_to_source':
-        return <ArrowLeft className="h-3 w-3" />;
-      case 'source_to_target':
-        return <ArrowRight className="h-3 w-3" />;
       case 'both':
         return <ArrowRightLeft className="h-3 w-3" />;
+      case 'target_to_source':
+      case 'source_to_target':
       default:
         return <ArrowRight className="h-3 w-3" />;
     }
@@ -96,7 +95,7 @@ export default function EdgeContextMenu({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: -70 }}
           exit={{ opacity: 0 }}
-          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-12 max-w-xs overflow-hidden"
+          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-10 max-w-xs overflow-hidden"
           style={{
             background: 'rgba(255,255,255,0.6)',
             border: '1px solid rgba(255,255,255,0.8)',
@@ -119,7 +118,7 @@ export default function EdgeContextMenu({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 50 }}
           exit={{ opacity: 0 }}
-          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white pointer-events-none top-12"
+          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white pointer-events-none top-10"
           style={{
             background: connectionType.color,
             border: '1px solid rgba(255,255,255,0.3)',
@@ -150,7 +149,7 @@ export default function EdgeContextMenu({
         {/* Radial item buttons */}
         <AnimatePresence>
           {items.map((item, index) => {
-            const angle = index * angleStep - Math.PI / 2;
+            const angle = index * angleStep;   
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
 
