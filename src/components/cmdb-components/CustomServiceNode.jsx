@@ -94,6 +94,20 @@ export default function CustomServiceNode({ data, id }) {
                     <span className="font-semibold text-muted-foreground">IP Address:</span>
                     <span className="text-foreground font-mono text-xs">{data.ip || '—'}</span>
 
+                    {data.domain && (
+                      <>
+                        <span className="font-semibold text-muted-foreground">Domain:</span>
+                        <span className="text-foreground font-mono text-xs">{data.domain}</span>
+                      </>
+                    )}
+
+                    {data.port && (
+                      <>
+                        <span className="font-semibold text-muted-foreground">Port:</span>
+                        <span className="text-foreground font-mono text-xs">{data.port}</span>
+                      </>
+                    )}
+
                     <span className="font-semibold text-muted-foreground">Tipe:</span>
                     <span className="text-foreground capitalize">{data.type || '—'}</span>
 
@@ -184,9 +198,15 @@ export default function CustomServiceNode({ data, id }) {
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm truncate">{data.name || 'Unnamed'}</div>
               <div className="text-xs text-muted-foreground capitalize">{data.type || ''}</div>
-              {data.ip && (
+              {/* {data.ip && (
                 <div className="text-xs text-muted-foreground font-mono truncate">{data.ip}</div>
+              )} */}
+              {data.domain && (
+                <div className="text-xs text-muted-foreground font-mono truncate">{data.domain}</div>
               )}
+              {/* {data.port && (
+                <div className="text-xs text-muted-foreground font-mono truncate">:{data.port}</div>
+              )} */}
             </div>
           </div>
         </div>

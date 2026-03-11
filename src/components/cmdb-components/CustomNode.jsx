@@ -101,10 +101,10 @@ export default function CustomNode({ data, id }) {
                     <span className="font-semibold text-muted-foreground">IP Address:</span>
                     <span className="text-foreground font-mono text-xs">{data.ip || '—'}</span>
 
-                    {data.alias && (
+                    {data.domain && (
                       <>
-                        <span className="font-semibold text-muted-foreground">Alias:</span>
-                        <span className="text-foreground font-mono text-xs">{data.alias}</span>
+                        <span className="font-semibold text-muted-foreground">Domain:</span>
+                        <span className="text-foreground font-mono text-xs">{data.domain}</span>
                       </>
                     )}
 

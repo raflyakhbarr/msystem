@@ -113,6 +113,34 @@ export default function ServiceItemFormModal({
             />
           </div>
 
+          {/* Domain */}
+          <div className="space-y-2">
+            <Label htmlFor="domain">Domain</Label>
+            <Input
+              id="domain"
+              name="domain"
+              type="text"
+              value={formData.domain || ''}
+              onChange={onInputChange}
+              placeholder="example.com"
+            />
+          </div>
+
+          {/* Port */}
+          <div className="space-y-2">
+            <Label htmlFor="port">Port</Label>
+            <Input
+              id="port"
+              name="port"
+              type="number"
+              value={formData.port || ''}
+              onChange={onInputChange}
+              placeholder="8080"
+              min="1"
+              max="65535"
+            />
+          </div>
+
           {/* Category */}
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>

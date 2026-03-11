@@ -123,7 +123,7 @@ export default function ItemFormModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="alias">Alias</Label>
+              <Label htmlFor="alias">Domain</Label>
               <Input
                 id="alias"
                 name="alias"
