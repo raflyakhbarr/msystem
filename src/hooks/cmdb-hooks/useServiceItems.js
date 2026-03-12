@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
+import { io } from 'socket.io-client';
 
 export const useServiceItems = (serviceId, workspaceId) => {
   const [items, setItems] = useState([]);
@@ -7,6 +8,8 @@ export const useServiceItems = (serviceId, workspaceId) => {
   const [groups, setGroups] = useState([]);
   const [groupConnections, setGroupConnections] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const fetchAllRef = useRef(null);
 
   const fetchServiceItems = useCallback(async () => {
     if (!serviceId || !workspaceId) return;
@@ -62,6 +65,9 @@ export const useServiceItems = (serviceId, workspaceId) => {
       setLoading(false);
     }
   }, [fetchServiceItems, fetchServiceConnections, fetchServiceGroups, fetchServiceGroupConnections, serviceId, workspaceId]);
+
+  // Store fetchAll in ref for socket listener
+  fetchAllRef.current = fetchAll;
 
   const createServiceGroup = useCallback(async (groupData) => {
     try {
@@ -148,6 +154,27 @@ export const useServiceItems = (serviceId, workspaceId) => {
       throw err;
     }
   }, [groupConnections, serviceId, workspaceId, fetchServiceGroupConnections]);
+
+  // Socket.io connection for real-time updates
+  useEffect(() => {
+    if (!serviceId || !workspaceId) return;
+
+    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
+      reconnectionAttempts: 5
+    });
+
+    socket.on('service_update', (data) => {
+      // Only refetch if this update is for our service
+      if (data.serviceId === serviceId && data.workspaceId === workspaceId) {
+        fetchAllRef.current?.();
+      }
+    });
+
+    return () => {
+      socket.off('service_update');
+      socket.disconnect();
+    };
+  }, [serviceId, workspaceId]);
 
   useEffect(() => {
     fetchAll();

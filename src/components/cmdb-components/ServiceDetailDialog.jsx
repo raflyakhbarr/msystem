@@ -21,31 +21,78 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 
 export default function ServiceDetailDialog({ show, service, workspaceId, onClose }) {
   if (!service) return null;
 
   const [localStatus, setLocalStatus] = useState(service.status);
   const [isUpdating, setIsUpdating] = useState(false);
+  const isLocalUpdateRef = useRef(false);
 
   useEffect(() => {
     setLocalStatus(service.status);
   }, [service.id, service.status]);
 
+  // Socket.io connection for real-time updates from OTHER clients
+  useEffect(() => {
+    if (!show || !service.id || !workspaceId) return;
+
+    console.log('🔌 Connecting to socket.io for service updates...');
+    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
+      reconnectionAttempts: 5
+    });
+
+    socket.on('connect', () => {
+      // console.log('✅ Socket connected for service dialog');
+    });
+
+    socket.on('disconnect', () => {
+      // console.log('🔌 Socket disconnected from service dialog');
+    });
+
+    socket.on('service_update', (data) => {
+      // Convert to number for comparison (backend might send string)
+      const eventServiceId = parseInt(data.serviceId);
+      const eventWorkspaceId = parseInt(data.workspaceId);
+      const currentServiceId = parseInt(service.id);
+      const currentWorkspaceId = parseInt(workspaceId);
+      // Only update if this is for our service AND not from our local update
+      if (eventServiceId === currentServiceId && eventWorkspaceId === currentWorkspaceId) {
+        if (!isLocalUpdateRef.current) {
+          // Fetch latest service data
+          api.get(`/services/single/${service.id}`)
+            .then(res => {
+              setLocalStatus(res.data.status);
+            })
+            .catch(err => console.error('Failed to refresh service status:', err));
+        } else {
+          isLocalUpdateRef.current = false;
+        }
+      } else {
+
+      }
+    });
+
+    return () => {
+      socket.off('service_update');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.disconnect();
+    };
+  }, [show, service.id, workspaceId]);
+
   const handleStatusChange = async (newStatus) => {
     setIsUpdating(true);
     setLocalStatus(newStatus);
+    isLocalUpdateRef.current = true; // Mark as local update
 
     try {
       await api.patch(`/services/${service.id}/status`, { status: newStatus });
       toast.success('Status updated!');
 
-      // Refresh service data by calling parent's refresh if available
-      if (onClose) {
-        // Optional: trigger parent refresh
-        window.dispatchEvent(new CustomEvent('service-status-changed', { detail: { serviceId: service.id, status: newStatus } }));
-      }
+      // Socket.io will handle real-time update to other clients
     } catch (err) {
       setLocalStatus(service.status);
       toast.error('Failed to update status: ' + (err.response?.data?.error || err.message));

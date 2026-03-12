@@ -126,7 +126,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
     connections,
     groups,
     groupConnections,
-    loading,
     fetchAll,
     createServiceGroup,
     updateServiceGroup,
@@ -137,11 +136,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Load service edge handles on mount
   useEffect(() => {
     const loadHandles = async () => {
+      if (!service?.id) return;
       const handles = await loadServiceEdgeHandles(service.id, workspaceId);
       setEdgeHandles(handles);
     };
     loadHandles();
-  }, [service.id, workspaceId]);
+  }, [service?.id, workspaceId]);
 
   // Siapkan data parent service dengan icon_preview
   const parentServiceData = useMemo(() => service ? {
@@ -858,14 +858,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
       }
     }
   }, [service.id, workspaceId, setEdges]);
-
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-full w-full relative">

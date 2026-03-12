@@ -569,6 +569,12 @@ export const deleteEdgeHandle = async (edgeId) => {
 
 // Load service edge handles from database
 export const loadServiceEdgeHandles = async (serviceId, workspaceId) => {
+  // Guard clause untuk mencegah API call dengan serviceId undefined
+  if (!serviceId || !workspaceId) {
+    console.warn('loadServiceEdgeHandles: serviceId atau workspaceId is missing');
+    return {};
+  }
+
   try {
     const response = await api.get(`/service-edge-handles/${serviceId}/edge-handles?workspace_id=${workspaceId}`);
     return response.data;
@@ -580,6 +586,11 @@ export const loadServiceEdgeHandles = async (serviceId, workspaceId) => {
 
 // Save a single service edge handle
 export const saveServiceEdgeHandle = async (edgeId, sourceHandle, targetHandle, serviceId, workspaceId) => {
+  if (!serviceId || !workspaceId) {
+    console.warn('saveServiceEdgeHandle: serviceId atau workspaceId is missing');
+    return;
+  }
+
   try {
     await api.put(`/service-edge-handles/edge-handles/${edgeId}`, {
       sourceHandle,
@@ -594,6 +605,11 @@ export const saveServiceEdgeHandle = async (edgeId, sourceHandle, targetHandle, 
 
 // Bulk save service edge handles
 export const saveServiceEdgeHandles = async (handles, serviceId, workspaceId) => {
+  if (!serviceId || !workspaceId) {
+    console.warn('saveServiceEdgeHandles: serviceId atau workspaceId is missing');
+    return;
+  }
+
   try {
     await api.post(`/service-edge-handles/${serviceId}/edge-handles/bulk`, {
       edgeHandles: handles,
