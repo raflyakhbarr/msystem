@@ -823,6 +823,7 @@ export default function CMDBVisualization() {
                   // New file uploaded - upload it
                   const iconFormData = new FormData();
                   iconFormData.append('icon', iconFile);
+                  iconFormData.append('icon_type', 'upload');  // Tambahkan icon_type
 
                   await api.put(`/services/${createdService.id}/icon`, iconFormData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
