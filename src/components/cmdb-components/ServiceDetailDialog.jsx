@@ -6,9 +6,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ServiceIcon from './ServiceIcon';
 import ServiceVisualization from './ServiceVisualization';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
+import api from "@/services/api";
+import { toast } from "sonner";
 import {
   Server,
   Activity,
@@ -18,9 +21,38 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function ServiceDetailDialog({ show, service, workspaceId, onClose }) {
   if (!service) return null;
+
+  const [localStatus, setLocalStatus] = useState(service.status);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    setLocalStatus(service.status);
+  }, [service.id, service.status]);
+
+  const handleStatusChange = async (newStatus) => {
+    setIsUpdating(true);
+    setLocalStatus(newStatus);
+
+    try {
+      await api.patch(`/services/${service.id}/status`, { status: newStatus });
+      toast.success('Status updated!');
+
+      // Refresh service data by calling parent's refresh if available
+      if (onClose) {
+        // Optional: trigger parent refresh
+        window.dispatchEvent(new CustomEvent('service-status-changed', { detail: { serviceId: service.id, status: newStatus } }));
+      }
+    } catch (err) {
+      setLocalStatus(service.status);
+      toast.error('Failed to update status: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const getStatusConfig = (status) => {
     const configs = {
@@ -46,7 +78,7 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     return configs[status] || configs.active;
   };
 
-  const statusConfig = getStatusConfig(service.status);
+  const statusConfig = getStatusConfig(localStatus);
   const StatusIcon = statusConfig.icon;
 
   return (
@@ -135,10 +167,36 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                       <Activity size={16} className="text-slate-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Status</p>
-                      <p className="text-sm font-semibold text-slate-900 capitalize">
-                        {service.status}
-                      </p>
+                      <p className="text-xs font-medium text-slate-500 mb-1.5">Status</p>
+                      <Select
+                        value={localStatus}
+                        onValueChange={handleStatusChange}
+                        disabled={isUpdating}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                              Active
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="inactive">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-red-500" />
+                              Inactive
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="maintenance">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-amber-500" />
+                              Maintenance
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

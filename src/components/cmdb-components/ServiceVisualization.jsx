@@ -535,15 +535,21 @@ export default function ServiceVisualization({ service, workspaceId }) {
     e.preventDefault();
 
     try {
+      // Convert empty string port to null for PostgreSQL INTEGER column
+      const submitData = {
+        ...itemFormData,
+        port: itemFormData.port === '' ? null : itemFormData.port
+      };
+
       if (editItem) {
-        await api.put(`/service-items/items/${editItem.id}`, itemFormData);
+        await api.put(`/service-items/items/${editItem.id}`, submitData);
       } else {
         const position = reactFlowInstance.current
           ? { x: Math.random() * 400, y: Math.random() * 300 }
           : { x: 0, y: 0 };
 
         await api.post(`/service-items/${service.id}/items`, {
-          ...itemFormData,
+          ...submitData,
           position,
           workspace_id: workspaceId,
         });
