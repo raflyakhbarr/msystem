@@ -1836,6 +1836,13 @@ export default function CMDBVisualization() {
       return;
     }
 
+    // Save state to history for undo/redo (only for significant drags >200ms)
+    if (dragDuration > 200) {
+      requestAnimationFrame(() => {
+        pushState(nodes);
+      });
+    }
+
     if (!draggedNode || !hoverPosition || !node.parentNode) {
       setDraggedNode(null);
       setHoverPosition(null);
@@ -1857,15 +1864,15 @@ export default function CMDBVisualization() {
                 x: hoverPosition.relativeX,
                 y: hoverPosition.relativeY
               },
-              data: { 
-                ...n.data, 
-                orderInGroup: hoverPosition.index 
+              data: {
+                ...n.data,
+                orderInGroup: hoverPosition.index
               }
             };
           }
           return n;
         });
-        
+
         nodesRef.current = updatedNodes;
         return updatedNodes;
       });
@@ -1883,7 +1890,7 @@ export default function CMDBVisualization() {
       setDraggedNode(null);
       setHoverPosition(null);
     }
-  }, [draggedNode, hoverPosition, setNodes, fetchAll]);
+  }, [draggedNode, hoverPosition, setNodes, fetchAll, nodes, pushState]);
 
   const onMouseDown = useCallback((event) => {
     if (selectionMode !== 'rectangle') return;
@@ -2294,14 +2301,18 @@ export default function CMDBVisualization() {
         onUndo={() => {
           const previousState = undo();
           if (previousState) {
-            setNodes(previousState);
+            requestAnimationFrame(() => {
+              setNodes(previousState);
+            });
             toast.info('Undo', { duration: 1000 });
           }
         }}
         onRedo={() => {
           const nextState = redo();
           if (nextState) {
-            setNodes(nextState);
+            requestAnimationFrame(() => {
+              setNodes(nextState);
+            });
             toast.info('Redo', { duration: 1000 });
           }
         }}

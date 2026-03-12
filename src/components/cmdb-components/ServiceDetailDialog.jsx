@@ -38,9 +38,7 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
   // Socket.io connection for real-time updates from OTHER clients
   useEffect(() => {
     if (!show || !service.id || !workspaceId) return;
-
-    console.log('🔌 Connecting to socket.io for service updates...');
-    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
+    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL, {
       reconnectionAttempts: 5
     });
 

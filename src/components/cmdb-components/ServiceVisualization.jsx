@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
+  MiniMap,
   useNodesState,
   useEdgesState,
   reconnectEdge,
@@ -18,6 +19,7 @@ import ServiceItemContextMenu from './ServiceItemContextMenu';
 import ServiceGroupModal from './ServiceGroupModal';
 import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
 import ServiceItemFormModal from './ServiceItemFormModal';
+import ServiceNavbar from './ServiceNavbar';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { INITIAL_GROUP_FORM, API_BASE_URL } from '../../utils/cmdb-utils/constants';
@@ -116,10 +118,28 @@ export default function ServiceVisualization({ service, workspaceId }) {
     itemWidth: 160,
     itemHeight: 80,
     gapX: 10,
-    gapY: 30, 
+    gapY: 30,
     padding: 15,
     headerHeight: 40,
   }), []);
+
+  // Autosave state
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(true);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const autoSaveTimeoutRef = useRef(null);
+
+  // Minimap state
+  const [showMiniMap, setShowMiniMap] = useState(true);
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState('single');
+
+  // Undo/Redo state
+  const [pastNodes, setPastNodes] = useState([]);
+  const [futureNodes, setFutureNodes] = useState([]);
+
+  const canUndo = pastNodes.length > 0;
+  const canRedo = futureNodes.length > 0;
 
   const {
     items,
@@ -194,6 +214,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         position: groupPos,
         draggable: true,
         data: {
+          label: group.name, // Add label for search
           name: group.name,
           description: group.description,
           color: group.color || 'rgba(16, 185, 129, 0.15)',
@@ -227,6 +248,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           extent: 'parent',
           draggable: true,
           data: {
+            label: item.name, // Add label for search
             name: item.name,
             type: item.type,
             description: item.description,
@@ -258,6 +280,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         position: parsePosition(item.position),
         draggable: true,
         data: {
+          label: item.name, // Add label for search
           name: item.name,
           type: item.type,
           description: item.description,
@@ -474,6 +497,53 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   }, [draggedNode]);
 
+  const handleAutoSave = useCallback(async () => {
+    if (!isAutoSaveEnabled || isSaving || isAutoSaving) return;
+
+    setIsAutoSaving(true);
+    try {
+      // Only save nodes that have changed position (compare with previous saved state)
+      const nodesToSave = nodes.filter(node => {
+        // Skip if node is in a group (handled by group position)
+        if (node.parentNode) return false;
+        return true;
+      });
+
+      if (nodesToSave.length === 0) {
+        setIsAutoSaving(false);
+        return;
+      }
+
+      // Save item positions
+      const itemPromises = nodesToSave
+        .filter(node => node.type === 'custom')
+        .map(node =>
+          api.put(`/service-items/items/${node.id}/position`, {
+            position: node.position,
+          })
+        );
+
+      // Save group positions
+      const groupPromises = nodesToSave
+        .filter(node => node.type === 'serviceGroup')
+        .map(node => {
+          const groupId = node.data.groupId;
+          return api.put(`/service-groups/${groupId}/position`, {
+            position: node.position,
+          });
+        });
+
+      await Promise.all([...itemPromises, ...groupPromises]);
+      console.log('✅ Autosave completed - saved', nodesToSave.length, 'nodes');
+      // Don't show toast for autosave to avoid distraction
+    } catch (err) {
+      console.error('Autosave failed:', err);
+      toast.error('Autosave failed');
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [isAutoSaveEnabled, isSaving, isAutoSaving, nodes]);
+
   const onNodeDragStop = useCallback(async (event, node) => {
     const dragDuration = Date.now() - dragStateRef.current.startTime;
     dragStateRef.current = { isDragging: false, startTime: 0 };
@@ -484,52 +554,77 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return;
     }
 
+    const shouldAutosave = !draggedNode || !hoverPosition || !node.parentNode;
+
     if (!draggedNode || !hoverPosition || !node.parentNode) {
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
-      return;
-    }
 
-    try {
-      await api.patch(`/service-groups/items/${node.id}/reorder`, {
-        new_order: hoverPosition.index
-      });
-
-      // Update dragged node position visual immediately
-      setNodes(prevNodes => {
-        const updatedNodes = prevNodes.map(n => {
-          if (n.id === draggedNode) {
-            return {
-              ...n,
-              position: {
-                x: hoverPosition.relativeX,
-                y: hoverPosition.relativeY
-              },
-              data: {
-                ...n.data,
-                orderInGroup: hoverPosition.index
-              }
-            };
-          }
-          return n;
+      // Save to history with lightweight clone (only for significant position changes)
+      if (dragDuration > 200) { // Only save if drag was significant (>200ms)
+        requestAnimationFrame(() => {
+          setPastNodes(prev => {
+            // Use structuredClone for better performance than JSON.parse/stringify
+            const snapshot = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
+            return [...prev.slice(-10), snapshot];
+          });
+          setFutureNodes([]);
+        });
+      }
+    } else {
+      try {
+        await api.patch(`/service-groups/items/${node.id}/reorder`, {
+          new_order: hoverPosition.index
         });
 
-        nodesRef.current = updatedNodes;
-        return updatedNodes;
-      });
+        // Update dragged node position visual immediately
+        setNodes(prevNodes => {
+          const updatedNodes = prevNodes.map(n => {
+            if (n.id === draggedNode) {
+              return {
+                ...n,
+                position: {
+                  x: hoverPosition.relativeX,
+                  y: hoverPosition.relativeY
+                },
+                data: {
+                  ...n.data,
+                  orderInGroup: hoverPosition.index
+                }
+              };
+            }
+            return n;
+          });
 
-      // Immediately fetch all data to get updated positions for ALL items
-      await fetchAll();
+          nodesRef.current = updatedNodes;
+          return updatedNodes;
+        });
 
-    } catch (err) {
-      console.error('Failed to reorder:', err);
-      toast.error('Failed to reorder item');
-    } finally {
-      setDraggedNode(null);
-      setHoverPosition(null);
+        // Immediately fetch all data to get updated positions for ALL items
+        await fetchAll();
+
+      } catch (err) {
+        console.error('Failed to reorder:', err);
+        toast.error('Failed to reorder item');
+      } finally {
+        setDraggedNode(null);
+        setHoverPosition(null);
+      }
     }
-  }, [draggedNode, hoverPosition, fetchAll, setNodes]);
+
+    // Trigger autosave for position changes
+    if (isAutoSaveEnabled && shouldAutosave) {
+      // Clear any existing autosave timeout
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      // Set new timeout
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        handleAutoSave();
+      }, 2000);
+    }
+  }, [draggedNode, hoverPosition, fetchAll, setNodes, nodes, isAutoSaveEnabled, handleAutoSave]);
 
   const handleItemSubmit = async (e) => {
     e.preventDefault();
@@ -718,7 +813,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   };
 
-  const handleSavePositions = async () => {
+  const handleSavePositions = useCallback(async () => {
     if (isSaving) return;
 
     setIsSaving(true);
@@ -750,7 +845,95 @@ export default function ServiceVisualization({ service, workspaceId }) {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [nodes, isSaving]);
+
+  const handleToggleAutoSave = useCallback(() => {
+    setIsAutoSaveEnabled(prev => {
+      const newValue = !prev;
+      toast.success(newValue ? 'Auto-save enabled' : 'Auto-save disabled');
+      return newValue;
+    });
+  }, []);
+
+  const handleToggleMiniMap = useCallback(() => {
+    setShowMiniMap(prev => !prev);
+  }, []);
+
+  const handleNodeSearch = useCallback((node) => {
+    if (!reactFlowInstance.current) return;
+
+    // Center the view on the selected node
+    reactFlowInstance.current.setCenter(
+      node.position.x + (node.style?.width || 160) / 2,
+      node.position.y + (node.style?.height || 80) / 2,
+      { zoom: 1, duration: 500 }
+    );
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+
+    const previousState = pastNodes[pastNodes.length - 1];
+    if (!previousState) return;
+
+    // Use requestAnimationFrame to avoid blocking UI
+    requestAnimationFrame(() => {
+      setFutureNodes(prev => [...prev.slice(-10), nodes]);
+      setNodes(previousState);
+      setPastNodes(prev => prev.slice(0, -1));
+    });
+
+    toast.success('Undo successful');
+  }, [canUndo, pastNodes, nodes]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+
+    const nextState = futureNodes[futureNodes.length - 1];
+    if (!nextState) return;
+
+    // Use requestAnimationFrame to avoid blocking UI
+    requestAnimationFrame(() => {
+      setPastNodes(prev => [...prev.slice(-10), nodes]);
+      setNodes(nextState);
+      setFutureNodes(prev => prev.slice(0, -1));
+    });
+
+    toast.success('Redo successful');
+  }, [canRedo, futureNodes, nodes]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Ctrl+S to save
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        handleSavePositions();
+      }
+      // Ctrl+Z to undo
+      else if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        handleUndo();
+      }
+      // Ctrl+Y or Ctrl+Shift+Z to redo
+      else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSavePositions, handleUndo, handleRedo]);
+
+  // Cleanup autosave timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Context Menu Handlers
   const handleCloseContextMenu = useCallback(() => {
@@ -861,33 +1044,28 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   return (
     <div className="h-full w-full relative">
-      {/* Toolbar */}
-      <div className="absolute top-4 left-4 z-10 flex gap-2 bg-white p-2 rounded-lg shadow-md">
-        <Button
-          onClick={handleOpenAddModal}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white"
-        >
-          <Plus size={16} />
-          Add Item
-        </Button>
-
-        <Button
-          onClick={handleOpenManageGroups}
-          className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white"
-        >
-          <Layers size={16} />
-          Manage Groups
-        </Button>
-
-        <Button
-          onClick={handleSavePositions}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 text-white disabled:opacity-50"
-        >
-          <Save size={16} />
-          {isSaving ? 'Saving...' : 'Save Positions'}
-        </Button>
-      </div>
+      {/* Service Navbar */}
+      <ServiceNavbar
+        draggedNode={draggedNode}
+        isSaving={isSaving}
+        isAutoSaving={isAutoSaving}
+        isAutoSaveEnabled={isAutoSaveEnabled}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onToggleAutoSave={handleToggleAutoSave}
+        nodes={nodes}
+        onNodeSearch={handleNodeSearch}
+        reactFlowInstance={reactFlowInstance}
+        onSetSelectionMode={setSelectionMode}
+        selectionMode={selectionMode}
+        onSavePositions={handleSavePositions}
+        onOpenAddItem={handleOpenAddModal}
+        onOpenManageGroups={handleOpenManageGroups}
+        showMiniMap={showMiniMap}
+        onToggleMiniMap={handleToggleMiniMap}
+      />
 
       {/* React Flow Canvas */}
       <ReactFlow
@@ -907,9 +1085,19 @@ export default function ServiceVisualization({ service, workspaceId }) {
         nodesConnectable={false}
         elementsSelectable={true}
         defaultViewport={defaultViewport}
+        selectionOnDrag={selectionMode === 'rectangle'}
       >
         <Background />
         <Controls />
+        {showMiniMap && (
+          <MiniMap
+            nodeColor={(node) => {
+              if (node.type === 'serviceGroup') return '#f59e0b';
+              return '#3b82f6';
+            }}
+            maskColor="rgba(0, 0, 0, 0.1)"
+          />
+        )}
       </ReactFlow>
 
       {/* Hover indicator for drag-to-reorder */}

@@ -39,6 +39,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         type: 'group',
         position: groupPos,
         data: {
+          label: group.name, // Add label for search
           name: group.name,
           description: group.description,
           color: group.color,
@@ -90,6 +91,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           parentNode: groupNodeId,
           extent: 'parent',
           data: {
+            label: item.name, // Add label for search
             name: item.name,
             type: item.type,
             description: item.description,
@@ -135,6 +137,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         type: 'custom',
         position: pos,
         data: {
+          label: item.name, // Add label for search
           name: item.name,
           type: item.type,
           description: item.description,

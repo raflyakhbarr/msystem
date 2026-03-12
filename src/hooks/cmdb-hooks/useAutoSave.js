@@ -9,11 +9,11 @@ export const useAutoSave = (nodes, saveFunction, delay = 2000, enabled = true) =
 
   const debouncedSave = useCallback(async () => {
     if (isSavingRef.current || !enabled) return;
-    
+
     try {
       isSavingRef.current = true;
       await saveFunction();
-      
+
     } catch (error) {
       toast.error('Gagal menyimpan otomatis', {
         description: error.message,
@@ -22,7 +22,7 @@ export const useAutoSave = (nodes, saveFunction, delay = 2000, enabled = true) =
     } finally {
       isSavingRef.current = false;
     }
-  }, [saveFunction, enabled]); 
+  }, [saveFunction, enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -33,22 +33,34 @@ export const useAutoSave = (nodes, saveFunction, delay = 2000, enabled = true) =
     }
 
     if (isInitialLoadRef.current) {
-      previousNodesRef.current = JSON.stringify(nodes);
+      // Use structuredClone for better performance than JSON.stringify
+      previousNodesRef.current = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
       isInitialLoadRef.current = false;
       return;
     }
 
-    const currentNodes = JSON.stringify(nodes);
-    
+    // Optimized comparison - only check node positions, not entire data
+    const nodesChanged = nodes.some((node, index) => {
+      const prevNode = previousNodesRef.current[index];
+      if (!prevNode) return true;
 
-    if (currentNodes !== previousNodesRef.current) {
+      // Only compare position, ignore other properties for performance
+      return (
+        node.position.x !== prevNode.position.x ||
+        node.position.y !== prevNode.position.y ||
+        node.id !== prevNode.id
+      );
+    });
+
+    if (nodesChanged) {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
 
       timeoutRef.current = setTimeout(() => {
         debouncedSave();
-        previousNodesRef.current = currentNodes;
+        // Update previous nodes ref
+        previousNodesRef.current = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
       }, delay);
     }
 
