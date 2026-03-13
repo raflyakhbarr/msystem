@@ -34,6 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { io } from 'socket.io-client';
 
 const nodeTypes = {
   custom: CustomServiceNode,
@@ -68,6 +69,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const nodesRef = useRef([]);
   const isReorderingRef = useRef(false);
   const dragStateRef = useRef({ isDragging: false, startTime: 0 });
+
+  // Socket initialization
+  const socket = io('http://localhost:5001', {
+    autoConnect: true,
+    reconnection: true
+  });
 
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -208,6 +215,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const prevGroupConnectionsRef = useRef(null);
   const prevEdgeHandlesRef = useRef(null);
   const prevCrossServiceConnectionsRef = useRef(null);
+  const prevExternalServiceItemsRef = useRef(null);
 
   // Fetch connection types on mount
   useEffect(() => {
@@ -221,6 +229,103 @@ export default function ServiceVisualization({ service, workspaceId }) {
     };
     fetchConnectionTypes();
   }, []);
+
+  // Listen for cross-service connection updates via socket
+  useEffect(() => {
+    if (!service?.id || !workspaceId) return;
+
+    const handleCrossServiceConnectionUpdate = async (data) => {
+      console.log('Received cross_service_connection_update:', data);
+
+      // Check if this service is involved in the update
+      if (data.sourceServiceId === service.id || data.targetServiceId === service.id) {
+        if (data.workspaceId === workspaceId) {
+          console.log('Refreshing cross-service connections for service:', service.id);
+
+          // Refresh cross-service connections
+          try {
+            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+            const connections = response.data;
+
+            // Filter connections that involve service items from this service
+            const serviceItemIds = items.map(item => item.id);
+            const relevantConnections = connections.filter(conn =>
+              serviceItemIds.includes(conn.source_service_item_id) ||
+              serviceItemIds.includes(conn.target_service_item_id)
+            );
+
+            setCrossServiceConnections(relevantConnections);
+
+            // Refresh external positions
+            const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
+              params: { workspaceId }
+            });
+            const positions = {};
+            positionsResponse.data.forEach(pos => {
+              positions[pos.external_service_item_id] = pos.position;
+            });
+            setExternalItemPositions(positions);
+
+            // Recalculate external service items from the updated connections
+            const externalItems = [];
+            const externalItemIds = new Set();
+
+            relevantConnections.forEach(conn => {
+              const isSource = serviceItemIds.includes(conn.source_service_item_id);
+
+              if (isSource) {
+                // Target is external
+                if (!externalItemIds.has(conn.target_service_item_id)) {
+                  const savedPosition = positions[conn.target_service_item_id];
+                  externalItems.push({
+                    id: conn.target_service_item_id,
+                    name: conn.target_name,
+                    type: conn.target_type,
+                    status: conn.target_status,
+                    cmdbItemId: conn.target_cmdb_item_id,
+                    serviceId: conn.target_service_id,
+                    serviceName: conn.target_service_name || 'Unknown Service',
+                    cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
+                    position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                  });
+                  externalItemIds.add(conn.target_service_item_id);
+                }
+              } else {
+                // Source is external
+                if (!externalItemIds.has(conn.source_service_item_id)) {
+                  const savedPosition = positions[conn.source_service_item_id];
+                  externalItems.push({
+                    id: conn.source_service_item_id,
+                    name: conn.source_name,
+                    type: conn.source_type,
+                    status: conn.source_status,
+                    cmdbItemId: conn.source_cmdb_item_id,
+                    serviceId: conn.source_service_id,
+                    serviceName: conn.source_service_name || 'Unknown Service',
+                    cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
+                    position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                  });
+                  externalItemIds.add(conn.source_service_item_id);
+                }
+              }
+            });
+
+            setExternalServiceItems(externalItems);
+            console.log('External service items recalculated:', externalItems);
+
+          } catch (error) {
+            console.error('Failed to refresh cross-service connections:', error);
+          }
+        }
+      }
+    };
+
+    socket.on('cross_service_connection_update', handleCrossServiceConnectionUpdate);
+
+    return () => {
+      socket.off('cross_service_connection_update', handleCrossServiceConnectionUpdate);
+    };
+  }, [service?.id, workspaceId, items]);
 
   // Fetch cross-service connections on mount
   useEffect(() => {
@@ -276,8 +381,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 status: conn.target_status,
                 cmdbItemId: conn.target_cmdb_item_id,
                 serviceId: conn.target_service_id,
-                serviceName: conn.service_name || 'Unknown Service',
-                cmdbItemName: conn.cmdb_item_name || 'Unknown CMDB Item',
+                serviceName: conn.target_service_name || 'Unknown Service',
+                cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
                 position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
               });
               externalItemIds.add(conn.target_service_item_id);
@@ -293,8 +398,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 status: conn.source_status,
                 cmdbItemId: conn.source_cmdb_item_id,
                 serviceId: conn.source_service_id,
-                serviceName: conn.service_name || 'Unknown Service',
-                cmdbItemName: conn.cmdb_item_name || 'Unknown CMDB Item',
+                serviceName: conn.source_service_name || 'Unknown Service',
+                cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
                 position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
               });
               externalItemIds.add(conn.source_service_item_id);
@@ -437,8 +542,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Add external service item nodes when cross-service connections change
   useEffect(() => {
     const crossServiceConnectionsChanged = JSON.stringify(prevCrossServiceConnectionsRef.current) !== JSON.stringify(crossServiceConnections);
+    const externalServiceItemsChanged = JSON.stringify(prevExternalServiceItemsRef.current) !== JSON.stringify(externalServiceItems);
 
-    if (!crossServiceConnectionsChanged && externalServiceItems.length === 0) {
+    if (!crossServiceConnectionsChanged && !externalServiceItemsChanged) {
       return;
     }
 
@@ -550,8 +656,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return filteredNodes;
     });
 
-    // Update ref
+    // Update refs
     prevCrossServiceConnectionsRef.current = crossServiceConnections;
+    prevExternalServiceItemsRef.current = externalServiceItems;
   }, [crossServiceConnections, externalServiceItems, showExternalNodes]);
 
   // Update edges when connections change

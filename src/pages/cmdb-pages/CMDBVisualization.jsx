@@ -733,7 +733,8 @@ export default function CMDBVisualization() {
               : [updatedService]
           }));
         } catch (err) {
-
+          console.warn(`Failed to fetch service ${eventServiceId}:`, err);
+          // Service might have been deleted, ignore error
         }
       } else {
 
