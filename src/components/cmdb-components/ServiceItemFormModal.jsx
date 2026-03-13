@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Folder } from "lucide-react";
+import { NODE_TYPES } from '../../utils/cmdb-utils/constants';
 
 export default function ServiceItemFormModal({
   show,
@@ -72,12 +73,11 @@ export default function ServiceItemFormModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="server">Server</SelectItem>
-                <SelectItem value="database">Database</SelectItem>
-                <SelectItem value="switch">Switch</SelectItem>
-                <SelectItem value="workstation">Workstation</SelectItem>
-                <SelectItem value="firewall">Firewall</SelectItem>
-                <SelectItem value="router">Router</SelectItem>
+                {NODE_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

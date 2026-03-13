@@ -709,11 +709,43 @@ export default function CMDBVisualization() {
       }
     });
 
+    socket.on('service_update', async (data) => {
+      // Parse serviceId and workspaceId (backend might send as strings)
+      const eventServiceId = parseInt(data.serviceId);
+      const eventWorkspaceId = parseInt(data.workspaceId);
+      const currentWorkspaceId = currentWorkspace?.id;
+
+      // Only update if this is for our workspace
+      if (eventWorkspaceId === currentWorkspaceId) {
+
+        try {
+          // Fetch the updated service
+          const response = await api.get(`/services/single/${eventServiceId}`);
+          const updatedService = response.data;
+
+          // Update the specific service in the services state
+          setServices(prevServices => ({
+            ...prevServices,
+            [updatedService.cmdb_item_id]: prevServices[updatedService.cmdb_item_id]
+              ? prevServices[updatedService.cmdb_item_id].map(service =>
+                  service.id === eventServiceId ? updatedService : service
+                )
+              : [updatedService]
+          }));
+        } catch (err) {
+
+        }
+      } else {
+
+      }
+    });
+
     return () => {
       socket.off('cmdb_update');
+      socket.off('service_update');
       socket.disconnect();
     };
-  }, [fetchAll]);
+  }, [fetchAll, currentWorkspace, setServices]);
 
   useEffect(() => {
     localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));
@@ -1023,29 +1055,19 @@ export default function CMDBVisualization() {
     if (!selectedItemForConnection || !currentWorkspace) return;
 
     try {
-      console.log('=== Saving Connections ===');
-      console.log('Source:', selectedItemForConnection.name);
-      console.log('Selected targets:', selectedConnections);
-      console.log('Item connection types:', itemConnTypes);
-      console.log('Group connection types:', groupConnTypes);
-
       // SIMPLER & MORE ROBUST APPROACH:
       // Delete all existing connections for this source, then add back the selected ones
       const existingConns = connections
         .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_id);
 
-      console.log('Existing connections to remove:', existingConns.length);
-
       // Remove all existing item-to-item connections for this source
       for (const conn of existingConns) {
-        console.log(`Deleting connection: ${selectedItemForConnection.name} -> ${conn.target_id}`);
         await api.delete(`/cmdb/connections/${selectedItemForConnection.id}/${conn.target_id}`);
       }
 
       // Add back all selected connections with their types
       for (const targetId of selectedConnections) {
         const connectionType = itemConnTypes[targetId] || selectedConnectionType;
-        console.log(`Adding connection: ${selectedItemForConnection.name} -> ${targetId} (type: ${connectionType})`);
         await api.post('/cmdb/connections', {
           source_id: selectedItemForConnection.id,
           target_id: targetId,
@@ -1058,8 +1080,6 @@ export default function CMDBVisualization() {
       // Handle group connections (remove all, then add back)
       const existingGroupConns = connections
         .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_group_id);
-
-      console.log('Existing group connections to remove:', existingGroupConns.length);
 
       for (const conn of existingGroupConns) {
         await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${conn.target_group_id}`);
@@ -1076,9 +1096,7 @@ export default function CMDBVisualization() {
         });
       }
 
-      console.log('✓ All operations completed, fetching fresh data...');
       await fetchAll();
-      console.log('✓ Fetch completed, closing modal');
       setShowConnectionModal(false);
     } catch (err) {
       console.error('Save error:', err);
@@ -2104,7 +2122,6 @@ export default function CMDBVisualization() {
 
   const handleSavePositions = async () => {
     if (isSavingRef.current) {
-      console.log('Save already in progress, skipping...');
       return;
     }
     

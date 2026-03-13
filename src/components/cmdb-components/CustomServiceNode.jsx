@@ -13,6 +13,18 @@ import {
   Monitor,
   Shield,
   Wifi,
+  Globe,
+  Laptop,
+  Smartphone,
+  Cloud,
+  Globe2,
+  HardDrive,
+  FileText,
+  Printer,
+  Users,
+  Mail,
+  Settings,
+  Layout,
   Layers
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
@@ -31,6 +43,22 @@ export default function CustomServiceNode({ data, id }) {
       case 'workstation': return <Monitor {...iconProps} />;
       case 'firewall': return <Shield {...iconProps} />;
       case 'router': return <Wifi {...iconProps} />;
+      case 'web_application': return <Globe {...iconProps} />;
+      case 'desktop_application': return <Laptop {...iconProps} />;
+      case 'mobile_application': return <Smartphone {...iconProps} />;
+      case 'api_service': return <Cloud {...iconProps} />;
+      case 'microservice': return <Layers {...iconProps} />;
+      case 'container': return <Layout {...iconProps} />;
+      case 'load_balancer': return <Wifi {...iconProps} />;
+      case 'proxy_server': return <Globe2 {...iconProps} />;
+      case 'application_server': return <Server {...iconProps} />;
+      case 'file_server': return <FileText {...iconProps} />;
+      case 'print_server': return <Printer {...iconProps} />;
+      case 'domain_controller': return <Users {...iconProps} />;
+      case 'mail_server': return <Mail {...iconProps} />;
+      case 'dns_server':
+      case 'dhcp_server': return <Settings {...iconProps} />;
+      case 'storage': return <HardDrive {...iconProps} />;
       default: return <Server {...iconProps} />;
     }
   };

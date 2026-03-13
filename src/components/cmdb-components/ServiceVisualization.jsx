@@ -8,7 +8,7 @@ import ReactFlow, {
   reconnectEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Plus, Link2, Trash2, Save, Layers } from 'lucide-react';
+import { Plus, Link2, Trash2, Save, Layers, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
@@ -23,6 +23,16 @@ import ServiceNavbar from './ServiceNavbar';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { INITIAL_GROUP_FORM, API_BASE_URL } from '../../utils/cmdb-utils/constants';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const nodeTypes = {
   custom: CustomServiceNode,
@@ -85,6 +95,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
     group: null,
   });
 
+  // Delete Confirmation Dialog State
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [groupToDelete, setGroupToDelete] = useState(null);
+
   // Edge Handles State
   const [edgeHandles, setEdgeHandles] = useState({});
 
@@ -129,7 +144,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const autoSaveTimeoutRef = useRef(null);
 
   // Minimap state
-  const [showMiniMap, setShowMiniMap] = useState(true);
+  const [showMiniMap, setShowMiniMap] = useState(false);
 
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState('single');
@@ -689,12 +704,23 @@ export default function ServiceVisualization({ service, workspaceId }) {
   };
 
   const handleDeleteItem = async (itemId) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    // Show confirmation dialog instead of window.confirm
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+      setItemToDelete(item);
+      setShowDeleteDialog(true);
+    }
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!itemToDelete) return;
 
     try {
-      await api.delete(`/service-items/items/${itemId}`);
+      await api.delete(`/service-items/items/${itemToDelete.id}`);
       await fetchAll();
       toast.success('Item deleted!');
+      setShowDeleteDialog(false);
+      setItemToDelete(null);
     } catch (err) {
       console.error(err);
       toast.error('Failed to delete item');
@@ -702,9 +728,21 @@ export default function ServiceVisualization({ service, workspaceId }) {
   };
 
   const handleDeleteGroup = async (groupId) => {
+    const group = groups.find(g => g.id === groupId);
+    if (group) {
+      setGroupToDelete(group);
+      setShowDeleteDialog(true);
+    }
+  };
+
+  const confirmDeleteGroup = async () => {
+    if (!groupToDelete) return;
+
     try {
-      await deleteServiceGroup(groupId);
+      await deleteServiceGroup(groupToDelete.id);
       toast.success('Group deleted!');
+      setShowDeleteDialog(false);
+      setGroupToDelete(null);
     } catch (err) {
       console.error(err);
       toast.error('Failed to delete group');
@@ -984,11 +1022,19 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const handleContextMenuDelete = useCallback(() => {
     handleCloseContextMenu();
     if (contextMenu.item) {
-      handleDeleteItem(contextMenu.item.id);
+      const item = items.find(i => i.id === contextMenu.item.id);
+      if (item) {
+        setItemToDelete(item);
+        setShowDeleteDialog(true);
+      }
     } else if (contextMenu.group) {
-      handleDeleteGroup(contextMenu.group.id);
+      const group = groups.find(g => g.id === contextMenu.group.id);
+      if (group) {
+        setGroupToDelete(group);
+        setShowDeleteDialog(true);
+      }
     }
-  }, [contextMenu, handleDeleteItem, handleDeleteGroup, handleCloseContextMenu]);
+  }, [contextMenu, items, groups, handleCloseContextMenu]);
 
   const handleContextMenuManageConnections = useCallback(() => {
     handleCloseContextMenu();
@@ -1183,7 +1229,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           setGroupFormData(prev => ({ ...prev, [name]: value }));
         }}
         onEditGroup={handleEditGroup}
-        onDeleteGroup={handleDeleteGroup}
+        onDeleteGroup={(groupId) => handleDeleteGroup(groupId)}
         onOpenGroupConnection={handleOpenGroupConnectionModal}
       />
 
@@ -1241,6 +1287,43 @@ export default function ServiceVisualization({ service, workspaceId }) {
           }
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Service Item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {itemToDelete && (
+                <>
+                  Apakah Anda yakin ingin menghapus item <strong>"{itemToDelete.name}"</strong> ini?
+                </>
+              )}
+              {groupToDelete && (
+                <>
+                  Apakah Anda yakin ingin menghapus group <strong>"{groupToDelete.name}"</strong> ini?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (itemToDelete) {
+                  confirmDeleteItem();
+                } else if (groupToDelete) {
+                  confirmDeleteGroup();
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 size={16} className="mr-2" />
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Context Menu */}
       <ServiceItemContextMenu

@@ -167,18 +167,29 @@ export default function CustomNode({ data, id }) {
                         {services.map((service) => (
                           <div
                             key={service.id}
-                            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-100 border"
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-100 border relative"
                             title={`${service.name} (${service.status})`}
                           >
-                            {service.icon_type === 'preset' ? (
-                              <ServiceIcon name={service.icon_name} size={14} />
-                            ) : (
-                              <img
-                                src={`${API_BASE_URL}${service.icon_path}`}
-                                alt={service.name}
-                                className="w-4 h-4 object-contain"
+                            <div className="relative">
+                              {service.icon_type === 'preset' ? (
+                                <ServiceIcon name={service.icon_name} size={14} />
+                              ) : (
+                                <img
+                                  src={`${API_BASE_URL}${service.icon_path}`}
+                                  alt={service.name}
+                                  className="w-4 h-4 object-contain"
+                                />
+                              )}
+                              {/* Status Indicator Dot */}
+                              <div
+                                className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white shadow-sm ${
+                                  service.status === 'active' ? 'bg-green-500' :
+                                  service.status === 'inactive' ? 'bg-red-500' :
+                                  service.status === 'maintenance' ? 'bg-yellow-500' :
+                                  'bg-gray-500'
+                                }`}
                               />
-                            )}
+                            </div>
                             <span className="text-xs">{service.name}</span>
                           </div>
                         ))}
@@ -303,7 +314,7 @@ export default function CustomNode({ data, id }) {
                 {services.map((service) => (
                   <div
                     key={service.id}
-                    className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer
+                    className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer relative
                       hover:border-primary hover:scale-110 transition-all
                       ${service.status === 'active' ? 'bg-green-50' : 'bg-red-50'}`}
                     title={`${service.name} (${service.status})`}
@@ -321,6 +332,15 @@ export default function CustomNode({ data, id }) {
                         crossOrigin="anonymous"
                       />
                     )}
+                    {/* Status Indicator Dot */}
+                    <div
+                      className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
+                        service.status === 'active' ? 'bg-green-500' :
+                        service.status === 'inactive' ? 'bg-red-500' :
+                        service.status === 'maintenance' ? 'bg-yellow-500' :
+                        'bg-gray-500'
+                      }`}
+                    />
                   </div>
                 ))}
               </div>
