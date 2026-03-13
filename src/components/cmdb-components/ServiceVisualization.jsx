@@ -276,17 +276,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const dragStateRef = useRef({ isDragging: false, startTime: 0 });
   const lastSavedPositionsRef = useRef(new Map()); // Track last saved positions
 
-  // Socket initialization - use ref to persist across renders
-  const socketRef = useRef(null);
-  if (!socketRef.current) {
-    socketRef.current = io('http://localhost:5001', {
+  // Socket initialization - use useMemo to create socket once
+  const socket = useMemo(() => {
+    return io('http://localhost:5001', {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
     });
-  }
-  const socket = socketRef.current;
+  }, []);
 
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -380,6 +378,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [crossServiceEdgeHandles, setCrossServiceEdgeHandles] = useState({});
   const [crossServiceUpdateKey, setCrossServiceUpdateKey] = useState(0); // Add force update key
 
+
   // Use refs to always get latest state values and avoid stale closures
   const crossServiceConnectionsRef = useRef(crossServiceConnections);
   const crossServiceEdgeHandlesRef = useRef(crossServiceEdgeHandles);
@@ -462,12 +461,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
     if (!service?.id || !workspaceId) return;
 
     const handleCrossServiceConnectionUpdate = async (data) => {
-      console.log('Received cross_service_connection_update:', data);
-
       // Check if this service is involved in the update
       if (data.sourceServiceId === service.id || data.targetServiceId === service.id) {
         if (data.workspaceId === workspaceId) {
-          console.log('Refreshing cross-service connections for service:', service.id);
 
           // Refresh cross-service connections
           try {
@@ -549,10 +545,13 @@ export default function ServiceVisualization({ service, workspaceId }) {
             });
 
             setExternalServiceItems(externalItems);
-            console.log('External service items recalculated:', externalItems);
+
+            // Refresh local items to ensure status propagation is consistent
+            // This prevents race condition where external items update but local items are stale
+            fetchAll();
 
           } catch (error) {
-            console.error('Failed to refresh cross-service connections:', error);
+            console.error('Error in cross_service_connection_update handler:', error);
           }
         }
       }
@@ -563,12 +562,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
     return () => {
       socket.off('cross_service_connection_update', handleCrossServiceConnectionUpdate);
     };
-  }, [service?.id, workspaceId]);
+  }, [service?.id, workspaceId, fetchAll]);
 
   // Fetch cross-service connections on mount
   useEffect(() => {
     const fetchCrossServiceConnections = async () => {
-      console.log('🔄 Fetching cross-service connections...', { serviceId: service?.id, workspaceId });
 
       if (!service?.id || !workspaceId) return;
 
@@ -598,22 +596,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
         const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
         const connections = response.data;
 
-        console.log('📡 All cross-service connections:', connections);
-        console.log('📍 Current service ID:', service.id);
-
         // Filter connections that involve service items from this service
         // Note: items from props might not be available yet, so we fetch all and filter
         const relevantConnections = connections.filter(conn => {
           // Include if source or target is in the same service as this visualization
           const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
-          console.log(`Connection ${conn.id}: source=${conn.source_service_id}, target=${conn.target_service_id}, relevant=${isRelevant}`);
           return isRelevant;
         });
-
-        console.log('✅ Relevant connections:', relevantConnections);
         setCrossServiceConnections(relevantConnections);
-        console.log('📝 setCrossServiceConnections called with', relevantConnections.length, 'connections');
-
         // Increment update key to force edges re-render
         setCrossServiceUpdateKey(prev => prev + 1);
 
@@ -934,16 +924,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Update edges when connections change
   useEffect(() => {
-    // Use ref for edgeHandles to avoid stale closures, but use direct values for crossServiceConnections
-    // since it's in the dependency array and will always be fresh when useEffect runs
+    // Use ref for edgeHandles to avoid stale closures
     const currentEdgeHandles = edgeHandles;
     const currentCrossServiceEdgeHandles = crossServiceEdgeHandlesRef.current;
-
-    console.log('🔄 Update edges useEffect triggered');
-    console.log('  - connections:', connections.length);
-    console.log('  - groupConnections:', groupConnections.length);
-    console.log('  - crossServiceConnections:', crossServiceConnections.length);
-    console.log('  - crossServiceEdgeHandles:', Object.keys(currentCrossServiceEdgeHandles).length);
 
     // Skip if data hasn't actually changed (but allow first render)
     const isFirstRender = prevConnectionsRef.current === null;
@@ -952,26 +935,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
     const edgeHandlesChanged = isFirstRender || JSON.stringify(prevEdgeHandlesRef.current) !== JSON.stringify(currentEdgeHandles);
 
     // For cross-service data, always update when useEffect is triggered (React handles dependency changes)
-    // We only check if it's the very first render to prevent unnecessary updates
     const crossServiceConnectionsChanged = isFirstRender || true;
     const crossServiceEdgeHandlesChanged = isFirstRender || true;
-
-    console.log('Change detection:', {
-      connectionsChanged,
-      groupConnectionsChanged,
-      edgeHandlesChanged,
-      crossServiceConnectionsChanged,
-      crossServiceEdgeHandlesChanged,
-      crossServiceUpdateKey,
-      currentCrossConnLength: crossServiceConnections.length
-    });
-
-    if (!connectionsChanged && !groupConnectionsChanged && !edgeHandlesChanged && !crossServiceConnectionsChanged && !crossServiceEdgeHandlesChanged) {
-      console.log('⏭️ Skipping edges update - no changes detected');
-      return;
-    }
-
-    console.log('✅ Updating edges...');
 
     const itemEdges = connections.map(conn => {
       const edgeId = `e${conn.source_id}-${conn.target_id}`;
@@ -1053,7 +1018,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     );
 
     // Add cross-service edges with connection type styling and status propagation
-    const crossServiceEdges = crossServiceConnections.map(conn => {
+    const crossServiceEdges = crossServiceConnections.map((conn, index) => {
       const edgeId = `cross-service-${conn.source_service_item_id}-${conn.target_service_item_id}`;
       const connectionType = connectionTypes.find(ct => ct.type_slug === conn.connection_type);
 
@@ -1075,6 +1040,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
         isPropagated = edgeStatusInfo.isPropagated || false;
       }
 
+      // Calculate unique z-index to prevent edge stacking issues
+      // Propagated edges get higher z-index (100-999), normal edges get lower (0-99)
+      const baseZIndex = isPropagated ? 100 : 0;
+      const uniqueZIndex = baseZIndex + (index % 100);
+
       const baseStyle = {
         strokeWidth: isPropagated ? 3 : 2,
         stroke: strokeColor,
@@ -1085,30 +1055,17 @@ export default function ServiceVisualization({ service, workspaceId }) {
         baseStyle.strokeDasharray = '5,5';
       }
 
-      console.log('🔗 Creating cross-service edge:', {
-        edgeId,
-        source: conn.source_service_item_id,
-        target: conn.target_service_item_id,
-        sourceHandle,
-        targetHandle,
-        sourceName: conn.source_name,
-        targetName: conn.target_name,
-        connectionType: connectionType?.label || conn.connection_type,
-        statusInfo: edgeStatusInfo,
-        isPropagated,
-        showCrossMarker
-      });
-
       const edge = {
         id: edgeId,
+        key: `${edgeId}-${crossServiceUpdateKey}`, // Add stable key to prevent React reusing components
         source: String(conn.source_service_item_id),
         target: String(conn.target_service_item_id),
         sourceHandle: sourceHandle,
         targetHandle: targetHandle,
         type: 'smoothstep',
-        animated: true, // Animate cross-service edges for visibility
+        animated: true, // Re-enable animation for cross-service edges
         style: baseStyle,
-        zIndex: isPropagated ? 10 : 5,
+        zIndex: uniqueZIndex,
         label: showCrossMarker ? '✕' : (connectionType?.label || ''),
         labelStyle: {
           fontSize: showCrossMarker ? 20 : 10,
@@ -1131,6 +1088,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           sourceServiceId: conn.source_service_id,
           targetServiceId: conn.target_service_id,
           isCrossService: true,
+          edgeIndex: index, // Store index for debugging
           ...(edgeStatusInfo && isPropagated ? {
             isPropagated: true,
             propagatedFrom: edgeStatusInfo.propagatedFrom,
@@ -1138,21 +1096,17 @@ export default function ServiceVisualization({ service, workspaceId }) {
           } : {})
         }
       };
-
-      console.log('✅ Edge created:', edge);
       return edge;
     });
 
-    console.log('📊 Total cross-service edges:', crossServiceEdges.length);
-
     setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges, ...itemToGroupEdges, ...crossServiceEdges]);
 
-    // Update refs (but NOT crossServiceConnectionsRef since we're using a separate ref to avoid stale closures)
+    // Update refs
     prevConnectionsRef.current = connections;
     prevGroupConnectionsRef.current = groupConnections;
     prevEdgeHandlesRef.current = edgeHandles;
     prevCrossServiceEdgeHandlesRef.current = crossServiceEdgeHandles;
-  }, [connections, groupConnections, edgeHandles, crossServiceConnections, crossServiceEdgeHandles, connectionTypes, crossServiceUpdateKey]);
+  }, [connections, groupConnections, edgeHandles, crossServiceConnections, crossServiceEdgeHandles, connectionTypes, crossServiceUpdateKey, items, externalServiceItems]);
 
   const handleOpenAddModal = useCallback(() => {
     setItemFormData({
@@ -1290,7 +1244,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
       if (nodesToSave.length === 0) {
         setIsAutoSaving(false);
-        console.log('✅ Autosave skipped - no position changes');
         return;
       }
 
@@ -1319,8 +1272,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
       nodesToSave.forEach(node => {
         lastSavedPositionsRef.current.set(node.id, { ...node.position });
       });
-
-      console.log('✅ Autosave completed - saved', nodesToSave.length, 'nodes (only changed positions)');
       // Don't show toast for autosave to avoid distraction
     } catch (err) {
       console.error('Autosave failed:', err);

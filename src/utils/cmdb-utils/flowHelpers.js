@@ -153,7 +153,7 @@ export const getStatusColor = (status) => {
 };
 
 export const shouldShowCrossMarker = (status) => {
-  return ['inactive', 'maintenance', 'decommissioned'].includes(status);
+  return ['inactive', 'maintenance', 'decommissioned', 'disabled'].includes(status);
 };
 
 // Connection type definitions - must match backend

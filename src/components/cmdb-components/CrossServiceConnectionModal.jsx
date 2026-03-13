@@ -332,7 +332,6 @@ export default function CrossServiceConnectionModal({
 
           if (connData) {
             await api.delete(`/cross-service-connections/${connData.id}`);
-            console.log('Deleted connection:', connData.id);
           }
         }
       }
@@ -348,7 +347,6 @@ export default function CrossServiceConnectionModal({
             connection_type: connData.type,
             direction: connData.direction
           });
-          console.log('Updated connection:', connData.id);
         } else {
           // Create new connection
           const response = await api.post('/cross-service-connections', {
@@ -358,7 +356,6 @@ export default function CrossServiceConnectionModal({
             connection_type: connData?.type || 'connects_to',
             direction: connData?.direction || 'forward'
           });
-          console.log('Created connection:', response.data.id);
         }
       }
 

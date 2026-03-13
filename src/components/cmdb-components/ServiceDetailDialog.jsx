@@ -25,29 +25,22 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 export default function ServiceDetailDialog({ show, service, workspaceId, onClose }) {
-  if (!service) return null;
-
-  const [localStatus, setLocalStatus] = useState(service.status);
+  const [localStatus, setLocalStatus] = useState(service?.status || 'active');
   const [isUpdating, setIsUpdating] = useState(false);
   const isLocalUpdateRef = useRef(false);
 
   useEffect(() => {
-    setLocalStatus(service.status);
-  }, [service.id, service.status]);
+    if (service) {
+      setLocalStatus(service.status);
+    }
+  }, [service?.id, service?.status]);
 
   // Socket.io connection for real-time updates from OTHER clients
   useEffect(() => {
-    if (!show || !service.id || !workspaceId) return;
+    if (!show || !service?.id || !workspaceId) return;
+
     const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL, {
       reconnectionAttempts: 5
-    });
-
-    socket.on('connect', () => {
-      // console.log('✅ Socket connected for service dialog');
-    });
-
-    socket.on('disconnect', () => {
-      // console.log('🔌 Socket disconnected from service dialog');
     });
 
     socket.on('service_update', (data) => {
@@ -79,9 +72,11 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
       socket.off('disconnect');
       socket.disconnect();
     };
-  }, [show, service.id, workspaceId]);
+  }, [show, service?.id, workspaceId]);
 
   const handleStatusChange = async (newStatus) => {
+    if (!service) return;
+
     setIsUpdating(true);
     setLocalStatus(newStatus);
     isLocalUpdateRef.current = true; // Mark as local update
@@ -118,6 +113,12 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
         color: 'bg-amber-500/10 text-amber-700 border-amber-200',
         dotColor: 'bg-amber-500',
         label: 'Maintenance'
+      },
+      disabled: {
+        icon: AlertCircle,
+        color: 'bg-gray-500/10 text-gray-700 border-gray-200',
+        dotColor: 'bg-gray-500',
+        label: 'Disabled'
       }
     };
     return configs[status] || configs.active;
@@ -125,6 +126,9 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
 
   const statusConfig = getStatusConfig(localStatus);
   const StatusIcon = statusConfig.icon;
+
+  // Guard clause - must be AFTER all hooks
+  if (!service) return null;
 
   return (
     <>
@@ -238,6 +242,12 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                             <div className="flex items-center gap-2">
                               <div className="w-2 h-2 rounded-full bg-amber-500" />
                               Maintenance
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="disabled">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-gray-500" />
+                              Disabled
                             </div>
                           </SelectItem>
                         </SelectContent>

@@ -150,6 +150,9 @@ export default function CMDBVisualization() {
 
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
 
+  // Cache for service items to avoid repeated API calls
+  const serviceItemsCacheRef = useRef({});
+
   // Helper function to get default direction for connection type
   const getConnectionDirection = (typeSlug) => {
     const directions = {
@@ -509,6 +512,52 @@ export default function CMDBVisualization() {
     });
   }, [items]);
 
+  const handleFetchServiceItems = useCallback(async (serviceId) => {
+    // Check if already cached
+    if (serviceItemsCacheRef.current[serviceId]) {
+      return serviceItemsCacheRef.current[serviceId];
+    }
+
+    try {
+      const res = await api.get(`/service-items/${serviceId}/items?workspace_id=${currentWorkspace?.id}`);
+      const serviceItems = res.data;
+
+      // Cache the result
+      serviceItemsCacheRef.current[serviceId] = serviceItems;
+
+      // Update services in nodes state
+      setNodes(prevNodes => {
+        return prevNodes.map(node => {
+          if (node.type === 'custom' && node.data.services) {
+            const updatedServices = node.data.services.map(svc => {
+              if (svc.id === parseInt(serviceId)) {
+                return {
+                  ...svc,
+                  items: serviceItems
+                };
+              }
+              return svc;
+            });
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                services: updatedServices
+              }
+            };
+          }
+          return node;
+        });
+      });
+
+      return serviceItems;
+    } catch (err) {
+      console.error('Failed to fetch service items:', err);
+      return [];
+    }
+  }, [currentWorkspace, setNodes]);
+
   const handleAddService = useCallback((nodeData) => {
     const item = items.find(i => i.id === parseInt(nodeData.id));
     if (!item) return;
@@ -580,6 +629,8 @@ export default function CMDBVisualization() {
           ...node.data,
           onServiceClick: handleServiceClick,
           onAddService: handleAddService,
+          onFetchServiceItems: handleFetchServiceItems,
+          workspaceId: currentWorkspace?.id,
           services: nodeServices,
         },
         style: {
@@ -592,7 +643,7 @@ export default function CMDBVisualization() {
         }
       };
     });
-  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, handleAddService, services]);
+  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, handleAddService, handleFetchServiceItems, currentWorkspace, services]);
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {

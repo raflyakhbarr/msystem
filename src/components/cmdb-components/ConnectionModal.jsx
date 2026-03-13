@@ -304,7 +304,6 @@ export default function ConnectionModal({
           delete newTypes[itemId];
         }
       });
-      console.log('itemConnectionTypes updated:', newTypes);
       return newTypes;
     });
   }, [selectedConnections, selectedConnectionType]);

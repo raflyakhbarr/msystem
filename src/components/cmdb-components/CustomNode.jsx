@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Handle, Position } from 'reactflow';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -21,10 +26,170 @@ import {
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
+import api from '@/services/api';
+import { io } from 'socket.io-client';
 
 export default function CustomNode({ data, id }) {
   const storage = data.storage || null;
   const services = data.services || [];
+
+  // Local state for service items (for hover card)
+  const [serviceItemsMap, setServiceItemsMap] = useState({});
+  const [fetchingServiceId, setFetchingServiceId] = useState(null);
+  // Store pending status updates for items not yet fetched
+  const pendingStatusUpdatesRef = useRef({});
+
+  // Use ref to always get latest serviceItemsMap (avoid stale closures)
+  const serviceItemsMapRef = useRef(serviceItemsMap);
+  useEffect(() => {
+    serviceItemsMapRef.current = serviceItemsMap;
+  }, [serviceItemsMap]);
+
+  // Socket.io connection for real-time service item updates
+  useEffect(() => {
+    if (!data.workspaceId) return;
+
+    const socket = io(API_BASE_URL, {
+      reconnectionAttempts: 5
+    });
+
+    socket.on('connect', () => {
+      console.log('✅ Socket connected for service items hover in node:', data.label);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('🔌 Socket disconnected from service items hover');
+    });
+
+    // Listen for service item status updates
+    socket.on('service_item_status_update', (updateData) => {
+      const { serviceItemId, newStatus, workspaceId } = updateData;
+
+      // Update the service item in our local state
+      setServiceItemsMap(prev => {
+        const updated = { ...prev };
+        let itemFound = false;
+
+        // Loop through all services' items
+        Object.keys(updated).forEach(serviceId => {
+          const items = updated[serviceId];
+          if (Array.isArray(items)) {
+            // Find and update the specific item
+            const itemIndex = items.findIndex(item => item.id === parseInt(serviceItemId));
+            if (itemIndex !== -1) {
+              itemFound = true;
+              updated[serviceId] = [
+                ...items.slice(0, itemIndex),
+                { ...items[itemIndex], status: newStatus },
+                ...items.slice(itemIndex + 1)
+              ];
+            }
+          }
+        });
+
+        // If item not found, store as pending update
+        if (!itemFound) {
+          pendingStatusUpdatesRef.current[serviceItemId] = newStatus;
+        }
+
+        return updated;
+      });
+    });
+
+    // Listen for service item updates (position, name, etc.)
+    socket.on('service_item_update', (updateData) => {
+      const { serviceItemId, workspaceId } = updateData;
+
+      // Only update if this is for our workspace
+      if (workspaceId !== data.workspaceId) {
+        return;
+      }
+
+      // Use ref to get latest serviceItemsMap
+      const currentMap = serviceItemsMapRef.current;
+
+      // Refetch the service items for the affected service
+      // Find which service this item belongs to
+      Object.keys(currentMap).forEach(serviceId => {
+        const items = currentMap[serviceId];
+        if (Array.isArray(items) && items.find(item => item.id === serviceItemId)) {  
+          api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`)
+            .then(response => {
+              if (Array.isArray(response.data)) {
+                setServiceItemsMap(prev => ({
+                  ...prev,
+                  [serviceId]: response.data
+                }));
+              }
+            })
+            .catch(err => console.error('Failed to refresh service items:', err));
+        }
+      });
+    });
+
+    return () => {
+      socket.off('service_item_status_update');
+      socket.off('service_item_update');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.disconnect();
+    };
+  }, [data.workspaceId, data.label]);
+
+  // Fetch service items when hover opens
+  const handleFetchServiceItems = async (serviceId) => {
+    // Check if already fetched
+    if (serviceItemsMap[serviceId]) {
+      return;
+    }
+
+    setFetchingServiceId(serviceId);
+
+    try {
+      const response = await api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`);
+      let items = response.data;
+
+      // Ensure items is always an array
+      if (Array.isArray(items)) {
+        // Apply any pending status updates
+        const pendingUpdates = pendingStatusUpdatesRef.current;
+        if (Object.keys(pendingUpdates).length > 0) {
+          items = items.map(item => {
+            // Check both string and number versions of the ID
+            const pendingStatus = pendingUpdates[item.id] || pendingUpdates[String(item.id)];
+            if (pendingStatus) {
+              return { ...item, status: pendingStatus };
+            }
+            return item;
+          });
+        }
+
+        setServiceItemsMap(prev => ({
+          ...prev,
+          [serviceId]: items
+        }));
+
+        // Also update the parent node data for persistence
+        if (data.onFetchServiceItems) {
+          data.onFetchServiceItems(serviceId);
+        }
+      } else {
+        console.error('Invalid response: expected array, got', typeof items);
+        setServiceItemsMap(prev => ({
+          ...prev,
+          [serviceId]: []
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch service items:', err);
+      setServiceItemsMap(prev => ({
+        ...prev,
+        [serviceId]: []
+      }));
+    } finally {
+      setFetchingServiceId(null);
+    }
+  };
 
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
@@ -186,6 +351,7 @@ export default function CustomNode({ data, id }) {
                                   service.status === 'active' ? 'bg-green-500' :
                                   service.status === 'inactive' ? 'bg-red-500' :
                                   service.status === 'maintenance' ? 'bg-yellow-500' :
+                                  service.status === 'disabled' ? 'bg-gray-500' :
                                   'bg-gray-500'
                                 }`}
                               />
@@ -312,36 +478,185 @@ export default function CustomNode({ data, id }) {
             <div className="mt-3 pt-2 border-t border-border">
               <div className="flex flex-wrap gap-1.5 justify-center">
                 {services.map((service) => (
-                  <div
-                    key={service.id}
-                    className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer relative
-                      hover:border-primary hover:scale-110 transition-all
-                      ${service.status === 'active' ? 'bg-green-50' : 'bg-red-50'}`}
-                    title={`${service.name} (${service.status})`}
-                    onClick={() => data.onServiceClick?.(service, data)}
-                  >
-                    {service.icon_type === 'preset' ? (
-                      <div className="w-full h-full flex items-center justify-center p-1">
-                        <ServiceIcon name={service.icon_name} size={32} />
+                  <HoverCard key={service.id} openDelay={300} closeDelay={200}>
+                    <HoverCardTrigger asChild>
+                      <div
+                        className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer relative
+                          hover:border-primary hover:scale-110 transition-all
+                          ${service.status === 'active' ? 'bg-green-50 border-green-200' :
+                            service.status === 'disabled' ? 'bg-gray-50 border-gray-200' :
+                            service.status === 'maintenance' ? 'bg-yellow-50 border-yellow-200' :
+                            service.status === 'inactive' ? 'bg-red-50 border-red-200' :
+                            'bg-gray-50 border-gray-200'}`}
+                        title={`${service.name} (${service.status})`}
+                        onClick={() => data.onServiceClick?.(service, data)}
+                        onMouseEnter={() => handleFetchServiceItems(service.id)}
+                      >
+                        {service.icon_type === 'preset' ? (
+                          <div className="w-full h-full flex items-center justify-center p-1">
+                            <ServiceIcon name={service.icon_name} size={32} />
+                          </div>
+                        ) : (
+                          <img
+                            src={`${API_BASE_URL}${service.icon_path}`}
+                            alt={service.name}
+                            className="w-full h-full object-contain"
+                            crossOrigin="anonymous"
+                          />
+                        )}
+                        {/* Status Indicator Dot */}
+                        <div
+                          className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
+                            service.status === 'active' ? 'bg-green-500' :
+                            service.status === 'inactive' ? 'bg-red-500' :
+                            service.status === 'maintenance' ? 'bg-yellow-500' :
+                            service.status === 'disabled' ? 'bg-gray-500' :
+                            'bg-gray-500'
+                          }`}
+                        />
                       </div>
-                    ) : (
-                      <img
-                        src={`${API_BASE_URL}${service.icon_path}`}
-                        alt={service.name}
-                        className="w-full h-full object-contain"
-                        crossOrigin="anonymous"
-                      />
-                    )}
-                    {/* Status Indicator Dot */}
-                    <div
-                      className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
-                        service.status === 'active' ? 'bg-green-500' :
-                        service.status === 'inactive' ? 'bg-red-500' :
-                        service.status === 'maintenance' ? 'bg-yellow-500' :
-                        'bg-gray-500'
-                      }`}
-                    />
-                  </div>
+                    </HoverCardTrigger>
+                    <HoverCardContent
+                      className="w-72 z-50"
+                      align="start"
+                      side="right"
+                    >
+                      <div className="space-y-3">
+                        {/* Service Header */}
+                        <div className="flex items-center gap-2 pb-2 border-b">
+                          {service.icon_type === 'preset' ? (
+                            <div className="w-8 h-8 bg-gray-100 rounded border flex items-center justify-center">
+                              <ServiceIcon name={service.icon_name} size={20} />
+                            </div>
+                          ) : (
+                            <img
+                              src={`${API_BASE_URL}${service.icon_path}`}
+                              alt={service.name}
+                              className="w-8 h-8 object-contain bg-gray-100 rounded border"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm truncate">{service.name}</p>
+                            <p className="text-xs text-muted-foreground">Service Items</p>
+                          </div>
+                        </div>
+
+                        {/* Loading State */}
+                        {fetchingServiceId === service.id ? (
+                          <div className="text-center py-4">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-transparent"></div>
+                            <p className="text-xs text-muted-foreground mt-2">Loading items...</p>
+                          </div>
+                        ) : (
+                          /* Service Items by Status */
+                          (() => {
+                            const items = serviceItemsMap[service.id] || [];
+
+                            if (items.length === 0) {
+                              return (
+                                <div className="text-center py-4">
+                                  <p className="text-sm text-muted-foreground">No service items</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Click to view details
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            const activeItems = items.filter(item => item.status === 'active');
+                            const maintenanceItems = items.filter(item => item.status === 'maintenance');
+                            const disabledItems = items.filter(item => item.status === 'disabled');
+                            const inactiveItems = items.filter(item => item.status === 'inactive');
+
+                            return (
+                              <div className="space-y-2">
+                                {/* Active Items */}
+                                {activeItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                                      <span className="text-xs font-medium text-green-700">
+                                        Active ({activeItems.length})
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 pl-4">
+                                      {activeItems.map(item => (
+                                        <div key={item.id} className="text-xs text-gray-700 truncate py-0.5">
+                                          • {item.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Maintenance Items */}
+                                {maintenanceItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                                      <span className="text-xs font-medium text-yellow-700">
+                                        Maintenance ({maintenanceItems.length})
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 pl-4">
+                                      {maintenanceItems.map(item => (
+                                        <div key={item.id} className="text-xs text-gray-700 truncate py-0.5">
+                                          • {item.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Disabled Items */}
+                                {disabledItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-gray-500" />
+                                      <span className="text-xs font-medium text-gray-700">
+                                        Disabled ({disabledItems.length})
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 pl-4">
+                                      {disabledItems.map(item => (
+                                        <div key={item.id} className="text-xs text-gray-700 truncate py-0.5">
+                                          • {item.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Inactive Items */}
+                                {inactiveItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                                      <span className="text-xs font-medium text-red-700">
+                                        Inactive ({inactiveItems.length})
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 pl-4">
+                                      {inactiveItems.map(item => (
+                                        <div key={item.id} className="text-xs text-gray-700 truncate py-0.5">
+                                          • {item.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Summary */}
+                                <div className="pt-2 border-t text-xs text-muted-foreground">
+                                  Total: {items.length} item{items.length !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </HoverCardContent>
+                  </HoverCard>
                 ))}
               </div>
             </div>

@@ -470,5 +470,5 @@ export const getStatusColor = (status, isPropagated = false) => {
  * @returns {boolean}
  */
 export const shouldShowCrossMarker = (status) => {
-  return ['inactive', 'maintenance', 'decommissioned'].includes(status);
+  return ['inactive', 'maintenance', 'decommissioned', 'disabled'].includes(status);
 };

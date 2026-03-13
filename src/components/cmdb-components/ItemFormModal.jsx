@@ -362,6 +362,7 @@ export default function ItemFormModal({
                         <SelectContent>
                           <SelectItem value="active">Active</SelectItem>
                           <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="disabled">Disabled</SelectItem>
                         </SelectContent>
                       </Select>
 

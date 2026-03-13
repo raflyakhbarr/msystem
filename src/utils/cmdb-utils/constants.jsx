@@ -69,6 +69,7 @@ export const STATUS_COLORS = {
   inactive: 'bg-red-100 text-red-800',
   maintenance: 'bg-yellow-100 text-yellow-800',
   decommissioned: 'bg-red-100 text-red-800',
+  disabled: 'bg-gray-100 text-gray-800',
 };
 
 export const INITIAL_ITEM_FORM = {
