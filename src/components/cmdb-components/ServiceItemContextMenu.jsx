@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Link2, MoreVertical } from 'lucide-react';
+import { Pencil, Trash2, Link2, MoreVertical, Globe } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function ServiceItemContextMenu({
@@ -10,19 +10,30 @@ export default function ServiceItemContextMenu({
   onDelete,
   onManageConnections,
   onManageGroupConnections,
+  onManageCrossServiceConnections,
   onClose,
 }) {
   if (!show) return null;
   const isGroup = !!group; // If group exists, then it's a group context menu
+  const isExternal = item?.data?.isExternal || false; // Check if item is external
 
   const items = [
-    !isGroup
+    !isGroup && !isExternal
       ? {
           label: 'Manage Connections',
           icon: <Link2 className="h-4 w-4" />,
           onClick: () => onManageConnections(item),
           color: 'hover:bg-blue-500 hover:text-white',
           iconColor: 'text-blue-600',
+        }
+      : null,
+    !isGroup && !isExternal && onManageCrossServiceConnections
+      ? {
+          label: 'Cross-Service Connections',
+          icon: <Globe className="h-4 w-4" />,
+          onClick: () => onManageCrossServiceConnections(item),
+          color: 'hover:bg-indigo-500 hover:text-white',
+          iconColor: 'text-indigo-600',
         }
       : null,
     isGroup && onManageGroupConnections

@@ -32,6 +32,8 @@ import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
 export default function CustomServiceNode({ data, id }) {
   const parentService = data.parentService || null;
+  const isExternal = data.isExternal || false;
+  const externalSource = data.externalSource || null;
 
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
@@ -95,9 +97,22 @@ export default function CustomServiceNode({ data, id }) {
   return (
     <>
       {/* Node UI */}
-      <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${getNodeBorderColor(data.status)}`}>
+      <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${
+        isExternal
+          ? 'border-dashed border-blue-500 bg-blue-50/30 dark:bg-blue-950/30'
+          : getNodeBorderColor(data.status)
+      }`}>
+        {/* External Badge */}
+        {isExternal && (
+          <div className="absolute top-0 left-0 -translate-x-1 -translate-y-1">
+            <div className="bg-blue-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-md whitespace-nowrap">
+              EXTERNAL
+            </div>
+          </div>
+        )}
+
         {/* Info Button */}
-        <div className="absolute top-1 right-1 flex gap-1 z-10">
+        <div className={`absolute top-1 right-1 flex gap-1 z-10 ${isExternal ? 'top-3' : ''}`}>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -199,6 +214,30 @@ export default function CustomServiceNode({ data, id }) {
                       </div>
                     </div>
                   )}
+
+                  {/* External Source Section */}
+                  {isExternal && externalSource && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold text-blue-600 flex items-center gap-1">
+                          <Globe size={14} />
+                          External Source:
+                        </p>
+                      </div>
+                      <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                        <div className="space-y-1.5 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-muted-foreground">Service:</span>
+                            <span className="font-medium">{externalSource.serviceName || 'Unknown'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-muted-foreground">CMDB Item:</span>
+                            <span className="font-medium">{externalSource.cmdbItemName || 'Unknown'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </PopoverContent>
@@ -206,7 +245,14 @@ export default function CustomServiceNode({ data, id }) {
         </div>
 
         {/* Node Content - Style seperti CustomNode */}
-        <div className="p-2 pt-6">
+        <div className={`p-2 ${isExternal ? 'pt-8' : 'pt-6'}`}>
+          {/* External Source Badge (small) */}
+          {isExternal && externalSource && (
+            <div className="text-[9px] text-blue-600 font-semibold mb-1 truncate" title={`From: ${externalSource.serviceName} (${externalSource.cmdbItemName})`}>
+              From: {externalSource.serviceName}
+            </div>
+          )}
+
           {/* Status Badge */}
           {data.status && (
             <div className="text-xs text-center mb-2">

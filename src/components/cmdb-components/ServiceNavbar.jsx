@@ -1,7 +1,7 @@
 import {
   Save, Plus, Layers, MousePointer2, Square,
   ToggleRight, ToggleLeft, Map, ChevronDown,
-  Undo2, Redo2
+  Undo2, Redo2, Globe, ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +32,8 @@ export default function ServiceNavbar({
   onOpenManageGroups,
   showMiniMap,
   onToggleMiniMap,
+  showExternalNodes,
+  onToggleExternalNodes,
 }) {
 
 
@@ -158,6 +160,18 @@ export default function ServiceNavbar({
               >
                 <Map size={14} />
                 <span className="hidden lg:inline ml-1">MiniMap</span>
+              </Button>
+
+              {/* EXTERNAL NODES TOGGLE BUTTON */}
+              <Button
+                onClick={onToggleExternalNodes}
+                variant={showExternalNodes ? "default" : "ghost"}
+                size="sm"
+                title={showExternalNodes ? "Sembunyikan External Nodes" : "Tampilkan External Nodes"}
+                className={showExternalNodes ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}
+              >
+                {showExternalNodes ? <Globe size={14} /> : <ExternalLink size={14} />}
+                <span className="hidden lg:inline ml-1">External</span>
               </Button>
             </div>
           </div>

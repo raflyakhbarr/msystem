@@ -8,7 +8,7 @@ import ReactFlow, {
   reconnectEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Plus, Link2, Trash2, Save, Layers, AlertTriangle } from 'lucide-react';
+import { Plus, Link2, Trash2, Save, Layers, AlertTriangle, Globe, ExternalLink } from 'lucide-react';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
@@ -20,6 +20,7 @@ import ServiceGroupModal from './ServiceGroupModal';
 import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
 import ServiceItemFormModal from './ServiceItemFormModal';
 import ServiceNavbar from './ServiceNavbar';
+import CrossServiceConnectionModal from './CrossServiceConnectionModal';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { INITIAL_GROUP_FORM, API_BASE_URL } from '../../utils/cmdb-utils/constants';
@@ -149,6 +150,16 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState('single');
 
+  // Cross-service connections state
+  const [crossServiceConnections, setCrossServiceConnections] = useState([]);
+  const [connectionTypes, setConnectionTypes] = useState([]);
+  const [externalServiceItems, setExternalServiceItems] = useState([]);
+  const [showCrossConnectionModal, setShowCrossConnectionModal] = useState(false);
+  const [selectedItemForCrossConnection, setSelectedItemForCrossConnection] = useState(null);
+  const [showExternalNodes, setShowExternalNodes] = useState(true);
+  const [externalItemPositions, setExternalItemPositions] = useState({});
+  const [crossServiceEdgeHandles, setCrossServiceEdgeHandles] = useState({});
+
   // Undo/Redo state
   const [pastNodes, setPastNodes] = useState([]);
   const [futureNodes, setFutureNodes] = useState([]);
@@ -196,6 +207,109 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const prevConnectionsRef = useRef(null);
   const prevGroupConnectionsRef = useRef(null);
   const prevEdgeHandlesRef = useRef(null);
+  const prevCrossServiceConnectionsRef = useRef(null);
+
+  // Fetch connection types on mount
+  useEffect(() => {
+    const fetchConnectionTypes = async () => {
+      try {
+        const response = await api.get('/cmdb/connection-types');
+        setConnectionTypes(response.data);
+      } catch (error) {
+        console.error('Failed to fetch connection types:', error);
+      }
+    };
+    fetchConnectionTypes();
+  }, []);
+
+  // Fetch cross-service connections on mount
+  useEffect(() => {
+    const fetchCrossServiceConnections = async () => {
+      if (!service?.id || !workspaceId) return;
+
+      try {
+        // Fetch external item positions for this service
+        const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
+          params: { workspaceId }
+        });
+        const positions = {};
+        positionsResponse.data.forEach(pos => {
+          positions[pos.external_service_item_id] = pos.position;
+        });
+        setExternalItemPositions(positions);
+
+        // Fetch cross-service edge handles
+        const edgeHandlesResponse = await api.get(`/cross-service-connections/service-item/1`, {
+          params: { workspaceId }
+        });
+        // Note: This endpoint doesn't exist yet, but we'll add it if needed
+        // For now, we'll create handles dynamically
+
+        // Get all cross-service connections for workspace
+        const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+        const connections = response.data;
+
+        // Filter connections that involve service items from this service
+        const serviceItemIds = items.map(item => item.id);
+        const relevantConnections = connections.filter(conn =>
+          serviceItemIds.includes(conn.source_service_item_id) ||
+          serviceItemIds.includes(conn.target_service_item_id)
+        );
+
+        setCrossServiceConnections(relevantConnections);
+
+        // Get all external service items from these connections
+        const externalItems = [];
+        const externalItemIds = new Set();
+
+        relevantConnections.forEach(conn => {
+          const isSource = serviceItemIds.includes(conn.source_service_item_id);
+
+          if (isSource) {
+            // Target is external
+            if (!externalItemIds.has(conn.target_service_item_id)) {
+              const savedPosition = positions[conn.target_service_item_id];
+              externalItems.push({
+                id: conn.target_service_item_id,
+                name: conn.target_name,
+                type: conn.target_type,
+                status: conn.target_status,
+                cmdbItemId: conn.target_cmdb_item_id,
+                serviceId: conn.target_service_id,
+                serviceName: conn.service_name || 'Unknown Service',
+                cmdbItemName: conn.cmdb_item_name || 'Unknown CMDB Item',
+                position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
+              });
+              externalItemIds.add(conn.target_service_item_id);
+            }
+          } else {
+            // Source is external
+            if (!externalItemIds.has(conn.source_service_item_id)) {
+              const savedPosition = positions[conn.source_service_item_id];
+              externalItems.push({
+                id: conn.source_service_item_id,
+                name: conn.source_name,
+                type: conn.source_type,
+                status: conn.source_status,
+                cmdbItemId: conn.source_cmdb_item_id,
+                serviceId: conn.source_service_id,
+                serviceName: conn.service_name || 'Unknown Service',
+                cmdbItemName: conn.cmdb_item_name || 'Unknown CMDB Item',
+                position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
+              });
+              externalItemIds.add(conn.source_service_item_id);
+            }
+          }
+        });
+
+        setExternalServiceItems(externalItems);
+      } catch (error) {
+        console.error('Failed to fetch cross-service connections:', error);
+      }
+    };
+
+    fetchCrossServiceConnections();
+  }, [service?.id, workspaceId, items]);
 
   // Update nodes when items or groups change
   useEffect(() => {
@@ -320,14 +434,135 @@ export default function ServiceVisualization({ service, workspaceId }) {
     prevGroupsRef.current = groups;
   }, [items, groups, parentServiceData]);
 
+  // Add external service item nodes when cross-service connections change
+  useEffect(() => {
+    const crossServiceConnectionsChanged = JSON.stringify(prevCrossServiceConnectionsRef.current) !== JSON.stringify(crossServiceConnections);
+
+    if (!crossServiceConnectionsChanged && externalServiceItems.length === 0) {
+      return;
+    }
+
+    // Add/update external nodes with saved positions
+    setNodes(currentNodes => {
+      const updatedNodes = [...currentNodes];
+      const externalNodeIds = new Set();
+
+      // Calculate bounding box of existing nodes (local nodes only)
+      let maxX = 0;
+      let maxY = 0;
+      currentNodes.forEach(node => {
+        if (!node.parentNode && !node.data?.isExternal) {
+          const nodeRight = node.position.x + (node.style?.width || 160);
+          const nodeBottom = node.position.y + (node.style?.height || 80);
+          maxX = Math.max(maxX, nodeRight);
+          maxY = Math.max(maxY, nodeBottom);
+        }
+      });
+
+      // Add external nodes
+      let offsetX = maxX + 200; // Start 200px to the right
+      let offsetY = 100;
+      let itemsInRow = 0;
+      const maxItemsPerRow = 4;
+
+      externalServiceItems.forEach(externalItem => {
+        const existingNode = updatedNodes.find(n => n.id === String(externalItem.id));
+
+        // Use saved position if available, otherwise calculate new position
+        let nodePosition = externalItem.position;
+        if (!nodePosition || (nodePosition.x === 0 && nodePosition.y === 0)) {
+          nodePosition = { x: offsetX, y: offsetY };
+
+          // Update offset for next new item
+          itemsInRow++;
+          if (itemsInRow >= maxItemsPerRow) {
+            offsetX = maxX + 200;
+            offsetY += 120;
+            itemsInRow = 0;
+          } else {
+            offsetX += 180;
+          }
+        }
+
+        if (!existingNode) {
+          // Create new external node
+          updatedNodes.push({
+            id: String(externalItem.id),
+            type: 'custom',
+            position: nodePosition,
+            draggable: true, // External nodes are now draggable!
+            data: {
+              label: externalItem.name,
+              name: externalItem.name,
+              type: externalItem.type,
+              description: '',
+              status: externalItem.status,
+              ip: '',
+              domain: '',
+              port: '',
+              category: 'external',
+              location: '',
+              parentService: null,
+              groupId: null,
+              orderInGroup: 0,
+              isExternal: true,
+              externalSource: {
+                serviceName: externalItem.serviceName,
+                cmdbItemName: externalItem.cmdbItemName,
+                serviceId: externalItem.serviceId,
+                cmdbItemId: externalItem.cmdbItemId,
+              },
+            },
+            style: {
+              width: 160,
+              height: 80,
+              pointerEvents: 'all',
+            },
+            className: 'external-service-node',
+          });
+
+          externalNodeIds.add(String(externalItem.id));
+        } else {
+          // Update existing external node position if needed
+          const nodeIndex = updatedNodes.findIndex(n => n.id === String(externalItem.id));
+          if (nodeIndex !== -1) {
+            updatedNodes[nodeIndex].position = nodePosition;
+            updatedNodes[nodeIndex].draggable = true; // Ensure it's draggable
+          }
+          externalNodeIds.add(String(externalItem.id));
+        }
+      });
+
+      // Remove external nodes that are no longer connected
+      const currentExternalNodeIds = new Set(externalServiceItems.map(item => String(item.id)));
+      const filteredNodes = updatedNodes.filter(node => {
+        // Remove external nodes that are no longer connected
+        if (node.data?.isExternal && !currentExternalNodeIds.has(node.id)) {
+          return false;
+        }
+        // Hide external nodes if toggle is off
+        if (node.data?.isExternal && !showExternalNodes) {
+          return false;
+        }
+        return true;
+      });
+
+      return filteredNodes;
+    });
+
+    // Update ref
+    prevCrossServiceConnectionsRef.current = crossServiceConnections;
+  }, [crossServiceConnections, externalServiceItems, showExternalNodes]);
+
   // Update edges when connections change
   useEffect(() => {
     // Skip if data hasn't actually changed
     const connectionsChanged = JSON.stringify(prevConnectionsRef.current) !== JSON.stringify(connections);
     const groupConnectionsChanged = JSON.stringify(prevGroupConnectionsRef.current) !== JSON.stringify(groupConnections);
     const edgeHandlesChanged = JSON.stringify(prevEdgeHandlesRef.current) !== JSON.stringify(edgeHandles);
+    const crossServiceConnectionsChanged = JSON.stringify(prevCrossServiceConnectionsRef.current) !== JSON.stringify(crossServiceConnections);
 
-    if (!connectionsChanged && !groupConnectionsChanged && !edgeHandlesChanged) {
+    if (!connectionsChanged && !groupConnectionsChanged && !edgeHandlesChanged && !crossServiceConnectionsChanged) {
       return;
     }
 
@@ -403,13 +638,52 @@ export default function ServiceVisualization({ service, workspaceId }) {
         };
       });
 
-    setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges, ...itemToGroupEdges]);
+    // Add cross-service edges with connection type styling
+    const crossServiceEdges = crossServiceConnections.map(conn => {
+      const edgeId = `cross-service-${conn.source_service_item_id}-${conn.target_service_item_id}`;
+      const connectionType = connectionTypes.find(ct => ct.type_slug === conn.connection_type);
+
+      const baseStyle = {
+        strokeWidth: 2,
+        stroke: connectionType?.color || '#3b82f6',
+      };
+
+      // Add dash array for certain connection types
+      if (conn.connection_type === 'related_to') {
+        baseStyle.strokeDasharray = '5,5';
+      }
+
+      return {
+        id: edgeId,
+        source: String(conn.source_service_item_id),
+        target: String(conn.target_service_item_id),
+        sourceHandle: 'source-right', // Default handle for cross-service edges
+        targetHandle: 'target-left',
+        type: 'smoothstep',
+        animated: true, // Animate cross-service edges for visibility
+        style: baseStyle,
+        zIndex: 5,
+        label: connectionType?.label || '',
+        labelStyle: {
+          fontSize: 10,
+          fontWeight: 600,
+          fill: connectionType?.color || '#3b82f6',
+          backgroundColor: 'white',
+        },
+        markerEnd: {
+          type: 'arrowclosed',
+          color: connectionType?.color || '#3b82f6',
+        },
+      };
+    });
+
+    setEdges([...itemEdges, ...groupToGroupEdges, ...groupToItemEdges, ...itemToGroupEdges, ...crossServiceEdges]);
 
     // Update refs
     prevConnectionsRef.current = connections;
     prevGroupConnectionsRef.current = groupConnections;
     prevEdgeHandlesRef.current = edgeHandles;
-  }, [connections, groupConnections, edgeHandles]);
+  }, [connections, groupConnections, edgeHandles, crossServiceConnections, connectionTypes]);
 
   const handleOpenAddModal = useCallback(() => {
     setItemFormData({
@@ -450,6 +724,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
     });
     setEditItem(item);
     setShowAddModal(true);
+  }, []);
+
+  const handleOpenCrossServiceConnection = useCallback((item) => {
+    setSelectedItemForCrossConnection(item);
+    setShowCrossConnectionModal(true);
   }, []);
 
   const handleEditGroup = useCallback((group) => {
@@ -575,6 +854,20 @@ export default function ServiceVisualization({ service, workspaceId }) {
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
+
+      // Save external item position to database
+      if (node.data?.isExternal && service?.id) {
+        try {
+          await api.post('/external-item-positions', {
+            workspaceId: workspaceId,
+            serviceId: service.id,
+            externalServiceItemId: node.id,
+            position: node.position
+          });
+        } catch (err) {
+          console.error('Failed to save external item position:', err);
+        }
+      }
 
       // Save to history with lightweight clone (only for significant position changes)
       if (dragDuration > 200) { // Only save if drag was significant (>200ms)
@@ -1050,6 +1343,13 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   }, [contextMenu, handleOpenGroupConnectionModal, handleCloseContextMenu]);
 
+  const handleContextMenuManageCrossServiceConnections = useCallback(() => {
+    handleCloseContextMenu();
+    if (contextMenu.item) {
+      handleOpenCrossServiceConnection(contextMenu.item);
+    }
+  }, [contextMenu, handleOpenCrossServiceConnection, handleCloseContextMenu]);
+
   // Handle reconnecting edges
   const handleReconnect = useCallback(async (oldEdge, newConnection) => {
     // Save to database FIRST
@@ -1111,6 +1411,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onOpenManageGroups={handleOpenManageGroups}
         showMiniMap={showMiniMap}
         onToggleMiniMap={handleToggleMiniMap}
+        showExternalNodes={showExternalNodes}
+        onToggleExternalNodes={() => setShowExternalNodes(!showExternalNodes)}
       />
 
       {/* React Flow Canvas */}
@@ -1288,6 +1590,39 @@ export default function ServiceVisualization({ service, workspaceId }) {
         }}
       />
 
+      {/* Cross-Service Connection Modal */}
+      <CrossServiceConnectionModal
+        show={showCrossConnectionModal}
+        selectedItem={selectedItemForCrossConnection}
+        allServiceItems={items}
+        workspaceId={workspaceId}
+        onClose={() => {
+          setShowCrossConnectionModal(false);
+          setSelectedItemForCrossConnection(null);
+        }}
+        onSave={async () => {
+          // Refresh cross-service connections
+          try {
+            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+            const connections = response.data;
+
+            // Filter connections that involve service items from this service
+            const serviceItemIds = items.map(item => item.id);
+            const relevantConnections = connections.filter(conn =>
+              serviceItemIds.includes(conn.source_service_item_id) ||
+              serviceItemIds.includes(conn.target_service_item_id)
+            );
+
+            setCrossServiceConnections(relevantConnections);
+          } catch (error) {
+            console.error('Failed to refresh cross-service connections:', error);
+          }
+
+          setShowCrossConnectionModal(false);
+          setSelectedItemForCrossConnection(null);
+        }}
+      />
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -1335,6 +1670,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onDelete={handleContextMenuDelete}
         onManageConnections={handleContextMenuManageConnections}
         onManageGroupConnections={handleContextMenuManageGroupConnections}
+        onManageCrossServiceConnections={handleContextMenuManageCrossServiceConnections}
         onClose={handleCloseContextMenu}
       />
     </div>
