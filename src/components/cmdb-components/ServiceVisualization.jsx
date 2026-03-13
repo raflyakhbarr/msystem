@@ -11,7 +11,8 @@ import 'reactflow/dist/style.css';
 import { Plus, Link2, Trash2, Save, Layers, AlertTriangle, Globe, ExternalLink } from 'lucide-react';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
-import { loadServiceEdgeHandles, saveServiceEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
+import { loadServiceEdgeHandles, saveServiceEdgeHandle, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
+import { calculatePropagatedStatuses, getStatusColor, shouldShowCrossMarker } from '../../utils/cmdb-utils/statusPropagation';
 import CustomServiceNode from './CustomServiceNode';
 import CustomServiceGroupNode from './CustomServiceGroupNode';
 import ServiceConnectionModal from './ServiceConnectionModal';
@@ -62,6 +63,210 @@ const parsePosition = (positionData) => {
 
   // Fallback
   return { x: 0, y: 0 };
+};
+
+/**
+ * Calculate propagated statuses for cross-service connections
+ * This considers both local items and external service items
+ */
+const calculateCrossServicePropagatedStatuses = (
+  localItems,
+  crossServiceConnections,
+  externalServiceItems
+) => {
+  const edgeStatuses = {};
+
+  // Create a unified map of all items (local + external)
+  const allItems = [...localItems];
+  externalServiceItems.forEach(externalItem => {
+    allItems.push({
+      id: externalItem.id,
+      status: externalItem.status,
+      name: externalItem.name,
+      type: externalItem.type,
+      isExternal: true,
+    });
+  });
+
+  // Build a simplified dependency graph for cross-service connections
+  const graph = {};
+  const ensureNode = (nodeId) => {
+    if (!graph[nodeId]) {
+      graph[nodeId] = {
+        dependencies: new Set(),
+        dependents: new Set(),
+      };
+    }
+  };
+
+  crossServiceConnections.forEach((conn) => {
+    const sourceId = String(conn.source_service_item_id);
+    const targetId = String(conn.target_service_item_id);
+
+    ensureNode(sourceId);
+    ensureNode(targetId);
+
+    // Get connection type for propagation direction
+    const connType = conn.connection_type || 'depends_on';
+    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
+    const propagation = connectionInfo.propagation || 'target_to_source';
+
+    if (propagation === 'target_to_source') {
+      // Target affects Source
+      graph[sourceId].dependencies.add(targetId);
+      graph[targetId].dependents.add(sourceId);
+    } else if (propagation === 'source_to_target') {
+      // Source affects Target
+      graph[targetId].dependencies.add(sourceId);
+      graph[sourceId].dependents.add(targetId);
+    } else if (propagation === 'both') {
+      // Bidirectional
+      graph[sourceId].dependencies.add(targetId);
+      graph[targetId].dependents.add(sourceId);
+      graph[targetId].dependencies.add(sourceId);
+      graph[sourceId].dependents.add(targetId);
+    }
+  });
+
+  // Recursive function to get affected nodes
+  const getAffectedNodesRecursive = (nodeId, visited = new Set()) => {
+    if (visited.has(nodeId) || !graph[nodeId]) {
+      return visited;
+    }
+    visited.add(nodeId);
+
+    const dependents = graph[nodeId].dependents;
+    dependents.forEach((dependentId) => {
+      getAffectedNodesRecursive(dependentId, visited);
+    });
+
+    return visited;
+  };
+
+  // Find all problematic nodes
+  const problematicNodes = new Set();
+  allItems.forEach((item) => {
+    if (['inactive', 'maintenance', 'decommissioned'].includes(item.status)) {
+      problematicNodes.add(String(item.id));
+    }
+  });
+
+  // Calculate affected nodes for each problematic node
+  const affectedNodesMap = new Map();
+  problematicNodes.forEach((nodeId) => {
+    const item = allItems.find(i => String(i.id) === nodeId);
+    const status = item?.status || 'inactive';
+    const affected = getAffectedNodesRecursive(nodeId, new Set());
+    affected.delete(nodeId);
+
+    affected.forEach((affectedId) => {
+      if (!affectedNodesMap.has(affectedId)) {
+        affectedNodesMap.set(affectedId, []);
+      }
+      affectedNodesMap.get(affectedId).push({ sourceId: nodeId, status });
+    });
+  });
+
+  // Calculate status for each cross-service edge
+  crossServiceConnections.forEach((conn) => {
+    const edgeId = `cross-service-${conn.source_service_item_id}-${conn.target_service_item_id}`;
+    const sourceId = String(conn.source_service_item_id);
+    const targetId = String(conn.target_service_item_id);
+
+    const sourceItem = allItems.find(i => String(i.id) === sourceId);
+    const targetItem = allItems.find(i => String(i.id) === targetId);
+
+    if (!sourceItem || !targetItem) return;
+
+    const sourceStatus = sourceItem.status;
+    const targetStatus = targetItem.status;
+
+    const connType = conn.connection_type || 'depends_on';
+    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
+    const propagation = connectionInfo.propagation || 'target_to_source';
+
+    let propagatedStatus = null;
+    let propagatedFrom = null;
+    let isPropagated = false;
+    let effectiveEdgeStatus = sourceStatus;
+
+    if (propagation === 'both') {
+      const sourceAffected = affectedNodesMap.has(sourceId);
+      const targetAffected = affectedNodesMap.has(targetId);
+
+      if (sourceAffected || targetAffected) {
+        isPropagated = true;
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+
+        let allAffecting = [];
+        if (sourceAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(sourceId));
+        if (targetAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(targetId));
+
+        let worstStatus = 'active';
+        allAffecting.forEach(({ status: s }) => {
+          if (priorities[s] > priorities[worstStatus]) {
+            worstStatus = s;
+          }
+        });
+
+        propagatedStatus = worstStatus;
+        propagatedFrom = allAffecting.map(s => s.sourceId);
+        effectiveEdgeStatus = worstStatus;
+      } else {
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+        effectiveEdgeStatus = priorities[sourceStatus] > priorities[targetStatus] ? sourceStatus : targetStatus;
+      }
+    } else {
+      let dependentId, dependencyId;
+
+      if (propagation === 'target_to_source') {
+        dependentId = sourceId;
+        dependencyId = targetId;
+      } else if (propagation === 'source_to_target') {
+        dependentId = targetId;
+        dependencyId = sourceId;
+      } else {
+        dependentId = null;
+        dependencyId = null;
+      }
+
+      const dependentAffected = affectedNodesMap.has(dependentId);
+
+      if (dependentAffected) {
+        isPropagated = true;
+        const affectingSources = affectedNodesMap.get(dependentId);
+        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
+
+        let worstStatus = 'active';
+        affectingSources.forEach(({ status: s }) => {
+          if (priorities[s] > priorities[worstStatus]) {
+            worstStatus = s;
+          }
+        });
+
+        propagatedStatus = worstStatus;
+        propagatedFrom = affectingSources.map(s => s.sourceId);
+        effectiveEdgeStatus = worstStatus;
+      } else {
+        effectiveEdgeStatus = dependencyId === targetId ? targetStatus : sourceStatus;
+      }
+    }
+
+    edgeStatuses[edgeId] = {
+      sourceId,
+      targetId,
+      sourceStatus,
+      targetStatus,
+      propagatedStatus,
+      propagatedFrom,
+      isPropagated,
+      effectiveEdgeStatus,
+      connectionType: connType,
+      propagation,
+    };
+  });
+
+  return edgeStatuses;
 };
 
 export default function ServiceVisualization({ service, workspaceId }) {
@@ -581,8 +786,17 @@ export default function ServiceVisualization({ service, workspaceId }) {
       });
     });
 
-    setNodes(flowNodes);
-    nodesRef.current = flowNodes;
+    // Preserve external nodes when rebuilding local nodes
+    setNodes(currentNodes => {
+      // Keep existing external nodes
+      const externalNodes = currentNodes.filter(n => n.data?.isExternal);
+
+      // Combine local nodes with external nodes
+      const allNodes = [...flowNodes, ...externalNodes];
+
+      nodesRef.current = allNodes;
+      return allNodes;
+    });
 
     // Update refs
     prevItemsRef.current = items;
@@ -831,7 +1045,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
         };
       });
 
-    // Add cross-service edges with connection type styling
+    // Calculate propagated statuses for cross-service connections
+    const crossServiceEdgeStatuses = calculateCrossServicePropagatedStatuses(
+      items,
+      crossServiceConnections,
+      externalServiceItems
+    );
+
+    // Add cross-service edges with connection type styling and status propagation
     const crossServiceEdges = crossServiceConnections.map(conn => {
       const edgeId = `cross-service-${conn.source_service_item_id}-${conn.target_service_item_id}`;
       const connectionType = connectionTypes.find(ct => ct.type_slug === conn.connection_type);
@@ -841,9 +1062,22 @@ export default function ServiceVisualization({ service, workspaceId }) {
       const sourceHandle = (handleConfig && handleConfig.sourceHandle) || 'source-right';
       const targetHandle = (handleConfig && handleConfig.targetHandle) || 'target-left';
 
+      // Get propagated status information
+      const edgeStatusInfo = crossServiceEdgeStatuses[edgeId];
+      let strokeColor = connectionType?.color || '#3b82f6';
+      let showCrossMarker = false;
+      let isPropagated = false;
+
+      if (edgeStatusInfo) {
+        const effectiveStatus = edgeStatusInfo.effectiveEdgeStatus || edgeStatusInfo.propagatedStatus || edgeStatusInfo.sourceStatus;
+        strokeColor = getStatusColor(effectiveStatus, !!edgeStatusInfo.isPropagated);
+        showCrossMarker = shouldShowCrossMarker(effectiveStatus);
+        isPropagated = edgeStatusInfo.isPropagated || false;
+      }
+
       const baseStyle = {
-        strokeWidth: 2,
-        stroke: connectionType?.color || '#3b82f6',
+        strokeWidth: isPropagated ? 3 : 2,
+        stroke: strokeColor,
       };
 
       // Add dash array for certain connection types
@@ -859,7 +1093,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
         targetHandle,
         sourceName: conn.source_name,
         targetName: conn.target_name,
-        connectionType: connectionType?.label || conn.connection_type
+        connectionType: connectionType?.label || conn.connection_type,
+        statusInfo: edgeStatusInfo,
+        isPropagated,
+        showCrossMarker
       });
 
       const edge = {
@@ -871,23 +1108,34 @@ export default function ServiceVisualization({ service, workspaceId }) {
         type: 'smoothstep',
         animated: true, // Animate cross-service edges for visibility
         style: baseStyle,
-        zIndex: 5,
-        label: connectionType?.label || '',
+        zIndex: isPropagated ? 10 : 5,
+        label: showCrossMarker ? '✕' : (connectionType?.label || ''),
         labelStyle: {
-          fontSize: 10,
-          fontWeight: 600,
-          fill: connectionType?.color || '#3b82f6',
+          fontSize: showCrossMarker ? 20 : 10,
+          fontWeight: showCrossMarker ? 'bold' : 600,
+          fill: strokeColor,
           backgroundColor: 'white',
         },
+        labelBgStyle: showCrossMarker ? {
+          fill: 'white',
+          fillOpacity: 0,
+        } : undefined,
+        labelBgPadding: showCrossMarker ? [8, 8] : undefined,
+        labelBgBorderRadius: showCrossMarker ? 50 : undefined,
         markerEnd: {
           type: 'arrowclosed',
-          color: connectionType?.color || '#3b82f6',
+          color: strokeColor,
         },
         // Store service IDs for edge handle saving
         data: {
           sourceServiceId: conn.source_service_id,
           targetServiceId: conn.target_service_id,
-          isCrossService: true
+          isCrossService: true,
+          ...(edgeStatusInfo && isPropagated ? {
+            isPropagated: true,
+            propagatedFrom: edgeStatusInfo.propagatedFrom,
+            propagatedStatus: edgeStatusInfo.propagatedStatus,
+          } : {})
         }
       };
 
