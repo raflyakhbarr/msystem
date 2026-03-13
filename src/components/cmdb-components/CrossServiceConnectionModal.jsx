@@ -478,7 +478,7 @@ export default function CrossServiceConnectionModal({
                     <FolderOpen className="h-4 w-4 text-yellow-600" />
                     <span className="font-semibold text-sm">{cmdbGroup.cmdbItemName}</span>
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {Object.keys(cmdbGroup.services).length} services
+                      {Object.keys(cmdbGroup.services).length} Service(s)
                     </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="ml-4 space-y-1">
@@ -499,7 +499,7 @@ export default function CrossServiceConnectionModal({
                           <Layers className="h-4 w-4 text-purple-600" />
                           <span className="font-medium text-sm">{serviceGroup.serviceName}</span>
                           <span className="ml-auto text-xs text-muted-foreground">
-                            {serviceGroup.items.length} items
+                            {serviceGroup.items.length} Service Item(s)
                           </span>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="ml-4 space-y-1">

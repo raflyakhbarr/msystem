@@ -9,6 +9,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Plus, Link2, Trash2, Save, Layers, AlertTriangle, Globe, ExternalLink } from 'lucide-react';
+import { io } from 'socket.io-client';
 import api from '../../services/api';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
@@ -22,6 +23,8 @@ import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
 import ServiceItemFormModal from './ServiceItemFormModal';
 import ServiceNavbar from './ServiceNavbar';
 import CrossServiceConnectionModal from './CrossServiceConnectionModal';
+import QuickConnectionModal from './QuickConnectionModal';
+import ServiceEdgeContextMenu from './ServiceEdgeContextMenu';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { INITIAL_GROUP_FORM, API_BASE_URL } from '../../utils/cmdb-utils/constants';
@@ -35,7 +38,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { io } from 'socket.io-client';
 
 const nodeTypes = {
   custom: CustomServiceNode,
@@ -276,16 +278,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const dragStateRef = useRef({ isDragging: false, startTime: 0 });
   const lastSavedPositionsRef = useRef(new Map()); // Track last saved positions
 
-  // Socket initialization - use useMemo to create socket once
-  const socket = useMemo(() => {
-    return io('http://localhost:5001', {
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
-  }, []);
-
   const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -297,6 +289,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
   const [selectedGroupConnections, setSelectedGroupConnections] = useState([]);
+  const [itemConnectionTypes, setItemConnectionTypes] = useState({});
+  const [itemToGroupConnectionTypes, setItemToGroupConnectionTypes] = useState({});
   const [selectedGroupForConnection, setSelectedGroupForConnection] = useState(null);
   const [selectedGroupToGroupConnections, setSelectedGroupToGroupConnections] = useState([]);
   const [selectedGroupToItemConnections, setSelectedGroupToItemConnections] = useState([]);
@@ -378,6 +372,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const [crossServiceEdgeHandles, setCrossServiceEdgeHandles] = useState({});
   const [crossServiceUpdateKey, setCrossServiceUpdateKey] = useState(0); // Add force update key
 
+  // Quick Connection Modal states
+  const [showQuickConnectionModal, setShowQuickConnectionModal] = useState(false);
+  const [quickConnectionSource, setQuickConnectionSource] = useState(null);
+  const [quickConnectionTarget, setQuickConnectionTarget] = useState(null);
+  const [quickConnectionMode, setQuickConnectionMode] = useState('create'); // 'create' or 'edit'
+  const [quickConnectionExistingType, setQuickConnectionExistingType] = useState(null);
+
+  // Edge Context Menu states
+  const [edgeContextMenu, setEdgeContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, edge: null, sourceNode: null, targetNode: null });
 
   // Use refs to always get latest state values and avoid stale closures
   const crossServiceConnectionsRef = useRef(crossServiceConnections);
@@ -429,6 +432,46 @@ export default function ServiceVisualization({ service, workspaceId }) {
       : null
   } : null, [service]);
 
+  // Helper function to get default propagation for connection type (for service items)
+  const getConnectionPropagation = (typeSlug) => {
+    const propagationMap = {
+      'depends_on': 'source_to_target',
+      'consumed_by': 'target_to_source',
+      'connects_to': 'both',
+      'contains': 'source_to_target',
+      'managed_by': 'source_to_target',
+      'data_flow_to': 'source_to_target',
+      'backup_to': 'source_to_target',
+      'backed_up_by': 'source_to_target',
+      'hosted_on': 'source_to_target',
+      'hosting': 'target_to_source',
+      'licensed_by': 'source_to_target',
+      'licensing': 'target_to_source',
+      'part_of': 'source_to_target',
+      'comprised_of': 'source_to_target',
+      'related_to': 'both',
+      'preceding': 'source_to_target',
+      'succeeding': 'target_to_source',
+      'encrypted_by': 'source_to_target',
+      'encrypting': 'target_to_source',
+      'authenticated_by': 'source_to_target',
+      'authenticating': 'target_to_source',
+      'monitoring': 'target_to_source',
+      'monitored_by': 'source_to_target',
+      'load_balanced_by': 'source_to_target',
+      'load_balancing': 'target_to_source',
+      'failing_over_to': 'source_to_target',
+      'failover_from': 'target_to_source',
+      'replicating_to': 'target_to_source',
+      'replicated_by': 'source_to_target',
+      'proxying_for': 'target_to_source',
+      'proxied_by': 'source_to_target',
+      'routed_through': 'source_to_target',
+      'routing': 'target_to_source',
+    };
+    return propagationMap[typeSlug] || 'source_to_target';
+  };
+
   // Initialize with empty arrays
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -455,114 +498,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
     };
     fetchConnectionTypes();
   }, []);
-
-  // Listen for cross-service connection updates via socket
-  useEffect(() => {
-    if (!service?.id || !workspaceId) return;
-
-    const handleCrossServiceConnectionUpdate = async (data) => {
-      // Check if this service is involved in the update
-      if (data.sourceServiceId === service.id || data.targetServiceId === service.id) {
-        if (data.workspaceId === workspaceId) {
-
-          // Refresh cross-service connections
-          try {
-            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
-            const connections = response.data;
-
-            // Filter connections that involve this service
-            const relevantConnections = connections.filter(conn =>
-              conn.source_service_id === service.id ||
-              conn.target_service_id === service.id
-            );
-
-            setCrossServiceConnections(relevantConnections);
-
-            // Refresh cross-service edge handles
-            const edgeHandlesResponse = await api.get(`/cross-service-connections/edge-handles/workspace/${workspaceId}`);
-            const edgeHandlesMap = {};
-            edgeHandlesResponse.data.forEach(handle => {
-              edgeHandlesMap[handle.edge_id] = {
-                sourceHandle: handle.source_handle,
-                targetHandle: handle.target_handle
-              };
-            });
-            setCrossServiceEdgeHandles(edgeHandlesMap);
-
-            // Refresh external positions
-            const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
-              params: { workspaceId }
-            });
-            const positions = {};
-            positionsResponse.data.forEach(pos => {
-              positions[pos.external_service_item_id] = pos.position;
-            });
-            setExternalItemPositions(positions);
-
-            // Recalculate external service items from the updated connections
-            const externalItems = [];
-            const externalItemIds = new Set();
-
-            relevantConnections.forEach(conn => {
-              // Check if source is from this service (local) or external
-              const isSourceLocal = conn.source_service_id === service.id;
-
-              if (isSourceLocal) {
-                // Target is external
-                if (!externalItemIds.has(conn.target_service_item_id)) {
-                  const savedPosition = positions[conn.target_service_item_id];
-                  externalItems.push({
-                    id: conn.target_service_item_id,
-                    name: conn.target_name,
-                    type: conn.target_type,
-                    status: conn.target_status,
-                    cmdbItemId: conn.target_cmdb_item_id,
-                    serviceId: conn.target_service_id,
-                    serviceName: conn.target_service_name || 'Unknown Service',
-                    cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
-                    position: savedPosition ? savedPosition : { x: 0, y: 0 },
-                  });
-                  externalItemIds.add(conn.target_service_item_id);
-                }
-              } else {
-                // Source is external
-                if (!externalItemIds.has(conn.source_service_item_id)) {
-                  const savedPosition = positions[conn.source_service_item_id];
-                  externalItems.push({
-                    id: conn.source_service_item_id,
-                    name: conn.source_name,
-                    type: conn.source_type,
-                    status: conn.source_status,
-                    cmdbItemId: conn.source_cmdb_item_id,
-                    serviceId: conn.source_service_id,
-                    serviceName: conn.source_service_name || 'Unknown Service',
-                    cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
-                    position: savedPosition ? savedPosition : { x: 0, y: 0 },
-                  });
-                  externalItemIds.add(conn.source_service_item_id);
-                }
-              }
-            });
-
-            setExternalServiceItems(externalItems);
-
-            // Refresh local items to ensure status propagation is consistent
-            // This prevents race condition where external items update but local items are stale
-            fetchAll();
-
-          } catch (error) {
-            console.error('Error in cross_service_connection_update handler:', error);
-          }
-        }
-      }
-    };
-
-    socket.on('cross_service_connection_update', handleCrossServiceConnectionUpdate);
-
-    return () => {
-      socket.off('cross_service_connection_update', handleCrossServiceConnectionUpdate);
-    };
-  }, [service?.id, workspaceId, fetchAll]);
 
   // Fetch cross-service connections on mount
   useEffect(() => {
@@ -661,16 +596,113 @@ export default function ServiceVisualization({ service, workspaceId }) {
     fetchCrossServiceConnections();
   }, [service?.id, workspaceId]);
 
+  // Socket listener for external service item status updates
+  useEffect(() => {
+    if (!service?.id || !workspaceId) return;
+
+    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
+      reconnectionAttempts: 5,
+      reconnection: true
+    });
+
+    socket.on('service_item_status_update', async (data) => {
+      // Only care about updates in the same workspace
+      if (data.workspaceId === workspaceId && data.serviceId !== service.id) {
+        console.log('🌐 External service item status update detected, refreshing cross-service connections...');
+        // Refresh cross-service connections to get updated external item statuses
+        try {
+          const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
+            params: { workspaceId }
+          });
+          const positions = {};
+          positionsResponse.data.forEach(pos => {
+            positions[pos.external_service_item_id] = pos.position;
+          });
+          setExternalItemPositions(positions);
+
+          const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+          const connections = response.data;
+          const relevantConnections = connections.filter(conn => {
+            const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
+            return isRelevant;
+          });
+
+          setCrossServiceConnections(relevantConnections);
+          setCrossServiceUpdateKey(prev => prev + 1);
+
+          const externalItems = [];
+          const externalItemIds = new Set();
+
+          relevantConnections.forEach(conn => {
+            const isSourceLocal = conn.source_service_id === service.id;
+
+            if (isSourceLocal) {
+              if (!externalItemIds.has(conn.target_service_item_id)) {
+                const savedPosition = positions[conn.target_service_item_id];
+                externalItems.push({
+                  id: conn.target_service_item_id,
+                  name: conn.target_name,
+                  type: conn.target_type,
+                  status: conn.target_status,
+                  cmdbItemId: conn.target_cmdb_item_id,
+                  serviceId: conn.target_service_id,
+                  serviceName: conn.target_service_name || 'Unknown Service',
+                  cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
+                  position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                });
+                externalItemIds.add(conn.target_service_item_id);
+              }
+            } else {
+              if (!externalItemIds.has(conn.source_service_item_id)) {
+                const savedPosition = positions[conn.source_service_item_id];
+                externalItems.push({
+                  id: conn.source_service_item_id,
+                  name: conn.source_name,
+                  type: conn.source_type,
+                  status: conn.source_status,
+                  cmdbItemId: conn.source_cmdb_item_id,
+                  serviceId: conn.source_service_id,
+                  serviceName: conn.source_service_name || 'Unknown Service',
+                  cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
+                  position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                });
+                externalItemIds.add(conn.source_service_item_id);
+              }
+            }
+          });
+
+          setExternalServiceItems(externalItems);
+          console.log('✅ Cross-service connections refreshed with updated external item statuses');
+        } catch (error) {
+          console.error('Failed to refresh cross-service connections:', error);
+        }
+      }
+    });
+
+    return () => {
+      socket.off('service_item_status_update');
+      socket.disconnect();
+    };
+  }, [service?.id, workspaceId]);
+
   // Update nodes when items or groups change
   useEffect(() => {
+    console.log('🔄 Node update useEffect triggered');
+    console.log('📊 Current items:', items);
+    console.log('📊 prevItemsRef:', prevItemsRef.current);
+
     // Skip if data hasn't actually changed
     const itemsChanged = JSON.stringify(prevItemsRef.current) !== JSON.stringify(items);
     const groupsChanged = JSON.stringify(prevGroupsRef.current) !== JSON.stringify(groups);
 
+    console.log('🔍 itemsChanged:', itemsChanged, 'groupsChanged:', groupsChanged);
+
     if (!itemsChanged && !groupsChanged) {
+      console.log('⏭️ Skipping node update - no changes detected');
       return;
     }
 
+    console.log('✅ Proceeding with node update');
     const flowNodes = [];
 
     // Create group nodes first
@@ -809,7 +841,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return;
     }
 
-    // Add/update external nodes with saved positions
+    // Add/update external nodes with saved positions (without filtering)
     setNodes(currentNodes => {
       const updatedNodes = [...currentNodes];
       const externalNodeIds = new Set();
@@ -890,11 +922,25 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
           externalNodeIds.add(String(externalItem.id));
         } else {
-          // Update existing external node position if needed
+          // Update existing external node with latest data
           const nodeIndex = updatedNodes.findIndex(n => n.id === String(externalItem.id));
           if (nodeIndex !== -1) {
             updatedNodes[nodeIndex].position = nodePosition;
             updatedNodes[nodeIndex].draggable = true; // Ensure it's draggable
+            // Update all data fields with latest values
+            updatedNodes[nodeIndex].data = {
+              ...updatedNodes[nodeIndex].data,
+              label: externalItem.name,
+              name: externalItem.name,
+              type: externalItem.type,
+              status: externalItem.status, // This is the key update!
+              externalSource: {
+                serviceName: externalItem.serviceName,
+                cmdbItemName: externalItem.cmdbItemName,
+                serviceId: externalItem.serviceId,
+                cmdbItemId: externalItem.cmdbItemId,
+              },
+            };
           }
           externalNodeIds.add(String(externalItem.id));
         }
@@ -907,10 +953,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
         if (node.data?.isExternal && !currentExternalNodeIds.has(node.id)) {
           return false;
         }
-        // Hide external nodes if toggle is off
-        if (node.data?.isExternal && !showExternalNodes) {
-          return false;
-        }
         return true;
       });
 
@@ -920,7 +962,73 @@ export default function ServiceVisualization({ service, workspaceId }) {
     // Update refs
     prevCrossServiceConnectionsRef.current = crossServiceConnections;
     prevExternalServiceItemsRef.current = externalServiceItems;
-  }, [crossServiceConnections, externalServiceItems, showExternalNodes]);
+  }, [crossServiceConnections, externalServiceItems]);
+
+  // Toggle external nodes visibility
+  useEffect(() => {
+    if (showExternalNodes) {
+      // Add external nodes to state
+      setNodes(currentNodes => {
+        const hasExternalNodes = currentNodes.some(node => node.data?.isExternal);
+        if (hasExternalNodes) {
+          return currentNodes; // Already has external nodes
+        }
+
+        // Recreate external nodes from externalServiceItems
+        const externalNodes = externalServiceItems.map(externalItem => ({
+          id: String(externalItem.id),
+          type: 'custom',
+          position: externalItem.position,
+          draggable: true,
+          data: {
+            label: externalItem.name,
+            name: externalItem.name,
+            type: externalItem.type,
+            description: '',
+            status: externalItem.status,
+            ip: '',
+            domain: '',
+            port: '',
+            category: 'external',
+            location: '',
+            parentService: null,
+            groupId: null,
+            orderInGroup: 0,
+            isExternal: true,
+            externalSource: {
+              serviceName: externalItem.serviceName,
+              cmdbItemName: externalItem.cmdbItemName,
+              serviceId: externalItem.serviceId,
+              cmdbItemId: externalItem.cmdbItemId,
+            },
+          },
+          style: {
+            width: 160,
+            height: 80,
+            pointerEvents: 'all',
+          },
+          className: 'external-service-node',
+        }));
+
+        return [...currentNodes, ...externalNodes];
+      });
+
+      // Trigger edge update by incrementing crossServiceUpdateKey
+      // This will cause the useEffect for edges to re-run and recreate cross-service edges
+      setCrossServiceUpdateKey(prev => prev + 1);
+    } else {
+      // Remove external nodes from state
+      setNodes(currentNodes => currentNodes.filter(node => !node.data?.isExternal));
+
+      // Remove cross-service edges (edges connected to external nodes)
+      setEdges(currentEdges => {
+        const externalNodeIds = new Set(externalServiceItems.map(item => String(item.id)));
+        return currentEdges.filter(edge => {
+          return !externalNodeIds.has(edge.source) && !externalNodeIds.has(edge.target);
+        });
+      });
+    }
+  }, [showExternalNodes, externalServiceItems]);
 
   // Update edges when connections change
   useEffect(() => {
@@ -941,8 +1049,29 @@ export default function ServiceVisualization({ service, workspaceId }) {
     const itemEdges = connections.map(conn => {
       const edgeId = `e${conn.source_id}-${conn.target_id}`;
       const handleConfig = edgeHandles[edgeId];
+      const connectionType = conn.connection_type || 'depends_on';
 
-      return {
+      // Get source item to determine edge color based on status
+      const sourceItem = items.find(item => item.id === conn.source_id);
+      const sourceStatus = sourceItem?.status || 'active';
+
+      // Edge color based on source item status (not connection type)
+      const getEdgeColor = (status) => {
+        switch (status) {
+          case 'active': return '#10b981';      // green-500
+          case 'inactive': return '#ef4444';    // red-500
+          case 'maintenance': return '#f59e0b';  // amber-500
+          case 'disabled': return '#9ca3af';    // gray-400
+          case 'decommissioned': return '#9ca3af'; // gray-400
+          default: return '#10b981';
+        }
+      };
+
+      // Determine if we need to show cross marker (for inactive/maintenance status)
+      const showCrossMarker = sourceStatus === 'inactive' || sourceStatus === 'maintenance' || sourceStatus === 'decommissioned';
+      const edgeColor = getEdgeColor(sourceStatus);
+
+      const edgeConfig = {
         id: edgeId,
         source: String(conn.source_id),
         target: String(conn.target_id),
@@ -951,16 +1080,45 @@ export default function ServiceVisualization({ service, workspaceId }) {
         targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-bottom',
         type: 'smoothstep',
         animated: false,
-        style: { stroke: '#10b981', strokeWidth: 2 },
+        style: { stroke: edgeColor, strokeWidth: 2 },
         zIndex:10,
+        markerEnd: {
+          type: 'arrowclosed',
+          color: edgeColor,
+        },
+        data: {
+          connectionType: connectionType,
+          sourceStatus: sourceStatus,
+        },
       };
+
+      // Add cross marker if needed (for inactive/maintenance status)
+      if (showCrossMarker) {
+        edgeConfig.label = '✕';
+        edgeConfig.labelStyle = {
+          fontSize: 18,
+          fontWeight: 'bold',
+          fill: edgeColor,
+        };
+        edgeConfig.labelBgStyle = {
+          fill: 'transparent',
+          fillOpacity: 0,
+        };
+        edgeConfig.labelBgPadding = [0, 0];
+      }
+
+      return edgeConfig;
     });
 
     const groupToGroupEdges = groupConnections
       .filter(conn => conn.source_id && conn.target_id)
       .map(conn => {
         const edgeId = `service-group-e${conn.source_id}-${conn.target_id}`;
-        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+        const handleConfig = edgeHandles[edgeId];
+
+        // Get source group info to determine status
+        const sourceGroup = groups.find(g => g.id === conn.source_id);
+        const groupColor = '#f59e0b'; // Default orange for group-to-group
 
         return {
           id: edgeId,
@@ -970,7 +1128,11 @@ export default function ServiceVisualization({ service, workspaceId }) {
           targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-left',
           type: 'smoothstep',
           animated: false,
-          style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' },
+          style: { stroke: groupColor, strokeWidth: 2, strokeDasharray: '5,5' },
+          markerEnd: {
+            type: 'arrowclosed',
+            color: groupColor,
+          },
         };
       });
 
@@ -978,9 +1140,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .filter(conn => conn.source_group_id && conn.target_item_id)
       .map(conn => {
         const edgeId = `service-group-item-e${conn.source_group_id}-${conn.target_item_id}`;
-        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+        const handleConfig = edgeHandles[edgeId];
 
-        return {
+        // Get target item to determine status
+        const targetItem = items.find(item => item.id === conn.target_item_id);
+        const targetStatus = targetItem?.status || 'active';
+        const edgeColor = targetStatus === 'active' ? '#8b5cf6' : targetStatus === 'inactive' ? '#ef4444' : targetStatus === 'maintenance' ? '#f59e0b' : '#9ca3af';
+        const showCrossMarker = targetStatus !== 'active';
+
+        const edgeConfig = {
           id: edgeId,
           source: `service-group-${conn.source_group_id}`,
           target: String(conn.target_item_id),
@@ -988,17 +1156,44 @@ export default function ServiceVisualization({ service, workspaceId }) {
           targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-top',
           type: 'smoothstep',
           animated: false,
-          style: { stroke: '#8b5cf6', strokeWidth: 2 },
+          style: { stroke: edgeColor, strokeWidth: 2 },
+          markerEnd: {
+            type: 'arrowclosed',
+            color: edgeColor,
+          },
         };
+
+        // Add cross marker if target item is not active
+        if (showCrossMarker) {
+          edgeConfig.label = '✕';
+          edgeConfig.labelStyle = {
+            fontSize: 18,
+            fontWeight: 'bold',
+            fill: edgeColor,
+          };
+          edgeConfig.labelBgStyle = {
+            fill: 'transparent',
+            fillOpacity: 0,
+          };
+          edgeConfig.labelBgPadding = [0, 0];
+        }
+
+        return edgeConfig;
       });
 
     const itemToGroupEdges = groupConnections
       .filter(conn => conn.source_id && conn.target_group_id)
       .map(conn => {
         const edgeId = `service-item-group-e${conn.source_id}-${conn.target_group_id}`;
-        const handleConfig = edgeHandles[edgeId];  // ← Ambil dari database
+        const handleConfig = edgeHandles[edgeId];
 
-        return {
+        // Get source item to determine status
+        const sourceItem = items.find(item => item.id === conn.source_id);
+        const sourceStatus = sourceItem?.status || 'active';
+        const edgeColor = sourceStatus === 'active' ? '#ec4899' : sourceStatus === 'inactive' ? '#ef4444' : sourceStatus === 'maintenance' ? '#f59e0b' : '#9ca3af';
+        const showCrossMarker = sourceStatus !== 'active';
+
+        const edgeConfig = {
           id: edgeId,
           source: String(conn.source_id),
           target: `service-group-${conn.target_group_id}`,
@@ -1006,8 +1201,29 @@ export default function ServiceVisualization({ service, workspaceId }) {
           targetHandle: (handleConfig && handleConfig.targetHandle) || 'target-top',
           type: 'smoothstep',
           animated: false,
-          style: { stroke: '#ec4899', strokeWidth: 2, strokeDasharray: '3,3' },
+          style: { stroke: edgeColor, strokeWidth: 2, strokeDasharray: '3,3' },
+          markerEnd: {
+            type: 'arrowclosed',
+            color: edgeColor,
+          },
         };
+
+        // Add cross marker if source item is not active
+        if (showCrossMarker) {
+          edgeConfig.label = '✕';
+          edgeConfig.labelStyle = {
+            fontSize: 18,
+            fontWeight: 'bold',
+            fill: edgeColor,
+          };
+          edgeConfig.labelBgStyle = {
+            fill: 'transparent',
+            fillOpacity: 0,
+          };
+          edgeConfig.labelBgPadding = [0, 0];
+        }
+
+        return edgeConfig;
       });
 
     // Calculate propagated statuses for cross-service connections
@@ -1071,14 +1287,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
           fontSize: showCrossMarker ? 20 : 10,
           fontWeight: showCrossMarker ? 'bold' : 600,
           fill: strokeColor,
-          backgroundColor: 'white',
         },
         labelBgStyle: showCrossMarker ? {
-          fill: 'white',
+          fill: 'transparent',
           fillOpacity: 0,
         } : undefined,
-        labelBgPadding: showCrossMarker ? [8, 8] : undefined,
-        labelBgBorderRadius: showCrossMarker ? 50 : undefined,
+        labelBgPadding: showCrossMarker ? [0, 0] : undefined,
         markerEnd: {
           type: 'arrowclosed',
           color: strokeColor,
@@ -1164,6 +1378,239 @@ export default function ServiceVisualization({ service, workspaceId }) {
     setEditGroupMode(true);
     setShowGroupModal(true);
   }, []);
+
+  // Handler for drag-to-connect (Quick Connection Modal)
+  const handleConnect = useCallback((connection) => {
+    // Detect if source or target is a group
+    const isSourceGroup = String(connection.source).startsWith('service-group-');
+    const isTargetGroup = String(connection.target).startsWith('service-group-');
+
+    let sourceItem, targetItem, sourceGroup, targetGroup;
+
+    if (isSourceGroup) {
+      const sourceGroupId = Number(String(connection.source).replace('service-group-', ''));
+      sourceGroup = groups.find(g => g.id === sourceGroupId);
+    } else {
+      sourceItem = items.find(item => item.id === Number(connection.source));
+    }
+
+    if (isTargetGroup) {
+      const targetGroupId = Number(String(connection.target).replace('service-group-', ''));
+      targetGroup = groups.find(g => g.id === targetGroupId);
+    } else {
+      targetItem = items.find(item => item.id === Number(connection.target));
+    }
+
+    // Check if we have valid source and target
+    if ((!sourceItem && !sourceGroup) || (!targetItem && !targetGroup)) {
+      return;
+    }
+
+    // Check if connection already exists
+    let existingConn = null;
+    if (sourceItem && targetItem) {
+      // Item-to-item
+      existingConn = connections.find(
+        conn => conn.source_id === sourceItem.id && conn.target_id === targetItem.id
+      );
+    } else if (sourceItem && targetGroup) {
+      // Item-to-group
+      existingConn = groupConnections.find(
+        conn => conn.source_id === sourceItem.id && conn.target_group_id === targetGroup.id
+      );
+    } else if (sourceGroup && targetItem) {
+      // Group-to-item
+      existingConn = groupConnections.find(
+        conn => conn.source_group_id === sourceGroup.id && conn.target_id === targetItem.id
+      );
+    } else if (sourceGroup && targetGroup) {
+      // Group-to-group - not supported in quick connection yet
+      toast.info('Gunakan Group Connection Modal untuk koneksi group-to-group');
+      return;
+    }
+
+    if (existingConn) {
+      toast.error('Koneksi sudah ada!');
+      return;
+    }
+
+    // Set source and target (can be item or group)
+    setQuickConnectionSource(sourceItem || sourceGroup);
+    setQuickConnectionTarget(targetItem || targetGroup);
+    setQuickConnectionMode('create');
+    setQuickConnectionExistingType(null);
+    setShowQuickConnectionModal(true);
+  }, [items, connections, groups, groupConnections]);
+
+  const handleSaveQuickConnection = useCallback(async (connectionType) => {
+    if (!quickConnectionSource || !quickConnectionTarget || !service?.id || !workspaceId) return;
+
+    try {
+      // Detect if source or target is a group
+      const isSourceGroup = quickConnectionSource.color !== undefined; // Groups have color property
+      const isTargetGroup = quickConnectionTarget.color !== undefined;
+
+      if (quickConnectionMode === 'edit') {
+        // Update existing connection
+        if (!isSourceGroup && !isTargetGroup) {
+          // Item-to-item
+          await api.put(`/services/${service.id}/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Tipe koneksi berhasil diubah!');
+        } else if (isSourceGroup && !isTargetGroup) {
+          // Group-to-item
+          await api.put(`/service-groups/connections/from-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            service_id: service.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Tipe koneksi group-to-item berhasil diubah!');
+        } else if (!isSourceGroup && isTargetGroup) {
+          // Item-to-group
+          await api.put(`/service-groups/connections/to-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+            service_id: service.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Tipe koneksi item-to-group berhasil diubah!');
+        } else {
+          toast.error('Edit koneksi group-to-group: Gunakan Group Connection Modal.');
+        }
+      } else {
+        // Create new connection
+        if (isSourceGroup && isTargetGroup) {
+          // Group-to-group - use group connection endpoint
+          await api.post('/service-groups/connections', {
+            service_id: service.id,
+            source_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Koneksi group-to-group berhasil dibuat!');
+        } else if (isSourceGroup && !isTargetGroup) {
+          // Group-to-item
+          await api.post('/service-groups/connections/from-group', {
+            service_id: service.id,
+            source_group_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Koneksi group-to-item berhasil dibuat!');
+        } else if (!isSourceGroup && isTargetGroup) {
+          // Item-to-group
+          await api.post('/service-groups/connections/to-group', {
+            service_id: service.id,
+            source_id: quickConnectionSource.id,
+            target_group_id: quickConnectionTarget.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Koneksi item-to-group berhasil dibuat!');
+        } else {
+          // Item-to-item
+          await api.post(`/services/${service.id}/connections`, {
+            source_id: quickConnectionSource.id,
+            target_id: quickConnectionTarget.id,
+            workspace_id: workspaceId,
+            connection_type: connectionType,
+            propagation: getConnectionPropagation(connectionType)
+          });
+          toast.success('Koneksi berhasil dibuat!');
+        }
+      }
+
+      await fetchAll();
+      setShowQuickConnectionModal(false);
+      setQuickConnectionSource(null);
+      setQuickConnectionTarget(null);
+    } catch (err) {
+      console.error('Save connection error:', err);
+      toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
+    }
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, service?.id, workspaceId, fetchAll, getConnectionPropagation]);
+
+  // Edge Context Menu handlers
+  const handleEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Prevent context menu on pane click
+    if (!edge) return;
+
+    // Only handle service item edges (not cross-service edges)
+    if (edge.id.startsWith('cross-service-')) return;
+
+    const sourceNode = nodes.find(n => n.id === edge.source);
+    const targetNode = nodes.find(n => n.id === edge.target);
+
+    // Get existing connection type from edge data
+    const existingConnectionType = edge.data?.connectionType || 'depends_on';
+
+    setEdgeContextMenu({
+      show: true,
+      position: { x: event.clientX, y: event.clientY },
+      edge,
+      sourceNode,
+      targetNode,
+      existingConnectionType
+    });
+  }, [nodes]);
+
+  const closeEdgeContextMenu = useCallback(() => {
+    setEdgeContextMenu(prev => ({ ...prev, show: false }));
+  }, []);
+
+  const handleEditEdgeConnectionType = useCallback(() => {
+    if (!edgeContextMenu.edge) return;
+
+    const { edge, sourceNode, targetNode, existingConnectionType } = edgeContextMenu;
+
+    // Open QuickConnectionModal in edit mode
+    // Node objects already have all the properties we need (id, type, data.name, etc.)
+    setQuickConnectionSource(sourceNode || null);
+    setQuickConnectionTarget(targetNode || null);
+    setQuickConnectionMode('edit');
+    setQuickConnectionExistingType(existingConnectionType);
+    setShowQuickConnectionModal(true);
+
+    closeEdgeContextMenu();
+  }, [edgeContextMenu, closeEdgeContextMenu]);
+
+  const handleDeleteEdge = useCallback(async () => {
+    if (!edgeContextMenu.edge) return;
+
+    const { edge } = edgeContextMenu;
+
+    try {
+      // Parse edge ID to get source and target IDs
+      // Edge ID format: "e{source_id}-{target_id}"
+      const match = edge.id.match(/^e(\d+)-(\d+)$/);
+      if (!match) {
+        toast.error('Format edge ID tidak valid');
+        return;
+      }
+
+      const [, sourceId, targetId] = match;
+
+      await api.delete(`/services/${service.id}/connections/${sourceId}/${targetId}`);
+      toast.success('Koneksi berhasil dihapus');
+
+      await fetchAll();
+      closeEdgeContextMenu();
+    } catch (err) {
+      console.error('Delete edge error:', err);
+      toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
+    }
+  }, [edgeContextMenu, service?.id, fetchAll, closeEdgeContextMenu]);
 
   // Drag handlers for reordering items in groups
   const onNodeDragStart = useCallback((event, node) => {
@@ -1492,11 +1939,29 @@ export default function ServiceVisualization({ service, workspaceId }) {
       .map(c => c.target_id);
     setSelectedConnections(existing);
 
+    // Load existing connection types for each selected item
+    const existingTypes = {};
+    connections
+      .filter(c => c.source_id === item.id && c.target_id)
+      .forEach(c => {
+        existingTypes[c.target_id] = c.connection_type || 'depends_on';
+      });
+    setItemConnectionTypes(existingTypes);
+
     // Get existing group connections for this item (item-to-group)
     const existingGroupConns = groupConnections
       .filter(conn => conn.source_id === item.id)
       .map(conn => conn.target_group_id);
     setSelectedGroupConnections(existingGroupConns);
+
+    // Load existing connection types for each selected group
+    const existingGroupTypes = {};
+    groupConnections
+      .filter(conn => conn.source_id === item.id && conn.target_group_id)
+      .forEach(conn => {
+        existingGroupTypes[conn.target_group_id] = conn.connection_type || 'depends_on';
+      });
+    setItemToGroupConnectionTypes(existingGroupTypes);
 
     setShowConnectionModal(true);
   }, [connections, groupConnections]);
@@ -1517,47 +1982,49 @@ export default function ServiceVisualization({ service, workspaceId }) {
     setShowGroupConnectionModal(true);
   };
 
-  const handleSaveConnections = async () => {
-    if (!selectedItem) return;
+  const handleSaveConnections = async (itemConnTypes = {}, groupConnTypes = {}) => {
+    if (!selectedItem || !service?.id || !workspaceId) return;
 
     try {
-      // Save item-to-item connections
-      const current = connections
-        .filter(c => c.source_id === selectedItem.id)
-        .map(c => c.target_id);
+      // Delete all existing item-to-item connections for this source
+      const existingItemConns = connections
+        .filter(c => c.source_id === selectedItem.id && c.target_id);
 
-      const toAdd = selectedConnections.filter(id => !current.includes(id));
-      for (const targetId of toAdd) {
-        await api.post(`/service-items/${service.id}/connections`, {
+      for (const conn of existingItemConns) {
+        await api.delete(`/services/${service.id}/connections/${selectedItem.id}/${conn.target_id}`);
+      }
+
+      // Add back all selected item-to-item connections with their types
+      for (const targetId of selectedConnections) {
+        const connectionType = itemConnTypes[targetId] || 'depends_on';
+        await api.post(`/services/${service.id}/connections`, {
           source_id: selectedItem.id,
           target_id: targetId,
           workspace_id: workspaceId,
+          connection_type: connectionType,
+          propagation: getConnectionPropagation(connectionType)
         });
       }
 
-      const toRemove = current.filter(id => !selectedConnections.includes(id));
-      for (const targetId of toRemove) {
-        await api.delete(`/service-items/${service.id}/connections/${selectedItem.id}/${targetId}`);
+      // Delete all existing item-to-group connections for this source
+      const existingGroupConns = groupConnections
+        .filter(c => c.source_id === selectedItem.id && c.target_group_id);
+
+      for (const conn of existingGroupConns) {
+        await api.delete(`/service-groups/connections/from-item/${service.id}/${selectedItem.id}/${conn.target_group_id}`);
       }
 
-      // Save item-to-group connections
-      const currentGroupConns = groupConnections
-        .filter(c => c.source_id === selectedItem.id)
-        .map(c => c.target_group_id);
-
-      const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
-      for (const targetGroupId of groupsToAdd) {
+      // Add back all selected item-to-group connections with their types
+      for (const targetGroupId of selectedGroupConnections) {
+        const connectionType = groupConnTypes[targetGroupId] || 'depends_on';
         await api.post('/service-groups/connections/from-item', {
           service_id: service.id,
           source_id: selectedItem.id,
           target_group_id: targetGroupId,
           workspace_id: workspaceId,
+          connection_type: connectionType,
+          propagation: getConnectionPropagation(connectionType)
         });
-      }
-
-      const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
-      for (const targetGroupId of groupsToRemove) {
-        await api.delete(`/service-groups/connections/from-item/${service.id}/${selectedItem.id}/${targetGroupId}`);
       }
 
       setShowConnectionModal(false);
@@ -1565,7 +2032,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
       toast.success('Connections updated!');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to update connections');
+      toast.error('Failed to update connections: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -1890,7 +2357,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onReconnect={handleReconnect}
+        onConnect={handleConnect}
         onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
         onPaneClick={handleCloseContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
@@ -1898,10 +2367,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         nodeTypes={nodeTypes}
         nodesDraggable={true}
-        nodesConnectable={false}
+        nodesConnectable={true}
         elementsSelectable={true}
         defaultViewport={defaultViewport}
         selectionOnDrag={selectionMode === 'rectangle'}
+        connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
+        connectionLineType="smoothstep"
       >
         <Background />
         <Controls />
@@ -2011,9 +2482,13 @@ export default function ServiceVisualization({ service, workspaceId }) {
         groups={groups}
         selectedConnections={selectedConnections}
         selectedGroupConnections={selectedGroupConnections}
+        itemConnectionTypes={itemConnectionTypes}
+        itemToGroupConnectionTypes={itemToGroupConnectionTypes}
         onClose={() => {
           setShowConnectionModal(false);
           setSelectedGroupConnections([]);
+          setItemConnectionTypes({});
+          setItemToGroupConnectionTypes({});
         }}
         onToggleConnection={(itemId) => {
           if (selectedConnections.includes(itemId)) {
@@ -2028,6 +2503,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
           } else {
             setSelectedGroupConnections([...selectedGroupConnections, groupId]);
           }
+        }}
+        onConnectionTypeChange={(itemId, typeSlug) => {
+          setItemConnectionTypes(prev => ({ ...prev, [itemId]: typeSlug }));
+        }}
+        onItemToGroupTypeChange={(groupId, typeSlug) => {
+          setItemToGroupConnectionTypes(prev => ({ ...prev, [groupId]: typeSlug }));
         }}
         onSave={handleSaveConnections}
       />
@@ -2089,6 +2570,33 @@ export default function ServiceVisualization({ service, workspaceId }) {
           setShowCrossConnectionModal(false);
           setSelectedItemForCrossConnection(null);
         }}
+      />
+
+      {/* Quick Connection Modal */}
+      <QuickConnectionModal
+        show={showQuickConnectionModal}
+        sourceItem={quickConnectionSource}
+        targetItem={quickConnectionTarget}
+        onClose={() => {
+          setShowQuickConnectionModal(false);
+          setQuickConnectionMode('create');
+          setQuickConnectionExistingType(null);
+        }}
+        onSave={handleSaveQuickConnection}
+        mode={quickConnectionMode}
+        existingConnectionType={quickConnectionExistingType}
+      />
+
+      {/* Service Edge Context Menu */}
+      <ServiceEdgeContextMenu
+        show={edgeContextMenu.show}
+        position={edgeContextMenu.position}
+        edge={edgeContextMenu.edge}
+        sourceNode={edgeContextMenu.sourceNode}
+        targetNode={edgeContextMenu.targetNode}
+        onEdit={handleEditEdgeConnectionType}
+        onDelete={handleDeleteEdge}
+        onClose={closeEdgeContextMenu}
       />
 
       {/* Delete Confirmation Dialog */}

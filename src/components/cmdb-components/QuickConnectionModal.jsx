@@ -56,11 +56,22 @@ export default function QuickConnectionModal({
 
   if (!sourceItem || !targetItem) return null;
 
+  // Helper function to get actual item data (handles both ReactFlow nodes and plain objects)
+  const getItemData = (item) => {
+    // ReactFlow nodes have data in .data property
+    if (item && item.data && typeof item.data === 'object') {
+      return item.data;
+    }
+    // Groups and plain objects use properties directly
+    return item;
+  };
+
   // Helper function to check if item is a group
-  const isGroup = (item) => item && item.color !== undefined;
+  const isGroup = (item) => item && (item.color !== undefined || item.data?.color !== undefined);
 
   const getItemIcon = (item) => {
     const iconProps = { size: 32, className: 'text-foreground' };
+    const data = getItemData(item);
 
     // Check if it's a group
     if (isGroup(item)) {
@@ -68,7 +79,7 @@ export default function QuickConnectionModal({
     }
 
     // Otherwise it's an item
-    switch (item.type) {
+    switch (data.type) {
       case 'server': return <Server {...iconProps} />;
       case 'database': return <Database {...iconProps} />;
       case 'switch': return <Network {...iconProps} />;
@@ -81,9 +92,12 @@ export default function QuickConnectionModal({
   };
 
   const getDisplayColor = (item) => {
+    const data = getItemData(item);
+
     // For groups, use their color
     if (isGroup(item)) {
-      return `border-2` + ` style={{ borderColor: '${item.color}' }}`;
+      const groupColor = item.color || data.color;
+      return `border-2 style={{ borderColor: '${groupColor}' }}`;
     }
 
     // For items, use status color
@@ -93,11 +107,20 @@ export default function QuickConnectionModal({
       'maintenance': 'bg-yellow-500 border-yellow-600',
       'decommissioned': 'bg-gray-500 border-gray-600',
     };
-    return statusColor[item.status] || 'bg-gray-500 border-gray-600';
+    return statusColor[data.status] || 'bg-gray-500 border-gray-600';
   };
 
   const getItemTypeLabel = (item) => {
-    return isGroup(item) ? 'Group' : (item.type || 'Item');
+    const data = getItemData(item);
+    return isGroup(item) ? 'Group' : (data.type || 'Item');
+  };
+
+  const getItemId = (item) => {
+    // ReactFlow nodes have id directly
+    if (item && item.id) {
+      return item.id;
+    }
+    return null;
   };
 
   const connectionTypeInfo = getConnectionTypeInfo(selectedType);
@@ -149,12 +172,12 @@ export default function QuickConnectionModal({
               <div className="flex flex-col items-center gap-2">
                 <div
                   className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${isGroup(sourceItem) ? '' : getDisplayColor(sourceItem)}`}
-                  style={isGroup(sourceItem) ? { borderColor: sourceItem.color, backgroundColor: `${sourceItem.color}20` } : {}}
+                  style={isGroup(sourceItem) ? { borderColor: sourceItem.color || getItemData(sourceItem).color, backgroundColor: `${sourceItem.color || getItemData(sourceItem).color}20` } : {}}
                 >
                   {getItemIcon(sourceItem)}
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">{sourceItem.name}</div>
+                  <div className="font-semibold text-sm">{getItemData(sourceItem).name}</div>
                   <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(sourceItem)}</div>
                 </div>
               </div>
@@ -176,12 +199,12 @@ export default function QuickConnectionModal({
               <div className="flex flex-col items-center gap-2">
                 <div
                   className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${isGroup(targetItem) ? '' : getDisplayColor(targetItem)}`}
-                  style={isGroup(targetItem) ? { borderColor: targetItem.color, backgroundColor: `${targetItem.color}20` } : {}}
+                  style={isGroup(targetItem) ? { borderColor: targetItem.color || getItemData(targetItem).color, backgroundColor: `${targetItem.color || getItemData(targetItem).color}20` } : {}}
                 >
                   {getItemIcon(targetItem)}
                 </div>
                 <div className="text-center">
-                  <div className="font-semibold text-sm">{targetItem.name}</div>
+                  <div className="font-semibold text-sm">{getItemData(targetItem).name}</div>
                   <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(targetItem)}</div>
                 </div>
               </div>
@@ -191,17 +214,17 @@ export default function QuickConnectionModal({
             <div className="mt-4 text-center text-sm text-muted-foreground">
               {connectionTypeInfo.propagation === 'target_to_source' && (
                 <span>
-                  <strong>{sourceItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{targetItem.name}</strong>
+                  <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
                 </span>
               )}
               {connectionTypeInfo.propagation === 'source_to_target' && (
                 <span>
-                  <strong>{sourceItem.name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{targetItem.name}</strong>
+                  <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
                 </span>
               )}
               {connectionTypeInfo.propagation === 'both' && (
                 <span>
-                  <strong>{sourceItem.name}</strong> dan <strong>{targetItem.name}</strong> memiliki hubungan {connectionTypeInfo.label.toLowerCase()}
+                  <strong>{getItemData(sourceItem).name}</strong> dan <strong>{getItemData(targetItem).name}</strong> memiliki hubungan {connectionTypeInfo.label.toLowerCase()}
                 </span>
               )}
             </div>
