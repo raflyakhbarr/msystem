@@ -27,43 +27,26 @@ import {
 import ServiceIcon from './ServiceIcon';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import api from '@/services/api';
-import { io } from 'socket.io-client';
+import { useSocket } from '../../context/SocketContext';
 
 export default function CustomNode({ data, id }) {
   const storage = data.storage || null;
-  const services = data.services || [];
+  const services = data.services || []; // Use props directly, no local state
+  const { socket, getServiceItemStatus, registerStatusCallback } = useSocket();
 
   // Local state for service items (for hover card)
   const [serviceItemsMap, setServiceItemsMap] = useState({});
   const [fetchingServiceId, setFetchingServiceId] = useState(null);
-  // Store pending status updates for items not yet fetched
-  const pendingStatusUpdatesRef = useRef({});
 
-  // Use ref to always get latest serviceItemsMap (avoid stale closures)
-  const serviceItemsMapRef = useRef(serviceItemsMap);
+  // Listen for service item status updates from SocketContext using callback
   useEffect(() => {
-    serviceItemsMapRef.current = serviceItemsMap;
-  }, [serviceItemsMap]);
-
-  // Socket.io connection for real-time service item updates
-  useEffect(() => {
-    if (!data.workspaceId) return;
-
-    const socket = io(API_BASE_URL, {
-      reconnectionAttempts: 5
-    });
-
-    socket.on('connect', () => {
-      console.log('✅ Socket connected for service items hover in node:', data.label);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('🔌 Socket disconnected from service items hover');
-    });
-
-    // Listen for service item status updates
-    socket.on('service_item_status_update', (updateData) => {
+    const handleStatusUpdate = (updateData) => {
       const { serviceItemId, newStatus, workspaceId } = updateData;
+
+      // Only update if this is for our workspace
+      if (workspaceId !== data.workspaceId) {
+        return;
+      }
 
       // Update the service item in our local state
       setServiceItemsMap(prev => {
@@ -87,54 +70,59 @@ export default function CustomNode({ data, id }) {
           }
         });
 
-        // If item not found, store as pending update
-        if (!itemFound) {
-          pendingStatusUpdatesRef.current[serviceItemId] = newStatus;
-        }
-
         return updated;
       });
-    });
+    };
 
-    // Listen for service item updates (position, name, etc.)
-    socket.on('service_item_update', (updateData) => {
-      const { serviceItemId, workspaceId } = updateData;
+    // Register callback with SocketContext
+    const unregister = registerStatusCallback(handleStatusUpdate);
 
-      // Only update if this is for our workspace
+    return () => {
+      unregister();
+    };
+  }, [data.workspaceId, registerStatusCallback]);
+
+  // Listen for service updates to refresh service items only
+  // (Service status will be updated via props from parent CMDBVisualization)
+  useEffect(() => {
+    if (!socket || !data.workspaceId) return;
+
+    const handleServiceUpdate = async (updateData) => {
+      const { serviceId, workspaceId } = updateData;
+
+      // Only update if this is for our workspace and affects this node's services
       if (workspaceId !== data.workspaceId) {
         return;
       }
 
-      // Use ref to get latest serviceItemsMap
-      const currentMap = serviceItemsMapRef.current;
+      // Check if any of this node's services are affected
+      const affectedServiceIds = services.map(s => s.id);
+      if (!affectedServiceIds.includes(parseInt(serviceId))) {
+        return;
+      }
 
-      // Refetch the service items for the affected service
-      // Find which service this item belongs to
-      Object.keys(currentMap).forEach(serviceId => {
-        const items = currentMap[serviceId];
-        if (Array.isArray(items) && items.find(item => item.id === serviceItemId)) {  
-          api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`)
-            .then(response => {
-              if (Array.isArray(response.data)) {
-                setServiceItemsMap(prev => ({
-                  ...prev,
-                  [serviceId]: response.data
-                }));
-              }
-            })
-            .catch(err => console.error('Failed to refresh service items:', err));
+      console.log('🔄 Service update received, refreshing service items for service:', serviceId);
+
+      // Refresh the service items for the affected service
+      try {
+        const response = await api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`);
+        if (Array.isArray(response.data)) {
+          setServiceItemsMap(prev => ({
+            ...prev,
+            [serviceId]: response.data
+          }));
         }
-      });
-    });
+      } catch (err) {
+        console.error('Failed to refresh service items after service update:', err);
+      }
+    };
+
+    socket.on('service_update', handleServiceUpdate);
 
     return () => {
-      socket.off('service_item_status_update');
-      socket.off('service_item_update');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.disconnect();
+      socket.off('service_update', handleServiceUpdate);
     };
-  }, [data.workspaceId, data.label]);
+  }, [socket, data.workspaceId, services]);
 
   // Fetch service items when hover opens
   const handleFetchServiceItems = async (serviceId) => {
@@ -147,26 +135,22 @@ export default function CustomNode({ data, id }) {
 
     try {
       const response = await api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`);
-      let items = response.data;
+      const items = response.data;
 
       // Ensure items is always an array
       if (Array.isArray(items)) {
-        // Apply any pending status updates
-        const pendingUpdates = pendingStatusUpdatesRef.current;
-        if (Object.keys(pendingUpdates).length > 0) {
-          items = items.map(item => {
-            // Check both string and number versions of the ID
-            const pendingStatus = pendingUpdates[item.id] || pendingUpdates[String(item.id)];
-            if (pendingStatus) {
-              return { ...item, status: pendingStatus };
-            }
-            return item;
-          });
-        }
+        // Apply any pending status updates from socket
+        const itemsWithStatus = items.map(item => {
+          const socketStatus = getServiceItemStatus(item.id);
+          if (socketStatus) {
+            return { ...item, status: socketStatus };
+          }
+          return item;
+        });
 
         setServiceItemsMap(prev => ({
           ...prev,
-          [serviceId]: items
+          [serviceId]: itemsWithStatus
         }));
 
         // Also update the parent node data for persistence

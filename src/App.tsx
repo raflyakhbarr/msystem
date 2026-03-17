@@ -20,6 +20,7 @@ import { Toaster } from 'sonner'
 import CMDBDashboard from './pages/cmdb-pages/CMDBDashboard'
 import CMDBSharedView from './pages/cmdb-pages/CMDBSharedView'
 import { AuthProvider } from './context/AuthProvider'
+import { SocketProvider } from './context/SocketContext'
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
@@ -222,9 +223,11 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <AuthProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
+        <SocketProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </SocketProvider>
       </AuthProvider>
     </ThemeProvider>
   )

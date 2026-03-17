@@ -43,11 +43,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import 'reactflow/dist/style.css';
-import { io } from 'socket.io-client';
 import { Square } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
+import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
 import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
@@ -777,24 +777,23 @@ export default function CMDBVisualization() {
       }
     });
   }, [nodes]);
+
+  // Use SocketContext for real-time updates
+  const { socket } = useSocket();
+
   useEffect(() => {
-    const socket = io(API_BASE_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
-    
+    if (!socket) return;
+
     socketRef.current = socket;
 
-    socket.on('cmdb_update', () => {
+    const handleCmdbUpdate = () => {
       // Skip fetch if currently saving
       if (!isSavingRef.current) {
         fetchAll();
       }
-    });
+    };
 
-    socket.on('service_update', async (data) => {
+    const handleServiceUpdate = async (data) => {
       // Parse serviceId and workspaceId (backend might send as strings)
       const eventServiceId = parseInt(data.serviceId);
       const eventWorkspaceId = parseInt(data.workspaceId);
@@ -802,36 +801,49 @@ export default function CMDBVisualization() {
 
       // Only update if this is for our workspace
       if (eventWorkspaceId === currentWorkspaceId) {
-
         try {
           // Fetch the updated service
           const response = await api.get(`/services/single/${eventServiceId}`);
           const updatedService = response.data;
 
           // Update the specific service in the services state
-          setServices(prevServices => ({
-            ...prevServices,
-            [updatedService.cmdb_item_id]: prevServices[updatedService.cmdb_item_id]
-              ? prevServices[updatedService.cmdb_item_id].map(service =>
-                  service.id === eventServiceId ? updatedService : service
-                )
-              : [updatedService]
-          }));
+          setServices(prevServices => {
+            const updated = {
+              ...prevServices,
+              [updatedService.cmdb_item_id]: prevServices[updatedService.cmdb_item_id]
+                ? prevServices[updatedService.cmdb_item_id].map(service =>
+                    service.id === eventServiceId ? updatedService : service
+                  )
+                : [updatedService]
+            };
+
+            // Force re-render nodes with updated services
+            // Get the flow nodes and edges with updated services
+            const { flowNodes: newFlowNodes, flowEdges: newFlowEdges } = transformToFlowData();
+
+            // Update nodes and edges state
+            setNodes(newFlowNodes);
+            setEdges(newFlowEdges);
+
+            console.log('✅ Nodes and edges re-rendered with updated service status');
+
+            return updated;
+          });
         } catch (err) {
           console.warn(`Failed to fetch service ${eventServiceId}:`, err);
           // Service might have been deleted, ignore error
         }
-      } else {
-
       }
-    });
+    };
+
+    socket.on('cmdb_update', handleCmdbUpdate);
+    socket.on('service_update', handleServiceUpdate);
 
     return () => {
-      socket.off('cmdb_update');
-      socket.off('service_update');
-      socket.disconnect();
+      socket.off('cmdb_update', handleCmdbUpdate);
+      socket.off('service_update', handleServiceUpdate);
     };
-  }, [fetchAll, currentWorkspace, setServices]);
+  }, [socket, fetchAll, currentWorkspace, setServices]);
 
   useEffect(() => {
     localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));

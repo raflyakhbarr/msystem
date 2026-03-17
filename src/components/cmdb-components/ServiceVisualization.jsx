@@ -9,8 +9,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Plus, Link2, Trash2, Save, Layers, AlertTriangle, Globe, ExternalLink } from 'lucide-react';
-import { io } from 'socket.io-client';
 import api from '../../services/api';
+import { useSocket } from '../../context/SocketContext';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
 import { loadServiceEdgeHandles, saveServiceEdgeHandle, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import { calculatePropagatedStatuses, getStatusColor, shouldShowCrossMarker } from '../../utils/cmdb-utils/statusPropagation';
@@ -57,7 +57,6 @@ const parsePosition = (positionData) => {
     try {
       return JSON.parse(positionData);
     } catch (e) {
-      console.error('Invalid position JSON:', positionData, e);
       return { x: 0, y: 0 };
     }
   }
@@ -597,19 +596,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
     fetchCrossServiceConnections();
   }, [service?.id, workspaceId]);
 
-  // Socket listener for external service item status updates
+  // Listen for external service item status updates using SocketContext
+  const { socket } = useSocket();
+
   useEffect(() => {
-    if (!service?.id || !workspaceId) return;
+    if (!socket || !service?.id || !workspaceId) return;
 
-    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
-      reconnectionAttempts: 5,
-      reconnection: true
-    });
-
-    socket.on('service_item_status_update', async (data) => {
-      // Only care about updates in the same workspace
+    const handleStatusUpdate = async (data) => {
+      // Only care about updates in the same workspace for external services
       if (data.workspaceId === workspaceId && data.serviceId !== service.id) {
-        console.log('🌐 External service item status update detected, refreshing cross-service connections...');
         // Refresh cross-service connections to get updated external item statuses
         try {
           const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
@@ -673,37 +668,25 @@ export default function ServiceVisualization({ service, workspaceId }) {
           });
 
           setExternalServiceItems(externalItems);
-          console.log('✅ Cross-service connections refreshed with updated external item statuses');
         } catch (error) {
           console.error('Failed to refresh cross-service connections:', error);
         }
       }
-    });
+    };
+
+    socket.on('service_item_status_update', handleStatusUpdate);
 
     return () => {
-      socket.off('service_item_status_update');
-      socket.disconnect();
+      socket.off('service_item_status_update', handleStatusUpdate);
     };
-  }, [service?.id, workspaceId]);
+  }, [socket, service?.id, workspaceId]);
 
   // Update nodes when items or groups change
   useEffect(() => {
-    console.log('🔄 Node update useEffect triggered');
-    console.log('📊 Current items:', items);
-    console.log('📊 prevItemsRef:', prevItemsRef.current);
-
     // Skip if data hasn't actually changed
     const itemsChanged = JSON.stringify(prevItemsRef.current) !== JSON.stringify(items);
     const groupsChanged = JSON.stringify(prevGroupsRef.current) !== JSON.stringify(groups);
 
-    console.log('🔍 itemsChanged:', itemsChanged, 'groupsChanged:', groupsChanged);
-
-    if (!itemsChanged && !groupsChanged) {
-      console.log('⏭️ Skipping node update - no changes detected');
-      return;
-    }
-
-    console.log('✅ Proceeding with node update');
     const flowNodes = [];
 
     // Create group nodes first
@@ -1720,14 +1703,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
     // Extract numeric group ID dari node ID (e.g., "serviceGroup-10" → 10)
     const groupIdNumeric = parseInt(groupNode.id.toString().replace(/\D/g, ''));
-
-    console.log('📐 Calculated drop position:', {
-      groupNodeId: groupNode.id,
-      groupIdNumeric,
-      groupName: groupNode.data?.name,
-      newIndex
-    });
-
     return {
       groupId: groupNode.id, // Full node ID untuk ReactFlow parentNode
       groupIdNumeric, // Numeric ID untuk database
@@ -1956,17 +1931,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
         }
         // CASE 2: Pindah ke group baru (dari luar group atau dari group lain)
         else if (targetGroupId) {
-          console.log('🎯 Attempting to move item to group:', {
-            itemId: node.id,
-            targetGroupId,
-            groupIdNumeric,
-            nodeName: node.data.name,
-            nodeServiceId: service?.id
-          });
-
           // Validasi: cek apakah group ID valid
           if (isNaN(groupIdNumeric)) {
-            console.error('❌ Invalid group ID:', targetGroupId);
             toast.error('ID group tidak valid!');
             isReorderingRef.current = false;
             return;
@@ -1975,7 +1941,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
           // Validasi: cek apakah group ada di groups state
           const targetGroup = groups.find(g => g.id === groupIdNumeric);
           if (!targetGroup) {
-            console.error('❌ Group not found in state:', groupIdNumeric, 'Available groups:', groups.map(g => ({id: g.id, name: g.name})));
             toast.error(`Group dengan ID ${groupIdNumeric} tidak ditemukan!`);
             isReorderingRef.current = false;
             return;
@@ -2027,19 +1992,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
           // Simpan position baru ke database
           try {
-            console.log('💾 Saving position to database:', {
-              itemId: node.id,
-              position: { x: hoverPosition.relativeX, y: hoverPosition.relativeY }
-            });
             await api.put(`/service-items/items/${node.id}/position`, {
               position: {
                 x: hoverPosition.relativeX,
                 y: hoverPosition.relativeY
               }
             });
-            console.log('✅ Position saved successfully - socket will trigger fetchAll automatically');
           } catch (posErr) {
-            console.error('❌ Failed to save position:', posErr);
+            console.error('Failed to save position:', posErr);
           }
 
           // Reset reordering flag - jangan panggil fetchAll() manual, socket akan menanganinya

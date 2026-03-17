@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Link, Globe, ChevronRight, ChevronDown, Layers, FolderOpen } from 'lucide-react';
+import { Check, Link, Globe, ChevronRight, ChevronDown, Layers, FolderOpen, ArrowUpRight, ArrowDownRight, Server, Key, Puzzle, Shield, TrendingUp, RefreshCw, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap, Database, Workflow, Route, Search } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/command";
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
 
-// Connection Type Selector Component
+// Connection Type Selector Component (Internal - for items/groups)
 function ConnectionTypeSelector({ value, onChange, size = "default" }) {
   const [showDialog, setShowDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +91,7 @@ function ConnectionTypeSelector({ value, onChange, size = "default" }) {
                     value={key}
                     onSelect={() => {
                       onChange(key);
+                      setShowDialog(false);
                       setSearchQuery('');
                     }}
                     className="cursor-pointer"
@@ -124,6 +125,130 @@ function ConnectionTypeSelector({ value, onChange, size = "default" }) {
       </Dialog>
     </>
   );
+}
+
+// Cross-Service Connection Type Selector Component (External - for cross-service)
+function CrossServiceConnectionTypeSelector({
+  value,
+  onChange,
+  connectionTypes,
+  placeholder = "Pilih tipe koneksi",
+  size = "default",
+  className = ""
+}) {
+  const [showDialog, setShowDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const selectedType = connectionTypes.find(ct => ct.type_slug === value);
+
+  const filteredTypes = connectionTypes.filter(ct => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      ct.label.toLowerCase().includes(searchLower) ||
+      ct.type_slug.toLowerCase().includes(searchLower) ||
+      (ct.description && ct.description.toLowerCase().includes(searchLower))
+    );
+  });
+
+  const sizeClasses = size === "small" ? "h-7 text-xs" : "";
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className={`w-full justify-between ${sizeClasses} ${className}`}
+        onClick={() => setShowDialog(true)}
+      >
+        {selectedType ? (
+          <div className="flex items-center gap-2">
+            {getConnectionIcon(selectedType.icon)}
+            <span>{selectedType.label}</span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">{placeholder}</span>
+        )}
+      </Button>
+
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Search Input */}
+            <div className="p-3 border-b">
+              <Input
+                placeholder="Cari tipe koneksi..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* Type List */}
+            <div className="max-h-80 overflow-y-auto px-1" style={{ maxHeight: size === 'small' ? '200px' : '400px' }}>
+              {filteredTypes.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  Tidak ada tipe koneksi ditemukan
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredTypes.map((ct) => (
+                    <div
+                      key={ct.id}
+                      onClick={() => {
+                        onChange(ct.type_slug);
+                        setShowDialog(false);
+                        setSearchQuery('');
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-secondary transition-colors border"
+                    >
+                      {getConnectionIcon(ct.icon)}
+                      <span className={`font-medium flex-1 ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
+                      {value === ct.type_slug && (
+                        <Check size={14} className="text-primary" />
+                      )}
+                      {ct.description && size !== "small" && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {ct.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// Helper function for connection icons
+function getConnectionIcon(iconName) {
+  const icons = {
+    'arrow-up-right': <ArrowUpRight className="h-4 w-4" />,
+    'arrow-down-right': <ArrowDownRight className="h-4 w-4" />,
+    'link': <Link className="h-4 w-4" />,
+    'layers': <Layers className="h-4 w-4" />,
+    'shield': <Shield className="h-4 w-4" />,
+    'trending-up': <TrendingUp className="h-4 w-4" />,
+    'refresh-cw': <RefreshCw className="h-4 w-4" />,
+    'server': <Server className="h-4 w-4" />,
+    'key': <Key className="h-4 w-4" />,
+    'puzzle': <Puzzle className="h-4 w-4" />,
+    'arrow-up': <ArrowUp className="h-4 w-4" />,
+    'arrow-down': <ArrowDown className="h-4 w-4" />,
+    'lock': <Lock className="h-4 w-4" />,
+    'shield-check': <ShieldCheck className="h-4 w-4" />,
+    'eye': <Eye className="h-4 w-4" />,
+    'scale': <Scale className="h-4 w-4" />,
+    'zap': <Zap className="h-4 w-4" />,
+    'database': <Database className="h-4 w-4" />,
+    'workflow': <Workflow className="h-4 w-4" />,
+    'route': <Route className="h-4 w-4" />,
+  };
+  return icons[iconName] || <ArrowRight className="h-4 w-4" />;
 }
 
 export default function ServiceConnectionModal({
@@ -507,23 +632,55 @@ export default function ServiceConnectionModal({
 
               {crossServiceSelectedIds.length > 0 && (
                 <div className="p-3 border rounded-lg bg-blue-50 border-blue-500">
-                  <p className="font-semibold text-sm mb-3">Terpilih ({crossServiceSelectedIds.length})</p>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                  <p className="font-semibold text-sm mb-3">Service Items Terpilih ({crossServiceSelectedIds.length})</p>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
                     {crossServiceAvailableItems
                       .filter(item => crossServiceSelectedIds.includes(item.id))
                       .slice(0, 10)
-                      .map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 text-xs">
-                          <Checkbox
-                            checked={true}
-                            onCheckedChange={() => handleCrossServiceToggle(item.id)}
-                          />
-                          <span className="truncate">{item.name}</span>
-                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
-                            {item.service_name}
-                          </span>
-                        </div>
-                      ))}
+                      .map((item) => {
+                        const itemTypeId = crossServiceTypesMap[item.id]?.type || 'connects_to';
+
+                        return (
+                          <div
+                            key={`selected-${item.id}`}
+                            className="p-3 bg-white rounded-lg border border-blue-200"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2 flex-1">
+                                <Checkbox
+                                  checked={true}
+                                  onCheckedChange={() => handleCrossServiceToggle(item.id)}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {getTypeIcon(item.type)}
+                                    <span className="text-sm font-medium">{item.name}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                      {item.service_name || 'Service'}
+                                    </span>
+                                    <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
+                                      {item.cmdb_item_name || 'CMDB Item'}
+                                    </span>
+                                  </div>
+
+                                  {/* Connection Type Selector - Simple & Clean */}
+                                  <div className="mt-2">
+                                    <CrossServiceConnectionTypeSelector
+                                      value={itemTypeId}
+                                      onChange={(typeSlug) => handleCrossServiceTypeChange(item.id, typeSlug)}
+                                      connectionTypes={crossServiceConnectionTypes}
+                                      placeholder="Pilih tipe koneksi"
+                                      size="small"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -605,31 +762,35 @@ export default function ServiceConnectionModal({
                                       item.type.toLowerCase().includes(crossServiceSearch.toLowerCase())
                                     )
                                   )
-                                  .map((item) => (
-                                    <div
-                                      key={item.id}
-                                      onClick={() => handleCrossServiceToggle(item.id)}
-                                      className="flex items-center gap-2 p-2 hover:bg-secondary rounded-lg cursor-pointer transition-colors"
-                                    >
-                                      <Checkbox checked={false} />
-                                      {getTypeIcon(item.type)}
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-medium text-sm truncate">{item.name}</div>
-                                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                          <span className="capitalize">{item.type}</span>
-                                          {item.status !== 'active' && (
-                                            <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
-                                              item.status === 'inactive' ? 'bg-red-100 text-red-600' :
-                                              item.status === 'maintenance' ? 'bg-yellow-100 text-yellow-600' :
-                                              'bg-gray-100 text-gray-600'
-                                            }`}>
-                                              {item.status}
-                                            </span>
-                                          )}
+                                  .map((item) => {
+                                    const isSelected = crossServiceSelectedIds.includes(item.id);
+
+                                    return (
+                                      <div
+                                        key={item.id}
+                                        onClick={() => handleCrossServiceToggle(item.id)}
+                                        className="flex items-center gap-2 p-2 hover:bg-secondary rounded-lg cursor-pointer transition-colors"
+                                      >
+                                        <Checkbox checked={isSelected} />
+                                        {getTypeIcon(item.type)}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-medium text-sm truncate">{item.name}</div>
+                                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <span className="capitalize">{item.type}</span>
+                                            {item.status !== 'active' && (
+                                              <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
+                                                item.status === 'inactive' ? 'bg-red-100 text-red-600' :
+                                                item.status === 'maintenance' ? 'bg-yellow-100 text-yellow-600' :
+                                                'bg-gray-100 text-gray-600'
+                                              }`}>
+                                                {item.status}
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                               </CollapsibleContent>
                             </Collapsible>
                           ))}

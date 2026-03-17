@@ -22,57 +22,70 @@ import {
   Clock
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
+import { useSocket } from '../../context/SocketContext';
 
 export default function ServiceDetailDialog({ show, service, workspaceId, onClose }) {
   const [localStatus, setLocalStatus] = useState(service?.status || 'active');
   const [isUpdating, setIsUpdating] = useState(false);
   const isLocalUpdateRef = useRef(false);
+  const { socket } = useSocket();
 
+  // Update local status when service prop changes (when dialog opens with new data)
   useEffect(() => {
     if (service) {
       setLocalStatus(service.status);
     }
   }, [service?.id, service?.status]);
 
-  // Socket.io connection for real-time updates from OTHER clients
+  // Fetch latest service data when dialog opens
   useEffect(() => {
-    if (!show || !service?.id || !workspaceId) return;
+    if (show && service?.id) {
+      // Fetch the latest service data when dialog opens
+      api.get(`/services/single/${service.id}`)
+        .then(res => {
+          setLocalStatus(res.data.status);
+          console.log('✅ ServiceDetailDialog: Fetched latest status on open:', res.data.status);
+        })
+        .catch(err => console.error('Failed to fetch service status:', err));
+    }
+  }, [show, service?.id]);
 
-    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL, {
-      reconnectionAttempts: 5
-    });
+  // Listen for service updates from SocketContext (always active, even when dialog is closed)
+  useEffect(() => {
+    if (!socket || !service?.id || !workspaceId) return;
 
-    socket.on('service_update', (data) => {
+    const handleServiceUpdate = async (data) => {
       // Convert to number for comparison (backend might send string)
       const eventServiceId = parseInt(data.serviceId);
       const eventWorkspaceId = parseInt(data.workspaceId);
       const currentServiceId = parseInt(service.id);
       const currentWorkspaceId = parseInt(workspaceId);
-      // Only update if this is for our service AND not from our local update
+
+      // Only update if this is for our service AND same workspace
       if (eventServiceId === currentServiceId && eventWorkspaceId === currentWorkspaceId) {
         if (!isLocalUpdateRef.current) {
+          console.log('🔄 ServiceDetailDialog: Received service_update, fetching latest status...');
           // Fetch latest service data
-          api.get(`/services/single/${service.id}`)
-            .then(res => {
-              setLocalStatus(res.data.status);
-            })
-            .catch(err => console.error('Failed to refresh service status:', err));
+          try {
+            const res = await api.get(`/services/single/${service.id}`);
+            setLocalStatus(res.data.status);
+            console.log('✅ ServiceDetailDialog: Updated status to', res.data.status);
+          } catch (err) {
+            console.error('Failed to refresh service status:', err);
+          }
         } else {
+          console.log('🔄 ServiceDetailDialog: Ignoring local update');
           isLocalUpdateRef.current = false;
         }
-      } else {
-
       }
-    });
+    };
+
+    socket.on('service_update', handleServiceUpdate);
 
     return () => {
-      socket.off('service_update');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.disconnect();
+      socket.off('service_update', handleServiceUpdate);
     };
-  }, [show, service?.id, workspaceId]);
+  }, [socket, service?.id, workspaceId]);
 
   const handleStatusChange = async (newStatus) => {
     if (!service) return;

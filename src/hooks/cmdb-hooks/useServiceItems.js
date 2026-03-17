@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
-import { io } from 'socket.io-client';
+import { useSocket } from '../../context/SocketContext';
 
 export const useServiceItems = (serviceId, workspaceId) => {
+  const { socket } = useSocket();
   const [items, setItems] = useState([]);
   const [connections, setConnections] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -69,7 +70,6 @@ export const useServiceItems = (serviceId, workspaceId) => {
   // Store fetchAll in ref for socket listener - update it whenever fetchAll changes
   useEffect(() => {
     fetchAllRef.current = fetchAll;
-    console.log('🔄 fetchAllRef updated');
   }, [fetchAll]);
 
   const createServiceGroup = useCallback(async (groupData) => {
@@ -158,73 +158,53 @@ export const useServiceItems = (serviceId, workspaceId) => {
     }
   }, [groupConnections, serviceId, workspaceId, fetchServiceGroupConnections]);
 
-  // Socket.io connection for real-time updates
+  // Socket.io listeners using SocketContext for real-time updates
   useEffect(() => {
-    if (!serviceId || !workspaceId) return;
+    if (!socket || !serviceId || !workspaceId) return;
 
-    console.log('🔌 Connecting to socket for service:', serviceId, 'workspace:', workspaceId);
-
-    const socket = io(import.meta.env.VITE_CMDB_API_BASE_URL || 'http://localhost:5001', {
-      reconnectionAttempts: 5,
-      reconnection: true
-    });
-
-    socket.on('connect', () => {
-      console.log('✅ Socket connected:', socket.id);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('🔌 Socket disconnected');
-    });
-
-    socket.on('service_update', (data) => {
-      console.log('📡 service_update received:', data);
+    const handleServiceUpdate = (data) => {
+      console.log('📡 useServiceItems - service_update received:', data);
       console.log('📡 Checking: serviceId=', data.serviceId, 'expected=', serviceId, 'workspaceId=', data.workspaceId, 'expected=', workspaceId);
+
       // Only refetch if this update is for our service
       if (data.serviceId === serviceId && data.workspaceId === workspaceId) {
         console.log('✅ Match! Fetching all data...');
-        // Use ref to get latest fetchAll function
         if (fetchAllRef.current) {
           fetchAllRef.current();
-        } else {
-          console.warn('⚠️ fetchAllRef.current is null, cannot fetch data');
         }
       } else {
         console.log('❌ No match, ignoring');
       }
-    });
+    };
 
-    socket.on('service_item_status_update', (data) => {
-      console.log('📡 service_item_status_update received:', data);
+    const handleServiceItemStatusUpdate = (data) => {
+      console.log('📡 useServiceItems - service_item_status_update received:', data);
       console.log('📡 Checking: serviceId=', data.serviceId, 'expected=', serviceId, 'workspaceId=', data.workspaceId, 'expected=', workspaceId);
-      // Handle individual service item status updates - only if it's for this service OR same workspace
-      // Same workspace check is needed for cross-service external items to update in real-time
+
+      // Handle individual service item status updates
+      // Only fetch if it's for this service OR same workspace (for external items)
       if (data.workspaceId === workspaceId) {
         if (data.serviceId === serviceId) {
           console.log('✅ Service and workspace match! Fetching all data...');
         } else {
           console.log('✅ Workspace match (external service item update)! Fetching all data...');
         }
-        // Use ref to get latest fetchAll function
         if (fetchAllRef.current) {
           fetchAllRef.current();
-        } else {
-          console.warn('⚠️ fetchAllRef.current is null, cannot fetch data');
         }
       } else {
         console.log('❌ No match, ignoring');
       }
-    });
+    };
+
+    socket.on('service_update', handleServiceUpdate);
+    socket.on('service_item_status_update', handleServiceItemStatusUpdate);
 
     return () => {
-      console.log('🔌 Cleaning up socket listeners');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('service_update');
-      socket.off('service_item_status_update');
-      socket.disconnect();
+      socket.off('service_update', handleServiceUpdate);
+      socket.off('service_item_status_update', handleServiceItemStatusUpdate);
     };
-  }, [serviceId, workspaceId]);
+  }, [socket, serviceId, workspaceId]);
 
   useEffect(() => {
     fetchAll();
