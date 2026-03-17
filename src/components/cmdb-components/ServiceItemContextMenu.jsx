@@ -17,7 +17,8 @@ export default function ServiceItemContextMenu({
   if (!show) return null;
   const isGroup = !!group; // If group exists, then it's a group context menu
   const isExternal = item?.data?.isExternal || false; // Check if item is external
-  const isInGroup = item?.parentNode && !isGroup; // Item dalam group
+  // Cek group dari backend data (item.group_id) bukan dari ReactFlow node (item.parentNode)
+  const isInGroup = item?.group_id && !isGroup; // Item dalam group
 
   const items = [
     !isGroup && !isExternal
@@ -27,15 +28,6 @@ export default function ServiceItemContextMenu({
           onClick: () => onManageConnections(item),
           color: 'hover:bg-blue-500 hover:text-white',
           iconColor: 'text-blue-600',
-        }
-      : null,
-    !isGroup && !isExternal && onManageCrossServiceConnections
-      ? {
-          label: 'Cross-Service Connections',
-          icon: <Globe className="h-4 w-4" />,
-          onClick: () => onManageCrossServiceConnections(item),
-          color: 'hover:bg-indigo-500 hover:text-white',
-          iconColor: 'text-indigo-600',
         }
       : null,
     isGroup && onManageGroupConnections

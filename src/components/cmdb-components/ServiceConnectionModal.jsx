@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Link } from 'lucide-react';
+import { Check, Link, Globe, ChevronRight, ChevronDown, Layers, FolderOpen } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
+import api from '../../services/api';
 import {
   Command,
   CommandEmpty,
@@ -19,6 +26,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { getTypeIcon } from '../../utils/cmdb-utils/constants';
 
 // Connection Type Selector Component
 function ConnectionTypeSelector({ value, onChange, size = "default" }) {
@@ -132,7 +140,10 @@ export default function ServiceConnectionModal({
   onToggleGroupConnection,
   onConnectionTypeChange,
   onItemToGroupTypeChange,
-  onSave
+  onSave,
+  // Cross-Service props
+  workspaceId,
+  onCrossServiceSave
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('items');
@@ -141,6 +152,16 @@ export default function ServiceConnectionModal({
   const [localItemTypes, setLocalItemTypes] = useState(itemConnectionTypes);
   const [localItemToGroupTypes, setLocalItemToGroupTypes] = useState(itemToGroupConnectionTypes);
 
+  // Cross-Service state
+  const [crossServiceSearch, setCrossServiceSearch] = useState('');
+  const [crossServiceAvailableItems, setCrossServiceAvailableItems] = useState([]);
+  const [crossServiceSelectedIds, setCrossServiceSelectedIds] = useState([]);
+  const [crossServiceTypesMap, setCrossServiceTypesMap] = useState({});
+  const [crossServiceConnectionTypes, setCrossServiceConnectionTypes] = useState([]);
+  const [isLoadingCrossService, setIsLoadingCrossService] = useState(false);
+  const [openCmdbGroups, setOpenCmdbGroups] = useState({});
+  const [openServices, setOpenServices] = useState({});
+
   // Sync local state with props when modal opens
   useEffect(() => {
     if (show) {
@@ -148,8 +169,62 @@ export default function ServiceConnectionModal({
       setLocalItemToGroupTypes(itemToGroupConnectionTypes);
       setSearchQuery('');
       setActiveTab('items');
+      setCrossServiceSearch('');
     }
   }, [show, itemConnectionTypes, itemToGroupConnectionTypes]);
+
+  // Fetch cross-service data when tab switches to 'external'
+  useEffect(() => {
+    const fetchCrossServiceData = async () => {
+      if (activeTab === 'external' && workspaceId && selectedItem) {
+        setIsLoadingCrossService(true);
+        try {
+          // Fetch connection types
+          const typesResponse = await api.get('/cmdb/connection-types');
+          setCrossServiceConnectionTypes(typesResponse.data);
+
+          // Fetch available service items
+          const itemsResponse = await api.get(`/cross-service-connections/available/${workspaceId}/${selectedItem.id}`);
+          setCrossServiceAvailableItems(itemsResponse.data);
+
+          // Auto-expand groups
+          const uniqueCmdbItems = [...new Set(itemsResponse.data.map(item => item.cmdb_item_id))];
+          const uniqueServices = [...new Set(itemsResponse.data.map(item => item.service_id))];
+          setOpenCmdbGroups(uniqueCmdbItems.reduce((acc, id) => ({ ...acc, [id]: true }), {}));
+          setOpenServices(uniqueServices.reduce((acc, id) => ({ ...acc, [id]: true }), {}));
+
+          // Fetch existing connections
+          const existingResponse = await api.get(`/cross-service-connections/service-item/${selectedItem.id}`);
+          const existingConnections = existingResponse.data;
+
+          const selectedIds = existingConnections.map(conn => {
+            const isSource = conn.source_service_item_id === selectedItem.id;
+            return isSource ? conn.target_service_item_id : conn.source_service_item_id;
+          });
+
+          setCrossServiceSelectedIds(selectedIds);
+
+          const typesMap = {};
+          existingConnections.forEach(conn => {
+            const isSource = conn.source_service_item_id === selectedItem.id;
+            const targetId = isSource ? conn.target_service_item_id : conn.source_service_item_id;
+            typesMap[targetId] = {
+              type: conn.connection_type,
+              direction: conn.direction,
+              id: conn.id
+            };
+          });
+          setCrossServiceTypesMap(typesMap);
+        } catch (error) {
+          console.error('Failed to fetch cross-service data:', error);
+        } finally {
+          setIsLoadingCrossService(false);
+        }
+      }
+    };
+
+    fetchCrossServiceData();
+  }, [activeTab, workspaceId, selectedItem]);
 
   const handleItemTypeChange = (itemId, typeSlug) => {
     const newTypes = { ...localItemTypes, [itemId]: typeSlug };
@@ -161,6 +236,86 @@ export default function ServiceConnectionModal({
     const newTypes = { ...localItemToGroupTypes, [groupId]: typeSlug };
     setLocalItemToGroupTypes(newTypes);
     onItemToGroupTypeChange && onItemToGroupTypeChange(groupId, typeSlug);
+  };
+
+  // Cross-Service handlers
+  const handleCrossServiceToggle = (itemId) => {
+    setCrossServiceSelectedIds(prev => {
+      if (prev.includes(itemId)) {
+        setCrossServiceTypesMap(prevMap => {
+          const newMap = { ...prevMap };
+          delete newMap[itemId];
+          return newMap;
+        });
+        return prev.filter(id => id !== itemId);
+      } else {
+        setCrossServiceTypesMap(prevMap => ({
+          ...prevMap,
+          [itemId]: { type: 'connects_to', direction: 'forward' }
+        }));
+        return [...prev, itemId];
+      }
+    });
+  };
+
+  const handleCrossServiceTypeChange = (itemId, typeSlug) => {
+    setCrossServiceTypesMap(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], type: typeSlug }
+    }));
+  };
+
+  const handleSaveCrossServiceConnections = async () => {
+    try {
+      setIsLoadingCrossService(true);
+
+      const existingResponse = await api.get(`/cross-service-connections/service-item/${selectedItem.id}`);
+      const existingConnections = existingResponse.data;
+      const existingIds = existingConnections.map(conn => {
+        const isSource = conn.source_service_item_id === selectedItem.id;
+        return isSource ? conn.target_service_item_id : conn.source_service_item_id;
+      });
+
+      // Delete removed connections
+      for (const connId of existingIds) {
+        if (!crossServiceSelectedIds.includes(connId)) {
+          const connData = existingConnections.find(c => {
+            const isSource = c.source_service_item_id === selectedItem.id;
+            const targetId = isSource ? c.target_service_item_id : c.source_service_item_id;
+            return targetId === connId;
+          });
+          if (connData) {
+            await api.delete(`/cross-service-connections/${connData.id}`);
+          }
+        }
+      }
+
+      // Create or update connections
+      for (const itemId of crossServiceSelectedIds) {
+        const connData = crossServiceTypesMap[itemId];
+        if (connData && connData.id) {
+          await api.put(`/cross-service-connections/${connData.id}`, {
+            workspace_id: workspaceId,
+            connection_type: connData.type,
+            direction: connData.direction
+          });
+        } else {
+          await api.post('/cross-service-connections', {
+            source_service_item_id: selectedItem.id,
+            target_service_item_id: itemId,
+            workspace_id: workspaceId,
+            connection_type: connData?.type || 'connects_to',
+            direction: connData?.direction || 'forward'
+          });
+        }
+      }
+
+      onCrossServiceSave && onCrossServiceSave();
+    } catch (error) {
+      console.error('Failed to save cross-service connections:', error);
+    } finally {
+      setIsLoadingCrossService(false);
+    }
   };
 
   if (!show) return null;
@@ -197,13 +352,19 @@ export default function ServiceConnectionModal({
           <Tabs value={activeTab} onValueChange={(newTab) => {
             setActiveTab(newTab);
             setSearchQuery('');
+            if (newTab === 'external') {
+              setCrossServiceSearch('');
+            }
           }} className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="items">
                 Ke Items ({selectedConnections.length})
               </TabsTrigger>
               <TabsTrigger value="groups">
                 Ke Groups ({selectedGroupConnections.length})
+              </TabsTrigger>
+              <TabsTrigger value="external">
+                Ke Eksternal ({crossServiceSelectedIds.length})
               </TabsTrigger>
             </TabsList>
 
@@ -337,12 +498,157 @@ export default function ServiceConnectionModal({
                 )}
               </div>
             </TabsContent>
+
+            {/* TAB 3: Cross-Service Connections */}
+            <TabsContent value="external" className="flex-1 overflow-hidden flex flex-col mt-4 space-y-3">
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs text-muted-foreground">Koneksi ke service item eksternal (dari service/CMDB lain)</p>
+              </div>
+
+              {crossServiceSelectedIds.length > 0 && (
+                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500">
+                  <p className="font-semibold text-sm mb-3">Terpilih ({crossServiceSelectedIds.length})</p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {crossServiceAvailableItems
+                      .filter(item => crossServiceSelectedIds.includes(item.id))
+                      .slice(0, 10)
+                      .map((item) => (
+                        <div key={item.id} className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={true}
+                            onCheckedChange={() => handleCrossServiceToggle(item.id)}
+                          />
+                          <span className="truncate">{item.name}</span>
+                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                            {item.service_name}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <Input
+                type="text"
+                placeholder="Cari service item, service, atau CMDB item..."
+                value={crossServiceSearch}
+                onChange={(e) => setCrossServiceSearch(e.target.value)}
+              />
+
+              <div className="flex-1 overflow-y-auto">
+                {isLoadingCrossService ? (
+                  <p className="text-center py-8 text-muted-foreground text-sm">Loading...</p>
+                ) : (
+                  <div className="space-y-1">
+                    {Object.values(
+                      crossServiceAvailableItems.reduce((acc, item) => {
+                        if (!acc[item.cmdb_item_id]) {
+                          acc[item.cmdb_item_id] = {
+                            cmdbItemId: item.cmdb_item_id,
+                            cmdbItemName: item.cmdb_item_name,
+                            services: {}
+                          };
+                        }
+                        if (!acc[item.cmdb_item_id].services[item.service_id]) {
+                          acc[item.cmdb_item_id].services[item.service_id] = {
+                            serviceId: item.service_id,
+                            serviceName: item.service_name,
+                            items: []
+                          };
+                        }
+                        acc[item.cmdb_item_id].services[item.service_id].items.push(item);
+                        return acc;
+                      }, {})
+                    ).map((cmdbGroup) => (
+                      <Collapsible
+                        key={cmdbGroup.cmdbItemId}
+                        open={openCmdbGroups[cmdbGroup.cmdbItemId]}
+                        onOpenChange={(open) => setOpenCmdbGroups(prev => ({ ...prev, [cmdbGroup.cmdbItemId]: open }))}
+                      >
+                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-secondary rounded-lg transition-colors text-left">
+                          {openCmdbGroups[cmdbGroup.cmdbItemId] ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          <FolderOpen className="h-4 w-4 text-yellow-600" />
+                          <span className="font-semibold text-sm">{cmdbGroup.cmdbItemName}</span>
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {Object.keys(cmdbGroup.services).length} Service(s)
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="ml-4 space-y-1">
+                          {Object.values(cmdbGroup.services).map((serviceGroup) => (
+                            <Collapsible
+                              key={serviceGroup.serviceId}
+                              open={openServices[serviceGroup.serviceId]}
+                              onOpenChange={(open) => setOpenServices(prev => ({ ...prev, [serviceGroup.serviceId]: open }))}
+                            >
+                              <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-secondary/50 rounded-lg transition-colors text-left">
+                                {openServices[serviceGroup.serviceId] ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                                <Layers className="h-4 w-4 text-purple-600" />
+                                <span className="font-medium text-sm">{serviceGroup.serviceName}</span>
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  {serviceGroup.items.length} Item(s)
+                                </span>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="ml-4 space-y-1">
+                                {serviceGroup.items
+                                  .filter(item =>
+                                    !crossServiceSelectedIds.includes(item.id) && (
+                                      item.name.toLowerCase().includes(crossServiceSearch.toLowerCase()) ||
+                                      String(item.id).includes(crossServiceSearch) ||
+                                      item.type.toLowerCase().includes(crossServiceSearch.toLowerCase())
+                                    )
+                                  )
+                                  .map((item) => (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => handleCrossServiceToggle(item.id)}
+                                      className="flex items-center gap-2 p-2 hover:bg-secondary rounded-lg cursor-pointer transition-colors"
+                                    >
+                                      <Checkbox checked={false} />
+                                      {getTypeIcon(item.type)}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm truncate">{item.name}</div>
+                                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                          <span className="capitalize">{item.type}</span>
+                                          {item.status !== 'active' && (
+                                            <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
+                                              item.status === 'inactive' ? 'bg-red-100 text-red-600' :
+                                              item.status === 'maintenance' ? 'bg-yellow-100 text-yellow-600' :
+                                              'bg-gray-100 text-gray-600'
+                                            }`}>
+                                              {item.status}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          ))}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
           <div className="flex-1 text-sm text-muted-foreground">
-            {selectedConnections.length + selectedGroupConnections.length} connection(s) selected
+            {activeTab === 'external'
+              ? `${crossServiceSelectedIds.length} koneksi eksternal`
+              : `${selectedConnections.length + selectedGroupConnections.length} koneksi`
+            }
           </div>
           <Button
             type="button"
@@ -351,8 +657,17 @@ export default function ServiceConnectionModal({
           >
             Cancel
           </Button>
-          <Button onClick={() => onSave(localItemTypes, localItemToGroupTypes)}>
-            Save Connections
+          <Button
+            onClick={() => {
+              if (activeTab === 'external') {
+                handleSaveCrossServiceConnections();
+              } else {
+                onSave(localItemTypes, localItemToGroupTypes);
+              }
+            }}
+            disabled={activeTab === 'external' ? isLoadingCrossService : false}
+          >
+            {activeTab === 'external' && isLoadingCrossService ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -22,7 +22,6 @@ import ServiceGroupModal from './ServiceGroupModal';
 import ServiceGroupConnectionModal from './ServiceGroupConnectionModal';
 import ServiceItemFormModal from './ServiceItemFormModal';
 import ServiceNavbar from './ServiceNavbar';
-import CrossServiceConnectionModal from './CrossServiceConnectionModal';
 import QuickConnectionModal from './QuickConnectionModal';
 import ServiceEdgeContextMenu from './ServiceEdgeContextMenu';
 import { toast } from 'sonner';
@@ -1398,8 +1397,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
   }, []);
 
   const handleOpenCrossServiceConnection = useCallback((item) => {
-    setSelectedItemForCrossConnection(item);
-    setShowCrossConnectionModal(true);
+    setSelectedConnectionItem(item); // Use same state as service connections
+    setShowConnectionModal(true);
   }, []);
 
   const handleEditGroup = useCallback((group) => {
@@ -2508,30 +2507,30 @@ export default function ServiceVisualization({ service, workspaceId }) {
   }, [contextMenu, handleOpenCrossServiceConnection, handleCloseContextMenu]);
 
   const handleContextMenuRemoveFromGroup = useCallback(async () => {
-    if (!contextMenu.item || !contextMenu.item.parentNode) {
+    if (!contextMenu.item || !contextMenu.item.group_id) {
       toast.error('Item tidak dalam group');
       return;
     }
 
     const itemId = contextMenu.item.id;
-    const itemData = contextMenu.item.data || {};
+    const itemData = contextMenu.item;
 
     try {
       toast.info('Mengeluarkan item dari group...');
 
       // Update item dengan group_id null menggunakan PUT (endpoint service items menggunakan PUT)
       await api.put(`/service-items/items/${itemId}`, {
-        name: itemData.name || '', // Field wajib
+        name: itemData.name || '',
         type: itemData.type || 'server',
         description: itemData.description || '',
         status: itemData.status || 'active',
         ip: itemData.ip || '',
         domain: itemData.domain || '',
-        port: itemData.port ? parseInt(itemData.port) : null,  // Convert to int or null
+        port: itemData.port ? parseInt(itemData.port) : null,
         category: itemData.category || 'internal',
         location: itemData.location || '',
-        group_id: null, // Keluarkan dari group
-        order_in_group: null, // Reset order_in_group
+        group_id: null,
+        order_in_group: null,
       });
 
       toast.success('Item berhasil dikeluarkan dari group!');
@@ -2801,6 +2800,25 @@ export default function ServiceVisualization({ service, workspaceId }) {
           setItemToGroupConnectionTypes(prev => ({ ...prev, [groupId]: typeSlug }));
         }}
         onSave={handleSaveConnections}
+        workspaceId={workspaceId}
+        onCrossServiceSave={async () => {
+          // Refresh cross-service connections
+          try {
+            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+            const connections = response.data;
+
+            // Filter connections that involve service items from this service
+            const serviceItemIds = items.map(item => item.id);
+            const relevantConnections = connections.filter(conn =>
+              serviceItemIds.includes(conn.source_service_item_id) ||
+              serviceItemIds.includes(conn.target_service_item_id)
+            );
+
+            setCrossServiceConnections(relevantConnections);
+          } catch (error) {
+            console.error('Failed to refresh cross-service connections:', error);
+          }
+        }}
       />
 
       {/* Group Connection Modal */}
@@ -2826,39 +2844,6 @@ export default function ServiceVisualization({ service, workspaceId }) {
           } else {
             setSelectedGroupToItemConnections([...selectedGroupToItemConnections, itemId]);
           }
-        }}
-      />
-
-      {/* Cross-Service Connection Modal */}
-      <CrossServiceConnectionModal
-        show={showCrossConnectionModal}
-        selectedItem={selectedItemForCrossConnection}
-        allServiceItems={items}
-        workspaceId={workspaceId}
-        onClose={() => {
-          setShowCrossConnectionModal(false);
-          setSelectedItemForCrossConnection(null);
-        }}
-        onSave={async () => {
-          // Refresh cross-service connections
-          try {
-            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
-            const connections = response.data;
-
-            // Filter connections that involve service items from this service
-            const serviceItemIds = items.map(item => item.id);
-            const relevantConnections = connections.filter(conn =>
-              serviceItemIds.includes(conn.source_service_item_id) ||
-              serviceItemIds.includes(conn.target_service_item_id)
-            );
-
-            setCrossServiceConnections(relevantConnections);
-          } catch (error) {
-            console.error('Failed to refresh cross-service connections:', error);
-          }
-
-          setShowCrossConnectionModal(false);
-          setSelectedItemForCrossConnection(null);
         }}
       />
 
