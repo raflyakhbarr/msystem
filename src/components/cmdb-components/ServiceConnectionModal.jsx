@@ -295,10 +295,31 @@ export default function ServiceConnectionModal({
       setSearchQuery('');
       setActiveTab('items');
       setCrossServiceSearch('');
-    }
-  }, [show, itemConnectionTypes, itemToGroupConnectionTypes]);
 
-  // Fetch cross-service data when tab switches to 'external'
+      // Fetch cross-service connection count when modal opens (regardless of active tab)
+      if (workspaceId && selectedItem) {
+        const fetchCrossServiceCount = async () => {
+          try {
+            const existingResponse = await api.get(`/cross-service-connections/service-item/${selectedItem.id}`);
+            const existingConnections = existingResponse.data;
+
+            const selectedIds = existingConnections.map(conn => {
+              const isSource = conn.source_service_item_id === selectedItem.id;
+              return isSource ? conn.target_service_item_id : conn.source_service_item_id;
+            });
+
+            setCrossServiceSelectedIds(selectedIds);
+          } catch (error) {
+            console.error('Failed to fetch cross-service count:', error);
+          }
+        };
+
+        fetchCrossServiceCount();
+      }
+    }
+  }, [show, itemConnectionTypes, itemToGroupConnectionTypes, workspaceId, selectedItem]);
+
+  // Fetch full cross-service data when tab switches to 'external'
   useEffect(() => {
     const fetchCrossServiceData = async () => {
       if (activeTab === 'external' && workspaceId && selectedItem) {
