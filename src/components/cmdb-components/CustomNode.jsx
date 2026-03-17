@@ -222,6 +222,25 @@ export default function CustomNode({ data, id }) {
 
   const handleColor = getHandleColor(data.status);
 
+  // Helper function to count dead/inactive service items
+  const getDeadItemCount = (serviceId) => {
+    const items = serviceItemsMap[serviceId] || [];
+    return items.filter(item =>
+      item.status === 'inactive' ||
+      item.status === 'disabled' ||
+      item.status === 'maintenance'
+    ).length;
+  };
+
+  // Helper function to determine if badge should be shown
+  const shouldShowBadge = (service) => {
+    // Only show badge if service is active
+    if (service.status !== 'active') return false;
+
+    const deadCount = getDeadItemCount(service.id);
+    return deadCount > 0;
+  };
+
   return (
     <>
       {/* Node UI */}
@@ -319,6 +338,25 @@ export default function CustomNode({ data, id }) {
                             className="flex items-center gap-1 px-2 py-1 rounded bg-gray-100 border relative"
                             title={`${service.name} (${service.status})`}
                           >
+                            {/* DEAD ITEMS BADGE - Top Left Corner */}
+                            {(() => {
+                              if (!shouldShowBadge(service)) return null;
+
+                              const deadCount = getDeadItemCount(service.id);
+
+                              return (
+                                <div
+                                  className="absolute -top-1 -left-1 min-w-[16px] h-4 px-0.5
+                                            bg-yellow-500 text-white font-bold text-[9px]
+                                            rounded-full border-2 border-white dark:border-gray-800
+                                            flex items-center justify-center z-20
+                                            shadow-sm"
+                                >
+                                  {deadCount > 99 ? '99+' : deadCount}
+                                </div>
+                              );
+                            })()}
+
                             <div className="relative">
                               {service.icon_type === 'preset' ? (
                                 <ServiceIcon name={service.icon_name} size={14} />
@@ -465,7 +503,7 @@ export default function CustomNode({ data, id }) {
                   <HoverCard key={service.id} openDelay={300} closeDelay={200}>
                     <HoverCardTrigger asChild>
                       <div
-                        className={`w-10 h-10 flex-shrink-0 rounded border overflow-hidden cursor-pointer relative
+                        className={`w-10 h-10 flex-shrink-0 rounded border cursor-pointer relative
                           hover:border-primary hover:scale-110 transition-all
                           ${service.status === 'active' ? 'bg-green-50 border-green-200' :
                             service.status === 'disabled' ? 'bg-gray-50 border-gray-200' :
@@ -476,6 +514,25 @@ export default function CustomNode({ data, id }) {
                         onClick={() => data.onServiceClick?.(service, data)}
                         onMouseEnter={() => handleFetchServiceItems(service.id)}
                       >
+                        {/* DEAD ITEMS BADGE - Top Left Corner */}
+                        {(() => {
+                          if (!shouldShowBadge(service)) return null;
+
+                          const deadCount = getDeadItemCount(service.id);
+
+                          return (
+                            <div
+                              className="absolute -top-1 -left-1 min-w-[11px] h-3 px-1
+                                        bg-yellow-500 text-white font-bold text-[10px]
+                                        rounded-full dark:border-gray-800
+                                        flex items-center justify-center z-20
+                                        shadow-sm"
+                            >
+                              {deadCount > 99 ? '99+' : deadCount}
+                            </div>
+                          );
+                        })()}
+
                         {service.icon_type === 'preset' ? (
                           <div className="w-full h-full flex items-center justify-center p-1">
                             <ServiceIcon name={service.icon_name} size={32} />
