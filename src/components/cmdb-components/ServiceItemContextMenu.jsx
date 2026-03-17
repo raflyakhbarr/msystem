@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Link2, MoreVertical, Globe } from 'lucide-react';
+import { Pencil, Trash2, Link2, MoreVertical, Globe, LogOut } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function ServiceItemContextMenu({
@@ -11,11 +11,13 @@ export default function ServiceItemContextMenu({
   onManageConnections,
   onManageGroupConnections,
   onManageCrossServiceConnections,
+  onRemoveFromGroup,
   onClose,
 }) {
   if (!show) return null;
   const isGroup = !!group; // If group exists, then it's a group context menu
   const isExternal = item?.data?.isExternal || false; // Check if item is external
+  const isInGroup = item?.parentNode && !isGroup; // Item dalam group
 
   const items = [
     !isGroup && !isExternal
@@ -45,6 +47,13 @@ export default function ServiceItemContextMenu({
           iconColor: 'text-purple-600',
         }
       : null,
+    ...(isInGroup ? [{
+      label: 'Keluarkan dari Group',
+      icon: <LogOut className="h-4 w-4" />,
+      onClick: () => onRemoveFromGroup(item),
+      color: 'hover:bg-orange-500 hover:text-white',
+      iconColor: 'text-orange-600',
+    }] : []),
     {
       label: isGroup ? 'Edit Group' : 'Edit Item',
       icon: <Pencil className="h-4 w-4" />,

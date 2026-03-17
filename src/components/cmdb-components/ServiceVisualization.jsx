@@ -298,6 +298,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Drag state for reordering items in groups
   const [draggedNode, setDraggedNode] = useState(null);
   const [hoverPosition, setHoverPosition] = useState(null);
+  const [hoveredGroup, setHoveredGroup] = useState(null); // Group yang sedang di-hover oleh dragged node
+  const [isReorderingInGroup, setIsReorderingInGroup] = useState(false); // Hanya true saat reorder dalam group
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
@@ -1030,6 +1032,38 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   }, [showExternalNodes, externalServiceItems]);
 
+  // Update node data untuk visual feedback saat group di-hover
+  useEffect(() => {
+    if (!hoveredGroup) {
+      // Reset semua group isHovered flag
+      setNodes(prevNodes => prevNodes.map(n => {
+        if (n.type === 'serviceGroup') {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: false }
+          };
+        }
+        return n;
+      }));
+    } else {
+      // Set isHovered flag untuk group yang di-hover
+      setNodes(prevNodes => prevNodes.map(n => {
+        if (n.id === hoveredGroup) {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: true }
+          };
+        } else if (n.type === 'serviceGroup') {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: false }
+          };
+        }
+        return n;
+      }));
+    }
+  }, [hoveredGroup, setNodes]);
+
   // Update edges when connections change
   useEffect(() => {
     // Use ref for edgeHandles to avoid stale closures
@@ -1614,52 +1648,162 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Drag handlers for reordering items in groups
   const onNodeDragStart = useCallback((event, node) => {
-    if (node.parentNode) {
+    // Handle semua node drag, bukan hanya yang punya parentNode
+    if (node.type === 'custom') { // Hanya item yang bisa di-drag
       setDraggedNode(node.id);
-      dragStateRef.current = { isDragging: true, startTime: Date.now() };
+
+      // Set isReorderingInGroup hanya jika node sudah dalam group (reorder, bukan pindah ke group baru)
+      setIsReorderingInGroup(!!node.parentNode);
+
+      dragStateRef.current = { isDragging: true, startTime: Date.now(), originalParentId: node.parentNode };
     }
   }, []);
 
-  const onNodeDrag = useCallback((event, node) => {
-    if (!node.parentNode || !draggedNode) return;
-
+  // Helper function untuk mendeteksi collision dengan group
+  const checkGroupCollision = useCallback((nodePosition, nodeSize) => {
     const currentNodes = nodesRef.current;
-    const groupNode = currentNodes.find(n => n.id === node.parentNode);
-    if (!groupNode) return;
+    const groups = currentNodes.filter(n => n.type === 'serviceGroup');
 
+    for (const group of groups) {
+      const groupWidth = group.data?.width || 200;
+      const groupHeight = group.data?.height || 250;
+
+      // Hitung center dari node
+      const nodeCenterX = nodePosition.x + nodeSize.width / 2;
+      const nodeCenterY = nodePosition.y + nodeSize.height / 2;
+
+      // Cek jika center node ada dalam bounds group
+      if (
+        nodeCenterX >= group.position.x &&
+        nodeCenterX <= group.position.x + groupWidth &&
+        nodeCenterY >= group.position.y &&
+        nodeCenterY <= group.position.y + groupHeight
+      ) {
+        return group;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper untuk menghitung posisi drop dalam group
+  const calculateDropPositionInGroup = useCallback((groupNode, draggedNodeId) => {
+    const currentNodes = nodesRef.current;
     const { itemsPerRow, itemWidth, itemHeight, gapX, gapY, padding, headerHeight } = DIMENSIONS;
-    const relX = node.position.x - padding;
-    const relY = node.position.y - padding - headerHeight;
+
+    // Hitung posisi node yang sedang di-drag (absolute position)
+    const draggedNodeData = currentNodes.find(n => n.id === draggedNodeId);
+    if (!draggedNodeData) return null;
+
+    const nodeAbsoluteX = draggedNodeData.position.x;
+    const nodeAbsoluteY = draggedNodeData.position.y;
+
+    // Hitung posisi relatif terhadap group
+    const relX = nodeAbsoluteX - groupNode.position.x - padding;
+    const relY = nodeAbsoluteY - groupNode.position.y - padding - headerHeight;
 
     const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
 
     // Calculate row based on fixed item height
     const row = Math.max(0, Math.floor(Math.max(0, relY) / (itemHeight + gapY)));
 
-    const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+    const itemsInGroup = currentNodes.filter(n => n.parentNode === groupNode.id && n.id !== draggedNodeId);
     const newIndex = Math.min(row * itemsPerRow + col, itemsInGroup.length);
 
-    if (newIndex >= 0 && newIndex <= itemsInGroup.length) {
-      const newRow = Math.floor(newIndex / itemsPerRow);
-      const newCol = newIndex % itemsPerRow;
+    const newRow = Math.floor(newIndex / itemsPerRow);
+    const newCol = newIndex % itemsPerRow;
 
-      const relativeX = padding + newCol * (itemWidth + gapX);
-      const relativeY = headerHeight + padding + newRow * (itemHeight + gapY);
+    const relativeX = padding + newCol * (itemWidth + gapX);
+    const relativeY = headerHeight + padding + newRow * (itemHeight + gapY);
 
-      // Calculate absolute position for hover indicator
-      const absoluteX = groupNode.position.x + relativeX;
-      const absoluteY = groupNode.position.y + relativeY;
+    // Calculate absolute position for hover indicator
+    const absoluteX = groupNode.position.x + relativeX;
+    const absoluteY = groupNode.position.y + relativeY;
 
-      setHoverPosition({
-        index: newIndex,
-        relativeX,
-        relativeY,
-        absoluteX,
-        absoluteY,
-        groupId: node.parentNode,
-      });
+    // Extract numeric group ID dari node ID (e.g., "serviceGroup-10" → 10)
+    const groupIdNumeric = parseInt(groupNode.id.toString().replace(/\D/g, ''));
+
+    console.log('📐 Calculated drop position:', {
+      groupNodeId: groupNode.id,
+      groupIdNumeric,
+      groupName: groupNode.data?.name,
+      newIndex
+    });
+
+    return {
+      groupId: groupNode.id, // Full node ID untuk ReactFlow parentNode
+      groupIdNumeric, // Numeric ID untuk database
+      index: newIndex,
+      relativeX,
+      relativeY,
+      absoluteX,
+      absoluteY,
+    };
+  }, [DIMENSIONS]);
+
+  const onNodeDrag = useCallback((event, node) => {
+    if (!draggedNode || node.id !== draggedNode) return;
+
+    const currentNodes = nodesRef.current;
+
+    // CASE 1: Node sudah dalam group (reorder dalam group yang sama)
+    if (node.parentNode) {
+      const groupNode = currentNodes.find(n => n.id === node.parentNode);
+      if (!groupNode) return;
+
+      const { itemsPerRow, itemWidth, itemHeight, gapX, gapY, padding, headerHeight } = DIMENSIONS;
+      const relX = node.position.x - padding;
+      const relY = node.position.y - padding - headerHeight;
+
+      const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
+
+      // Calculate row based on fixed item height
+      const row = Math.max(0, Math.floor(Math.max(0, relY) / (itemHeight + gapY)));
+
+      const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+      const newIndex = Math.min(row * itemsPerRow + col, itemsInGroup.length);
+
+      if (newIndex >= 0 && newIndex <= itemsInGroup.length) {
+        const newRow = Math.floor(newIndex / itemsPerRow);
+        const newCol = newIndex % itemsPerRow;
+
+        const relativeX = padding + newCol * (itemWidth + gapX);
+        const relativeY = headerHeight + padding + newRow * (itemHeight + gapY);
+
+        // Calculate absolute position for hover indicator
+        const absoluteX = groupNode.position.x + relativeX;
+        const absoluteY = groupNode.position.y + relativeY;
+
+        setHoverPosition({
+          index: newIndex,
+          relativeX,
+          relativeY,
+          absoluteX,
+          absoluteY,
+          groupId: node.parentNode,
+        });
+        setHoveredGroup(node.parentNode); // Set hovered group untuk visual feedback
+      }
+    } else {
+      // CASE 2: Node di luar group, cek collision dengan group
+      const nodeSize = {
+        width: node.style?.width || DIMENSIONS.itemWidth,
+        height: node.style?.height || DIMENSIONS.itemHeight
+      };
+
+      const collidedGroup = checkGroupCollision(node.position, nodeSize);
+
+      if (collidedGroup) {
+        const dropPosition = calculateDropPositionInGroup(collidedGroup, draggedNode);
+        if (dropPosition) {
+          setHoverPosition(dropPosition);
+          setHoveredGroup(collidedGroup.id); // Set hovered group untuk visual feedback
+        }
+      } else {
+        setHoverPosition(null);
+        setHoveredGroup(null); // Clear hovered group
+      }
     }
-  }, [draggedNode]);
+  }, [draggedNode, checkGroupCollision, calculateDropPositionInGroup]);
 
   const handleAutoSave = useCallback(async () => {
     if (!isAutoSaveEnabled || isSaving || isAutoSaving) return;
@@ -1730,7 +1874,12 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   const onNodeDragStop = useCallback(async (event, node) => {
     const dragDuration = Date.now() - dragStateRef.current.startTime;
-    dragStateRef.current = { isDragging: false, startTime: 0 };
+    const originalParentId = dragStateRef.current.originalParentId;
+    dragStateRef.current = { isDragging: false, startTime: 0, originalParentId: null };
+
+    // Clear hovered group visual feedback dan reordering state
+    setHoveredGroup(null);
+    setIsReorderingInGroup(false);
 
     if (dragDuration < 100) {
       setDraggedNode(null);
@@ -1738,9 +1887,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return;
     }
 
-    const shouldAutosave = !draggedNode || !hoverPosition || !node.parentNode;
-
-    if (!draggedNode || !hoverPosition || !node.parentNode) {
+    if (!draggedNode || !hoverPosition) {
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
@@ -1772,39 +1919,138 @@ export default function ServiceVisualization({ service, workspaceId }) {
       }
     } else {
       try {
-        await api.patch(`/service-groups/items/${node.id}/reorder`, {
-          new_order: hoverPosition.index
-        });
+        const targetGroupId = hoverPosition.groupId; // Full node ID ("service-group-10")
+        const groupIdNumeric = hoverPosition.groupIdNumeric; // Numeric ID (10)
+        const isNewGroup = node.parentNode !== targetGroupId;
 
-        // Update dragged node position visual immediately
-        setNodes(prevNodes => {
-          const updatedNodes = prevNodes.map(n => {
-            if (n.id === draggedNode) {
-              return {
-                ...n,
-                position: {
-                  x: hoverPosition.relativeX,
-                  y: hoverPosition.relativeY
-                },
-                data: {
-                  ...n.data,
-                  orderInGroup: hoverPosition.index
-                }
-              };
-            }
-            return n;
+        // CASE 1: Reorder dalam group yang sama
+        if (!isNewGroup && node.parentNode) {
+          await api.patch(`/service-groups/items/${node.id}/reorder`, {
+            new_order: hoverPosition.index
           });
 
-          nodesRef.current = updatedNodes;
-          return updatedNodes;
-        });
+          // Update dragged node position visual immediately
+          setNodes(prevNodes => {
+            const updatedNodes = prevNodes.map(n => {
+              if (n.id === draggedNode) {
+                return {
+                  ...n,
+                  position: {
+                    x: hoverPosition.relativeX,
+                    y: hoverPosition.relativeY
+                  },
+                  data: {
+                    ...n.data,
+                    orderInGroup: hoverPosition.index
+                  }
+                };
+              }
+              return n;
+            });
 
-        // Immediately fetch all data to get updated positions for ALL items
-        await fetchAll();
+            nodesRef.current = updatedNodes;
+            return updatedNodes;
+          });
+
+          // Immediately fetch all data to get updated positions for ALL items
+          await fetchAll();
+        }
+        // CASE 2: Pindah ke group baru (dari luar group atau dari group lain)
+        else if (targetGroupId) {
+          console.log('🎯 Attempting to move item to group:', {
+            itemId: node.id,
+            targetGroupId,
+            groupIdNumeric,
+            nodeName: node.data.name,
+            nodeServiceId: service?.id
+          });
+
+          // Validasi: cek apakah group ID valid
+          if (isNaN(groupIdNumeric)) {
+            console.error('❌ Invalid group ID:', targetGroupId);
+            toast.error('ID group tidak valid!');
+            isReorderingRef.current = false;
+            return;
+          }
+
+          // Validasi: cek apakah group ada di groups state
+          const targetGroup = groups.find(g => g.id === groupIdNumeric);
+          if (!targetGroup) {
+            console.error('❌ Group not found in state:', groupIdNumeric, 'Available groups:', groups.map(g => ({id: g.id, name: g.name})));
+            toast.error(`Group dengan ID ${groupIdNumeric} tidak ditemukan!`);
+            isReorderingRef.current = false;
+            return;
+          }
+
+          toast.info(`Memindahkan item ke group "${targetGroup.name}"...`);
+
+          // Update item dengan group baru menggunakan PUT (endpoint service items menggunakan PUT)
+          await api.put(`/service-items/items/${node.id}`, {
+            name: node.data.name || '',
+            type: node.data.type || 'server',
+            description: node.data.description || '',
+            status: node.data.status || 'active',
+            ip: node.data.ip || '',
+            domain: node.data.domain || '',
+            port: node.data.port ? parseInt(node.data.port) : null,  // Convert to int or null
+            category: node.data.category || 'internal',
+            location: node.data.location || '',
+            group_id: hoverPosition.groupIdNumeric, // Numeric ID untuk database
+            order_in_group: hoverPosition.index,  // Tambahkan order_in_group
+          });
+
+          // Update local state
+          setNodes(prevNodes => {
+            const updatedNodes = prevNodes.map(n => {
+              if (n.id === draggedNode) {
+                return {
+                  ...n,
+                  position: {
+                    x: hoverPosition.relativeX,
+                    y: hoverPosition.relativeY
+                  },
+                  parentNode: hoverPosition.groupId, // Full node ID untuk ReactFlow
+                  data: {
+                    ...n.data,
+                    groupId: hoverPosition.groupIdNumeric, // Numeric ID
+                    orderInGroup: hoverPosition.index
+                  }
+                };
+              }
+              return n;
+            });
+
+            nodesRef.current = updatedNodes;
+            return updatedNodes;
+          });
+
+          toast.success('Item berhasil dipindahkan ke group!');
+
+          // Simpan position baru ke database
+          try {
+            console.log('💾 Saving position to database:', {
+              itemId: node.id,
+              position: { x: hoverPosition.relativeX, y: hoverPosition.relativeY }
+            });
+            await api.put(`/service-items/items/${node.id}/position`, {
+              position: {
+                x: hoverPosition.relativeX,
+                y: hoverPosition.relativeY
+              }
+            });
+            console.log('✅ Position saved successfully - socket will trigger fetchAll automatically');
+          } catch (posErr) {
+            console.error('❌ Failed to save position:', posErr);
+          }
+
+          // Reset reordering flag - jangan panggil fetchAll() manual, socket akan menanganinya
+          isReorderingRef.current = false;
+        }
 
       } catch (err) {
-        console.error('Failed to reorder:', err);
-        toast.error('Failed to reorder item');
+        console.error('Failed to move item:', err);
+        toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
+        isReorderingRef.current = false;
       } finally {
         setDraggedNode(null);
         setHoverPosition(null);
@@ -1812,6 +2058,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
 
     // Trigger autosave for position changes
+    const shouldAutosave = !draggedNode || !hoverPosition;
     if (isAutoSaveEnabled && shouldAutosave) {
       // Clear any existing autosave timeout
       if (autoSaveTimeoutRef.current) {
@@ -1822,7 +2069,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         handleAutoSave();
       }, 2000);
     }
-  }, [draggedNode, hoverPosition, fetchAll, setNodes, nodes, isAutoSaveEnabled, handleAutoSave]);
+  }, [draggedNode, hoverPosition, fetchAll, setNodes, nodes, isAutoSaveEnabled, handleAutoSave, service?.id, workspaceId]);
 
   const handleItemSubmit = async (e) => {
     e.preventDefault();
@@ -2260,6 +2507,48 @@ export default function ServiceVisualization({ service, workspaceId }) {
     }
   }, [contextMenu, handleOpenCrossServiceConnection, handleCloseContextMenu]);
 
+  const handleContextMenuRemoveFromGroup = useCallback(async () => {
+    if (!contextMenu.item || !contextMenu.item.parentNode) {
+      toast.error('Item tidak dalam group');
+      return;
+    }
+
+    const itemId = contextMenu.item.id;
+    const itemData = contextMenu.item.data || {};
+
+    try {
+      toast.info('Mengeluarkan item dari group...');
+
+      // Update item dengan group_id null menggunakan PUT (endpoint service items menggunakan PUT)
+      await api.put(`/service-items/items/${itemId}`, {
+        name: itemData.name || '', // Field wajib
+        type: itemData.type || 'server',
+        description: itemData.description || '',
+        status: itemData.status || 'active',
+        ip: itemData.ip || '',
+        domain: itemData.domain || '',
+        port: itemData.port ? parseInt(itemData.port) : null,  // Convert to int or null
+        category: itemData.category || 'internal',
+        location: itemData.location || '',
+        group_id: null, // Keluarkan dari group
+        order_in_group: null, // Reset order_in_group
+      });
+
+      toast.success('Item berhasil dikeluarkan dari group!');
+
+      handleCloseContextMenu();
+
+      // Fetch ulang data
+      setTimeout(() => {
+        fetchAll();
+      }, 300);
+
+    } catch (err) {
+      console.error('Failed to remove from group:', err);
+      toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
+    }
+  }, [contextMenu.item, fetchAll, handleCloseContextMenu]);
+
   // Handle reconnecting edges
   const handleReconnect = useCallback(async (oldEdge, newConnection) => {
     // Save to database FIRST
@@ -2327,7 +2616,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
     <div className="h-full w-full relative">
       {/* Service Navbar */}
       <ServiceNavbar
-        draggedNode={draggedNode}
+        draggedNode={isReorderingInGroup ? draggedNode : null}
+        isReorderingInGroup={isReorderingInGroup}
         isSaving={isSaving}
         isAutoSaving={isAutoSaving}
         isAutoSaveEnabled={isAutoSaveEnabled}
@@ -2647,6 +2937,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onManageConnections={handleContextMenuManageConnections}
         onManageGroupConnections={handleContextMenuManageGroupConnections}
         onManageCrossServiceConnections={handleContextMenuManageCrossServiceConnections}
+        onRemoveFromGroup={handleContextMenuRemoveFromGroup}
         onClose={handleCloseContextMenu}
       />
     </div>

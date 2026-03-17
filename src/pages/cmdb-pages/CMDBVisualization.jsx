@@ -147,6 +147,8 @@ export default function CMDBVisualization() {
 
   const [draggedNode, setDraggedNode] = useState(null);
   const [hoverPosition, setHoverPosition] = useState(null);
+  const [hoveredGroup, setHoveredGroup] = useState(null); // Group yang sedang di-hover oleh dragged node
+  const [isReorderingInGroup, setIsReorderingInGroup] = useState(false); // Hanya true saat reorder dalam group
 
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
 
@@ -735,6 +737,38 @@ export default function CMDBVisualization() {
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  // Update node data untuk visual feedback saat group di-hover
+  useEffect(() => {
+    if (!hoveredGroup) {
+      // Reset semua group isHovered flag
+      setNodes(prevNodes => prevNodes.map(n => {
+        if (n.type === 'group') {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: false }
+          };
+        }
+        return n;
+      }));
+    } else {
+      // Set isHovered flag untuk group yang di-hover
+      setNodes(prevNodes => prevNodes.map(n => {
+        if (n.id === hoveredGroup) {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: true }
+          };
+        } else if (n.type === 'group') {
+          return {
+            ...n,
+            data: { ...n.data, isHovered: false }
+          };
+        }
+        return n;
+      }));
+    }
+  }, [hoveredGroup, setNodes]);
 
   useEffect(() => {
     nodes.forEach(node => {
@@ -1821,43 +1855,77 @@ export default function CMDBVisualization() {
   }, []);
 
   const onNodeDragStart = useCallback((event, node) => {
-    if (node.parentNode) {
+    // Handle semua node drag, bukan hanya yang punya parentNode
+    if (node.type === 'custom') { // Hanya item yang bisa di-drag
       setDraggedNode(node.id);
-      dragStateRef.current = { isDragging: true, startTime: Date.now() };
+
+      // Set isReorderingInGroup hanya jika node sudah dalam group (reorder, bukan pindah ke group baru)
+      setIsReorderingInGroup(!!node.parentNode);
+
+      dragStateRef.current = { isDragging: true, startTime: Date.now(), originalParentId: node.parentNode };
     }
   }, []);
 
-  const onNodeDrag = useCallback((event, node) => {
-    if (!node.parentNode || !draggedNode) return;
-
+  // Helper function untuk mendeteksi collision dengan group
+  const checkGroupCollision = useCallback((nodePosition, nodeSize) => {
     const currentNodes = nodesRef.current;
-    const groupNode = currentNodes.find(n => n.id === node.parentNode);
-    if (!groupNode) return;
+    const groups = currentNodes.filter(n => n.type === 'group');
 
+    for (const group of groups) {
+      const groupWidth = group.data?.width || 200;
+      const groupHeight = group.data?.height || 250;
+
+      // Hitung center dari node
+      const nodeCenterX = nodePosition.x + nodeSize.width / 2;
+      const nodeCenterY = nodePosition.y + nodeSize.height / 2;
+
+      // Cek jika center node ada dalam bounds group
+      if (
+        nodeCenterX >= group.position.x &&
+        nodeCenterX <= group.position.x + groupWidth &&
+        nodeCenterY >= group.position.y &&
+        nodeCenterY <= group.position.y + groupHeight
+      ) {
+        return group;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper untuk menghitung posisi drop dalam group
+  const calculateDropPositionInGroup = useCallback((groupNode, draggedNodeId) => {
+    const currentNodes = nodesRef.current;
     const { itemsPerRow, itemWidth, gapX, gapY, padding } = DIMENSIONS;
-    const relX = node.position.x - padding;
-    const relY = node.position.y - padding - 40;
+
+    // Hitung posisi node yang sedang di-drag (absolute position)
+    const draggedNodeData = currentNodes.find(n => n.id === draggedNodeId);
+    if (!draggedNodeData) return null;
+
+    const nodeAbsoluteX = draggedNodeData.position.x;
+    const nodeAbsoluteY = draggedNodeData.position.y;
+
+    // Hitung posisi relatif terhadap group
+    const relX = nodeAbsoluteX - groupNode.position.x - padding;
+    const relY = nodeAbsoluteY - groupNode.position.y - padding - 40;
 
     const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
 
-    // Hitung baris berdasarkan kumulatif tinggi baris dari groupNode
+    // Hitung baris berdasarkan kumulatif tinggi baris
     let row = 0;
     let currentY = 0;
-    const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+    const itemsInGroup = currentNodes.filter(n => n.parentNode === groupNode.id && n.id !== draggedNodeId);
     const rowCount = Math.ceil(itemsInGroup.length / itemsPerRow);
 
     // Cari baris yang sesuai dengan posisi Y
     for (let r = 0; r < rowCount; r++) {
-      // Hitung tinggi baris ini (ambil maksimum dari item di baris tersebut)
       const startIdx = r * itemsPerRow;
       const endIdx = Math.min(startIdx + itemsPerRow, itemsInGroup.length);
       const itemsInRow = itemsInGroup.slice(startIdx, endIdx);
 
-      let maxRowHeight = DIMENSIONS.baseItemHeight; // Default
+      let maxRowHeight = DIMENSIONS.baseItemHeight;
       if (groupNode.data?.rowHeights && groupNode.data.rowHeights[r]) {
         maxRowHeight = groupNode.data.rowHeights[r];
       } else {
-        // Fallback: hitung dari items yang ada
         for (const item of itemsInRow) {
           const itemServices = item.data?.services || [];
           const serviceCount = itemServices.length;
@@ -1876,30 +1944,133 @@ export default function CMDBVisualization() {
       currentY += maxRowHeight + gapY;
     }
 
-    const newIndex = row * itemsPerRow + col;
+    // Jika posisi Y di luar semua baris, letakkan di baris terakhir
+    if (relY > currentY && rowCount > 0) {
+      row = rowCount - 1;
+    }
 
-    if (newIndex >= 0 && newIndex <= currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode).length) {
-      // Hitung relativeY berdasarkan kumulatif tinggi baris sebelumnya
-      let targetRelativeY = padding + 40;
-      for (let r = 0; r < row; r++) {
-        const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
-        targetRelativeY += rowHeight + gapY;
+    const newIndex = row * itemsPerRow + col;
+    const maxIndex = itemsInGroup.length;
+
+    // Batasi index agar tidak melebihi jumlah items
+    const validIndex = Math.min(Math.max(0, newIndex), maxIndex);
+
+    // Hitung relativeY berdasarkan kumulatif tinggi baris sebelumnya
+    let targetRelativeY = padding + 40;
+    for (let r = 0; r < row; r++) {
+      const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
+      targetRelativeY += rowHeight + gapY;
+    }
+
+    return {
+      groupId: groupNode.id,
+      index: validIndex,
+      relativeX: padding + col * (itemWidth + gapX),
+      relativeY: targetRelativeY,
+      absoluteX: groupNode.position.x + padding + col * (itemWidth + gapX),
+      absoluteY: groupNode.position.y + targetRelativeY,
+    };
+  }, []);
+
+  const onNodeDrag = useCallback((event, node) => {
+    if (!draggedNode || node.id !== draggedNode) return;
+
+    const currentNodes = nodesRef.current;
+
+    // CASE 1: Node sudah dalam group (reorder dalam group yang sama)
+    if (node.parentNode) {
+      const groupNode = currentNodes.find(n => n.id === node.parentNode);
+      if (!groupNode) return;
+
+      const { itemsPerRow, itemWidth, gapX, gapY, padding } = DIMENSIONS;
+      const relX = node.position.x - padding;
+      const relY = node.position.y - padding - 40;
+
+      const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
+
+      // Hitung baris berdasarkan kumulatif tinggi baris dari groupNode
+      let row = 0;
+      let currentY = 0;
+      const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
+      const rowCount = Math.ceil(itemsInGroup.length / itemsPerRow);
+
+      // Cari baris yang sesuai dengan posisi Y
+      for (let r = 0; r < rowCount; r++) {
+        const startIdx = r * itemsPerRow;
+        const endIdx = Math.min(startIdx + itemsPerRow, itemsInGroup.length);
+        const itemsInRow = itemsInGroup.slice(startIdx, endIdx);
+
+        let maxRowHeight = DIMENSIONS.baseItemHeight;
+        if (groupNode.data?.rowHeights && groupNode.data.rowHeights[r]) {
+          maxRowHeight = groupNode.data.rowHeights[r];
+        } else {
+          for (const item of itemsInRow) {
+            const itemServices = item.data?.services || [];
+            const serviceCount = itemServices.length;
+            const itemHeight = DIMENSIONS.baseItemHeight + (serviceCount > 0 ? 20 + Math.ceil(serviceCount / DIMENSIONS.servicesPerRow) * DIMENSIONS.serviceHeight : 0);
+            maxRowHeight = Math.max(maxRowHeight, itemHeight);
+          }
+        }
+
+        const rowBottomY = currentY + maxRowHeight + gapY / 2;
+
+        if (relY <= rowBottomY) {
+          row = r;
+          break;
+        }
+
+        currentY += maxRowHeight + gapY;
       }
 
-      setHoverPosition({
-        groupId: node.parentNode,
-        index: newIndex,
-        relativeX: padding + col * (itemWidth + gapX),
-        relativeY: targetRelativeY,
-        absoluteX: groupNode.position.x + padding + col * (itemWidth + gapX),
-        absoluteY: groupNode.position.y + targetRelativeY,
-      });
+      const newIndex = row * itemsPerRow + col;
+
+      if (newIndex >= 0 && newIndex <= currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode).length) {
+        let targetRelativeY = padding + 40;
+        for (let r = 0; r < row; r++) {
+          const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
+          targetRelativeY += rowHeight + gapY;
+        }
+
+        setHoverPosition({
+          groupId: node.parentNode,
+          index: newIndex,
+          relativeX: padding + col * (itemWidth + gapX),
+          relativeY: targetRelativeY,
+          absoluteX: groupNode.position.x + padding + col * (itemWidth + gapX),
+          absoluteY: groupNode.position.y + targetRelativeY,
+        });
+        setHoveredGroup(node.parentNode); // Set hovered group untuk visual feedback
+      }
+    } else {
+      // CASE 2: Node di luar group, cek collision dengan group
+      const nodeSize = {
+        width: node.style?.width || DIMENSIONS.itemWidth,
+        height: node.style?.height || DIMENSIONS.baseItemHeight
+      };
+
+      const collidedGroup = checkGroupCollision(node.position, nodeSize);
+
+      if (collidedGroup) {
+        const dropPosition = calculateDropPositionInGroup(collidedGroup, draggedNode);
+        if (dropPosition) {
+          setHoverPosition(dropPosition);
+          setHoveredGroup(collidedGroup.id); // Set hovered group untuk visual feedback
+        }
+      } else {
+        setHoverPosition(null);
+        setHoveredGroup(null); // Clear hovered group
+      }
     }
-  }, [draggedNode]);
+  }, [draggedNode, checkGroupCollision, calculateDropPositionInGroup]);
 
   const onNodeDragStop = useCallback(async (event, node) => {
     const dragDuration = Date.now() - dragStateRef.current.startTime;
-    dragStateRef.current = { isDragging: false, startTime: 0 };
+    const originalParentId = dragStateRef.current.originalParentId;
+    dragStateRef.current = { isDragging: false, startTime: 0, originalParentId: null };
+
+    // Clear hovered group visual feedback dan reordering state
+    setHoveredGroup(null);
+    setIsReorderingInGroup(false);
 
     if (dragDuration < 100) {
       setDraggedNode(null);
@@ -1914,7 +2085,7 @@ export default function CMDBVisualization() {
       });
     }
 
-    if (!draggedNode || !hoverPosition || !node.parentNode) {
+    if (!draggedNode || !hoverPosition) {
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
@@ -1922,39 +2093,89 @@ export default function CMDBVisualization() {
     }
 
     try {
-      await api.patch(`/cmdb/${node.id}/reorder`, {
-        new_order: hoverPosition.index
-      });
+      const targetGroupId = hoverPosition.groupId;
+      const isNewGroup = node.parentNode !== targetGroupId;
 
-      setNodes(prevNodes => {
-        const updatedNodes = prevNodes.map(n => {
-          if (n.id === draggedNode) {
-            return {
-              ...n,
-              position: {
-                x: hoverPosition.relativeX,
-                y: hoverPosition.relativeY
-              },
-              data: {
-                ...n.data,
-                orderInGroup: hoverPosition.index
-              }
-            };
-          }
-          return n;
+      // CASE 1: Reorder dalam group yang sama
+      if (!isNewGroup && node.parentNode) {
+        await api.patch(`/cmdb/${node.id}/reorder`, {
+          new_order: hoverPosition.index
         });
 
-        nodesRef.current = updatedNodes;
-        return updatedNodes;
-      });
+        setNodes(prevNodes => {
+          const updatedNodes = prevNodes.map(n => {
+            if (n.id === draggedNode) {
+              return {
+                ...n,
+                position: {
+                  x: hoverPosition.relativeX,
+                  y: hoverPosition.relativeY
+                },
+                data: {
+                  ...n.data,
+                  orderInGroup: hoverPosition.index
+                }
+              };
+            }
+            return n;
+          });
 
-      setTimeout(() => {
-        isReorderingRef.current = false;
-        fetchAll();
-      }, 500);
+          nodesRef.current = updatedNodes;
+          return updatedNodes;
+        });
+
+        setTimeout(() => {
+          isReorderingRef.current = false;
+          fetchAll();
+        }, 500);
+      }
+      // CASE 2: Pindah ke group baru (dari luar group atau dari group lain)
+      else if (targetGroupId) {
+        const groupIdNumeric = parseInt(targetGroupId.replace('group-', ''));
+
+        toast.info('Memindahkan item ke group...');
+
+        // Update item dengan group baru dan order menggunakan endpoint spesifik
+        await api.patch(`/cmdb/${node.id}/group`, {
+          group_id: groupIdNumeric,
+          order_in_group: hoverPosition.index
+        });
+
+        // Update local state
+        setNodes(prevNodes => {
+          const updatedNodes = prevNodes.map(n => {
+            if (n.id === draggedNode) {
+              return {
+                ...n,
+                position: {
+                  x: hoverPosition.relativeX,
+                  y: hoverPosition.relativeY
+                },
+                parentNode: targetGroupId,
+                data: {
+                  ...n.data,
+                  groupId: groupIdNumeric,
+                  orderInGroup: hoverPosition.index
+                }
+              };
+            }
+            return n;
+          });
+
+          nodesRef.current = updatedNodes;
+          return updatedNodes;
+        });
+
+        toast.success('Item berhasil dipindahkan ke group!');
+
+        setTimeout(() => {
+          isReorderingRef.current = false;
+          fetchAll();
+        }, 500);
+      }
 
     } catch (err) {
-      console.error('Failed to reorder:', err);
+      console.error('Failed to move item:', err);
       toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
       isReorderingRef.current = false;
     } finally {
@@ -2269,6 +2490,37 @@ export default function CMDBVisualization() {
     toggleNodeVisibility(contextMenu.node.id);
 
   }, [contextMenu.node, toggleNodeVisibility]);
+
+  const handleContextRemoveFromGroup = useCallback(async () => {
+    if (!contextMenu.node || !contextMenu.node.parentNode) {
+      toast.error('Item tidak dalam group');
+      return;
+    }
+
+    const nodeId = contextMenu.node.id;
+
+    try {
+      toast.info('Mengeluarkan item dari group...');
+
+      // Update item dengan group_id null
+      await api.patch(`/cmdb/${nodeId}/group`, {
+        group_id: null,
+        order_in_group: null
+      });
+
+      toast.success('Item berhasil dikeluarkan dari group!');
+
+      // Fetch ulang data
+      setTimeout(() => {
+        fetchAll();
+      }, 300);
+
+    } catch (err) {
+      console.error('Failed to remove from group:', err);
+      toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
+    }
+  }, [contextMenu.node, fetchAll]);
+
     const toggleTableDrawer = useCallback(() => {
     setShowTableDrawer(prev => !prev);
   }, []);
@@ -2357,7 +2609,8 @@ export default function CMDBVisualization() {
   return (
     <div className="w-full h-screen flex flex-col">
       <VisualizationNavbar
-        draggedNode={draggedNode}
+        draggedNode={isReorderingInGroup ? draggedNode : null}
+        isReorderingInGroup={isReorderingInGroup}
         selectionMode={selectionMode}
         highlightMode={highlightMode}
         highlightedNodeId={highlightedNodeId}
@@ -2707,6 +2960,7 @@ export default function CMDBVisualization() {
             onDelete={handleContextDelete}
             onManageConnections={handleContextManageConnections}
             onManageGroupConnections={handleContextManageGroupConnections}
+            onRemoveFromGroup={handleContextRemoveFromGroup}
             onToggleVisibility={handleContextToggleVisibility}
             onClose={closeContextMenu}
           />

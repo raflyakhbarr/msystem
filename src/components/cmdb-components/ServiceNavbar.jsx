@@ -14,6 +14,7 @@ import ServiceSearchBar from './ServiceSearchBar';
 
 export default function ServiceNavbar({
   draggedNode,
+  isReorderingInGroup,
   isSaving,
   isAutoSaving,
   isAutoSaveEnabled,

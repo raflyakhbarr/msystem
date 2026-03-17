@@ -1,21 +1,29 @@
 import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const CustomGroupNode = memo(({ data }) => {
+const CustomGroupNode = memo(({ data, selected }) => {
   // Warna handle berdasarkan primary color
   const handleColor = 'hsl(var(--primary))';
-  
+
+  // Cek jika group sedang di-hover oleh dragged node
+  const isHovered = data.isHovered || false;
+  const borderColor = isHovered ? 'hsl(var(--primary))' : 'hsl(var(--primary))';
+  const borderWidth = isHovered ? '4px' : '2px';
+  const boxShadow = isHovered ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none';
+
   return (
     <div
       style={{
         top: '-11px',
         left: '-11px',
         backgroundColor: data.color || 'hsl(var(--primary) / 0.15)',
-        border: '2px solid hsl(var(--primary))',
+        border: `${borderWidth} solid ${borderColor}`,
         padding: '5px',
         minWidth: data.width || 200,
         minHeight: data.height || 250,
         position: 'relative',
+        boxShadow: boxShadow,
+        transition: isHovered ? 'all 0.2s ease-in-out' : 'none',
       }}
     >
       {/* TOP HANDLES */}

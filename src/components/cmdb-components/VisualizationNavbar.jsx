@@ -17,6 +17,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 export default function VisualizationNavbar({
   draggedNode,
+  isReorderingInGroup,
   selectionMode,
   highlightMode,
   highlightedNodeId,

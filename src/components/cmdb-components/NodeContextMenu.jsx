@@ -1,4 +1,4 @@
-import { Pencil, Trash2, Link, Eye, EyeOff, MoreVertical } from 'lucide-react';
+import { Pencil, Trash2, Link, Eye, EyeOff, MoreVertical, LogOut } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function NodeContextMenu({
@@ -10,12 +10,14 @@ export default function NodeContextMenu({
   onDelete,
   onManageConnections,
   onManageGroupConnections,
+  onRemoveFromGroup,
   onToggleVisibility,
   onClose,
 }) {
   if (!show || !node) return null;
 
   const isGroupNode = node.type === 'group';
+  const isInGroup = node.parentNode && !isGroupNode; // Item dalam group
 
   const items = [
     isGroupNode
@@ -33,6 +35,13 @@ export default function NodeContextMenu({
           color: 'hover:bg-blue-500 hover:text-white',
           iconColor: 'text-blue-600',
         },
+    ...(isInGroup ? [{
+      label: 'Keluarkan dari Group',
+      icon: <LogOut className="h-4 w-4" />,
+      onClick: onRemoveFromGroup,
+      color: 'hover:bg-orange-500 hover:text-white',
+      iconColor: 'text-orange-600',
+    }] : []),
     {
       label: 'Edit',
       icon: <Pencil className="h-4 w-4" />,

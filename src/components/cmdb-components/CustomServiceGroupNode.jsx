@@ -5,18 +5,26 @@ const CustomServiceGroupNode = memo(({ data, style }) => {
   // Warna handle berdasarkan service theme (green/teal untuk service level)
   const handleColor = '#10b981';
 
+  // Cek jika group sedang di-hover oleh dragged node
+  const isHovered = data.isHovered || false;
+  const borderColor = '#10b981';
+  const borderWidth = isHovered ? '4px' : '2px';
+  const boxShadow = isHovered ? '0 0 20px rgba(16, 185, 129, 0.5)' : 'none';
+
   return (
     <div
       style={{
         top: '-11px',
         left: '-11px',
         backgroundColor: data.color || 'rgba(16, 185, 129, 0.15)',
-        border: '2px solid #10b981',
+        border: `${borderWidth} solid ${borderColor}`,
         padding: '5px',
         width: style?.width || data.width || 200,
         height: style?.height || data.height || 200,
         position: 'relative',
         borderRadius: '8px',
+        boxShadow: boxShadow,
+        transition: isHovered ? 'all 0.2s ease-in-out' : 'none',
       }}
     >
       {/* TOP HANDLES */}
