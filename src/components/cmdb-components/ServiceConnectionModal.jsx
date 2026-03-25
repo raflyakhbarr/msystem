@@ -484,14 +484,14 @@ export default function ServiceConnectionModal({
 
   return (
     <Dialog open={show} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl overflow-hidden">
+        <DialogHeader className="px-6 pb-4 border-b">
           <DialogTitle>Kelola Koneksi Service</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-          <div className="p-3 bg-teal-50 rounded-lg border border-teal-200">
-            <p className="text-sm text-muted-foreground">Source Item:</p>
+        <div className="flex flex-col overflow-hidden" style={{ height: 'calc(90vh - 140px)' }}>
+          <div className="p-3 bg-teal-50 rounded-lg border border-teal-200 flex-shrink-0">
+            <p className="text-sm text-muted-foreground">Service Item:</p>
             <p className="font-semibold">{selectedItem?.name}</p>
           </div>
 
@@ -501,8 +501,8 @@ export default function ServiceConnectionModal({
             if (newTab === 'external') {
               setCrossServiceSearch('');
             }
-          }} className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-3">
+          }} className="flex-1 flex flex-col min-h-0 pt-5">
+            <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
               <TabsTrigger value="items">
                 Ke Items ({selectedConnections.length})
               </TabsTrigger>
@@ -514,15 +514,17 @@ export default function ServiceConnectionModal({
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="items" className="flex-1 overflow-hidden flex flex-col mt-4 space-y-3">
-              <Input
-                type="text"
-                placeholder="Cari items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <TabsContent value="items" className="flex-1 overflow-hidden flex flex-col mt-4 min-h-0">
+              <div className="space-y-3 px-1">
+                <Input
+                  type="text"
+                  placeholder="Cari items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-shrink-0"
+                />
 
-              <div className="flex-1 overflow-y-auto space-y-3">
+                <div className="overflow-y-auto px-1" style={{ maxHeight: 'calc(90vh - 300px)' }}>
                 {filteredItems.length > 0 ? (
                   filteredItems.map(item => {
                     const isConnected = selectedConnections.includes(item.id);
@@ -573,18 +575,21 @@ export default function ServiceConnectionModal({
                     {searchQuery ? 'No items match your search' : 'No items available'}
                   </p>
                 )}
+                </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="groups" className="flex-1 overflow-hidden flex flex-col mt-4 space-y-3">
-              <Input
-                type="text"
-                placeholder="Search groups..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <TabsContent value="groups" className="flex-1 overflow-hidden flex flex-col mt-4 min-h-0">
+              <div className="space-y-3 px-1">
+                <Input
+                  type="text"
+                  placeholder="Search groups..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-shrink-0"
+                />
 
-              <div className="flex-1 overflow-y-auto space-y-3">
+                <div className="overflow-y-auto px-1" style={{ maxHeight: 'calc(90vh - 300px)' }}>
                 {filteredGroups.length > 0 ? (
                   filteredGroups.map(group => {
                     const isConnected = selectedGroupConnections.includes(group.id);
@@ -642,78 +647,81 @@ export default function ServiceConnectionModal({
                     {searchQuery ? 'No groups match your search' : 'No groups available'}
                   </p>
                 )}
+                </div>
               </div>
             </TabsContent>
 
             {/* TAB 3: Cross-Service Connections */}
-            <TabsContent value="external" className="flex-1 overflow-hidden flex flex-col mt-4 space-y-3">
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-xs text-muted-foreground">Koneksi ke service item eksternal (dari service/CMDB lain)</p>
-              </div>
+            <TabsContent value="external" className="flex-1 overflow-hidden flex flex-col mt-4 min-h-0">
+              <div className="space-y-3 px-1">
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex-shrink-0">
+                  <p className="text-xs text-muted-foreground">Koneksi ke service item eksternal (dari service/CMDB lain)</p>
+                </div>
 
-              {crossServiceSelectedIds.length > 0 && (
-                <div className="p-3 border rounded-lg bg-blue-50 border-blue-500">
-                  <p className="font-semibold text-sm mb-3">Service Items Terpilih ({crossServiceSelectedIds.length})</p>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {crossServiceAvailableItems
-                      .filter(item => crossServiceSelectedIds.includes(item.id))
-                      .slice(0, 10)
-                      .map((item) => {
-                        const itemTypeId = crossServiceTypesMap[item.id]?.type || 'connects_to';
+                {crossServiceSelectedIds.length > 0 && (
+                  <div className="p-3 border rounded-lg bg-blue-50 border-blue-500 flex-shrink-0">
+                    <p className="font-semibold text-sm mb-3">Service Items Terpilih ({crossServiceSelectedIds.length})</p>
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {crossServiceAvailableItems
+                        .filter(item => crossServiceSelectedIds.includes(item.id))
+                        .slice(0, 10)
+                        .map((item) => {
+                          const itemTypeId = crossServiceTypesMap[item.id]?.type || 'connects_to';
 
-                        return (
-                          <div
-                            key={`selected-${item.id}`}
-                            className="p-3 bg-white rounded-lg border border-blue-200"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-2 flex-1">
-                                <Checkbox
-                                  checked={true}
-                                  onCheckedChange={() => handleCrossServiceToggle(item.id)}
-                                />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    {getTypeIcon(item.type)}
-                                    <span className="text-sm font-medium">{item.name}</span>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
-                                      {item.service_name || 'Service'}
-                                    </span>
-                                    <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
-                                      {item.cmdb_item_name || 'CMDB Item'}
-                                    </span>
-                                  </div>
+                          return (
+                            <div
+                              key={`selected-${item.id}`}
+                              className="p-3 bg-white rounded-lg border border-blue-200"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2 flex-1">
+                                  <Checkbox
+                                    checked={true}
+                                    onCheckedChange={() => handleCrossServiceToggle(item.id)}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {getTypeIcon(item.type)}
+                                      <span className="text-sm font-medium">{item.name}</span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                        {item.service_name || 'Service'}
+                                      </span>
+                                      <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">
+                                        {item.cmdb_item_name || 'CMDB Item'}
+                                      </span>
+                                    </div>
 
-                                  {/* Connection Type Selector - Simple & Clean */}
-                                  <div className="mt-2">
-                                    <CrossServiceConnectionTypeSelector
-                                      value={itemTypeId}
-                                      onChange={(typeSlug) => handleCrossServiceTypeChange(item.id, typeSlug)}
-                                      connectionTypes={crossServiceConnectionTypes}
-                                      placeholder="Pilih tipe koneksi"
-                                      size="small"
-                                    />
+                                    {/* Connection Type Selector - Simple & Clean */}
+                                    <div className="mt-2">
+                                      <CrossServiceConnectionTypeSelector
+                                        value={itemTypeId}
+                                        onChange={(typeSlug) => handleCrossServiceTypeChange(item.id, typeSlug)}
+                                        connectionTypes={crossServiceConnectionTypes}
+                                        placeholder="Pilih tipe koneksi"
+                                        size="small"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <Input
-                type="text"
-                placeholder="Cari service item, service, atau CMDB item..."
-                value={crossServiceSearch}
-                onChange={(e) => setCrossServiceSearch(e.target.value)}
-              />
+                <Input
+                  type="text"
+                  placeholder="Cari service item, service, atau CMDB item..."
+                  value={crossServiceSearch}
+                  onChange={(e) => setCrossServiceSearch(e.target.value)}
+                  className="flex-shrink-0"
+                />
 
-              <div className="flex-1 overflow-y-auto">
+                <div className="overflow-y-auto px-1" style={{ maxHeight: 'calc(90vh - 400px)' }}>
                 {isLoadingCrossService ? (
                   <p className="text-center py-8 text-muted-foreground text-sm">Loading...</p>
                 ) : (
@@ -820,12 +828,13 @@ export default function ServiceConnectionModal({
                     ))}
                   </div>
                 )}
+                </div>
               </div>
             </TabsContent>
           </Tabs>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+        <div className="flex items-center gap-2 justify-end px-6 py-4 border-t bg-background">
           <div className="flex-1 text-sm text-muted-foreground">
             {activeTab === 'external'
               ? `${crossServiceSelectedIds.length} koneksi eksternal`
@@ -851,7 +860,7 @@ export default function ServiceConnectionModal({
           >
             {activeTab === 'external' && isLoadingCrossService ? 'Menyimpan...' : 'Simpan'}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

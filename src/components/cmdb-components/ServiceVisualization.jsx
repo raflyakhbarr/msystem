@@ -129,12 +129,15 @@ const calculateCrossServicePropagatedStatuses = (
   });
 
   // Recursive function to get affected nodes
+  // If a node is problematic, all nodes that DEPEND on it are affected
   const getAffectedNodesRecursive = (nodeId, visited = new Set()) => {
     if (visited.has(nodeId) || !graph[nodeId]) {
       return visited;
     }
     visited.add(nodeId);
 
+    // Get dependents (nodes yang bergantung pada nodeId ini)
+    // Jika A bermasalah dan B depends on A, maka B terpengaruh
     const dependents = graph[nodeId].dependents;
     dependents.forEach((dependentId) => {
       getAffectedNodesRecursive(dependentId, visited);
@@ -213,8 +216,9 @@ const calculateCrossServicePropagatedStatuses = (
         propagatedFrom = allAffecting.map(s => s.sourceId);
         effectiveEdgeStatus = worstStatus;
       } else {
-        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-        effectiveEdgeStatus = priorities[sourceStatus] > priorities[targetStatus] ? sourceStatus : targetStatus;
+        // No propagation - edge status is based on source item status
+        // Each edge is independent and should only reflect its own source status
+        effectiveEdgeStatus = sourceStatus;
       }
     } else {
       let dependentId, dependencyId;
@@ -248,7 +252,9 @@ const calculateCrossServicePropagatedStatuses = (
         propagatedFrom = affectingSources.map(s => s.sourceId);
         effectiveEdgeStatus = worstStatus;
       } else {
-        effectiveEdgeStatus = dependencyId === targetId ? targetStatus : sourceStatus;
+        // No propagation - edge status is based on source item status
+        // Each edge is independent and should only reflect its own source status
+        effectiveEdgeStatus = sourceStatus;
       }
     }
 
@@ -678,6 +684,108 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
     return () => {
       socket.off('service_item_status_update', handleStatusUpdate);
+    };
+  }, [socket, service?.id, workspaceId]);
+
+  // Listen for cross-service connection updates (create/update/delete)
+  useEffect(() => {
+    if (!socket || !service?.id || !workspaceId) return;
+
+    const handleCrossServiceConnectionUpdate = async (data) => {
+      // Only care about updates in the same workspace
+      if (data.workspaceId !== workspaceId) return;
+
+      // Only care if it involves this service (either as source or target)
+      if (data.sourceServiceId !== service.id && data.targetServiceId !== service.id) return;
+
+      console.log('📡 Cross-service connection update - refreshing data:', data);
+
+      try {
+        // Fetch external item positions
+        const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
+          params: { workspaceId }
+        });
+        const positions = {};
+        positionsResponse.data.forEach(pos => {
+          positions[pos.external_service_item_id] = pos.position;
+        });
+        setExternalItemPositions(positions);
+
+        // Fetch cross-service edge handles
+        const edgeHandlesResponse = await api.get(`/cross-service-connections/edge-handles/workspace/${workspaceId}`);
+        const edgeHandlesMap = {};
+        edgeHandlesResponse.data.forEach(handle => {
+          edgeHandlesMap[handle.edge_id] = {
+            sourceHandle: handle.source_handle,
+            targetHandle: handle.target_handle
+          };
+        });
+        setCrossServiceEdgeHandles(edgeHandlesMap);
+
+        // Fetch updated cross-service connections
+        const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+        const connections = response.data;
+
+        // Filter connections that involve this service
+        const relevantConnections = connections.filter(conn => {
+          const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
+          return isRelevant;
+        });
+        setCrossServiceConnections(relevantConnections);
+        setCrossServiceUpdateKey(prev => prev + 1);
+
+        // Fetch external service items
+        const externalItems = [];
+        const externalItemIds = new Set();
+
+        relevantConnections.forEach(conn => {
+          const isSourceLocal = conn.source_service_id === service.id;
+
+          if (isSourceLocal) {
+            if (!externalItemIds.has(conn.target_service_item_id)) {
+              const savedPosition = positions[conn.target_service_item_id];
+              externalItems.push({
+                id: conn.target_service_item_id,
+                name: conn.target_name,
+                type: conn.target_type,
+                status: conn.target_status,
+                cmdbItemId: conn.target_cmdb_item_id,
+                serviceId: conn.target_service_id,
+                serviceName: conn.target_service_name || 'Unknown Service',
+                cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
+                position: savedPosition ? savedPosition : { x: 0, y: 0 },
+              });
+              externalItemIds.add(conn.target_service_item_id);
+            }
+          } else {
+            if (!externalItemIds.has(conn.source_service_item_id)) {
+              const savedPosition = positions[conn.source_service_item_id];
+              externalItems.push({
+                id: conn.source_service_item_id,
+                name: conn.source_name,
+                type: conn.source_type,
+                status: conn.source_status,
+                cmdbItemId: conn.source_cmdb_item_id,
+                serviceId: conn.source_service_id,
+                serviceName: conn.source_service_name || 'Unknown Service',
+                cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
+                position: savedPosition ? savedPosition : { x: 0, y: 0 },
+              });
+              externalItemIds.add(conn.source_service_item_id);
+            }
+          }
+        });
+
+        setExternalServiceItems(externalItems);
+      } catch (error) {
+        console.error('Failed to refresh cross-service connections after update:', error);
+      }
+    };
+
+    socket.on('cross_service_connection_update', handleCrossServiceConnectionUpdate);
+
+    return () => {
+      socket.off('cross_service_connection_update', handleCrossServiceConnectionUpdate);
     };
   }, [socket, service?.id, workspaceId]);
 
@@ -2761,23 +2869,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
         }}
         onSave={handleSaveConnections}
         workspaceId={workspaceId}
-        onCrossServiceSave={async () => {
-          // Refresh cross-service connections
-          try {
-            const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
-            const connections = response.data;
-
-            // Filter connections that involve service items from this service
-            const serviceItemIds = items.map(item => item.id);
-            const relevantConnections = connections.filter(conn =>
-              serviceItemIds.includes(conn.source_service_item_id) ||
-              serviceItemIds.includes(conn.target_service_item_id)
-            );
-
-            setCrossServiceConnections(relevantConnections);
-          } catch (error) {
-            console.error('Failed to refresh cross-service connections:', error);
-          }
+        onCrossServiceSave={() => {
+          // Cross-service connection updates will be handled automatically via socket
+          console.log('✅ Cross-service connection saved - socket will auto-refresh');
         }}
       />
 

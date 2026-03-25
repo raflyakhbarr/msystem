@@ -78,6 +78,18 @@ export const SocketProvider = ({ children }) => {
         console.log('📡 CMDB update received');
         // Let parent components handle this
       });
+
+      // Cross-service connection updates
+      socket.on('cross_service_connection_update', (data) => {
+        const { workspaceId, serviceId, connectionId, action } = data;
+        console.log('📡 Cross-service connection update received:', {
+          workspaceId,
+          serviceId,
+          connectionId,
+          action
+        });
+        // Components handle this via their own listeners
+      });
     }
 
     // Cleanup on unmount

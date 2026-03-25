@@ -82,6 +82,48 @@ export default function CustomNode({ data, id }) {
     };
   }, [data.workspaceId, registerStatusCallback]);
 
+  // Fetch all service items on mount (for badge counts)
+  useEffect(() => {
+    if (!data.workspaceId || !services || services.length === 0) return;
+
+    const fetchAllServiceItems = async () => {
+      const serviceIds = services.map(s => s.id);
+
+      // Fetch items for each service in parallel
+      const promises = serviceIds.map(async (serviceId) => {
+        try {
+          const response = await api.get(`/service-items/${serviceId}/items?workspace_id=${data.workspaceId}`);
+          return { serviceId, items: response.data };
+        } catch (error) {
+          console.error(`Failed to fetch items for service ${serviceId}:`, error);
+          return { serviceId, items: [] };
+        }
+      });
+
+      const results = await Promise.all(promises);
+
+      // Populate serviceItemsMap with all results
+      const itemsMap = {};
+      results.forEach(({ serviceId, items }) => {
+        if (Array.isArray(items)) {
+          // Apply any pending status updates from socket
+          const itemsWithStatus = items.map(item => {
+            const socketStatus = getServiceItemStatus(item.id);
+            if (socketStatus) {
+              return { ...item, status: socketStatus };
+            }
+            return item;
+          });
+          itemsMap[serviceId] = itemsWithStatus;
+        }
+      });
+
+      setServiceItemsMap(itemsMap);
+    };
+
+    fetchAllServiceItems();
+  }, [data.workspaceId, services]);
+
   // Listen for service updates to refresh service items only
   // (Service status will be updated via props from parent CMDBVisualization)
   useEffect(() => {
