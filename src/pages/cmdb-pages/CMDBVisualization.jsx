@@ -62,13 +62,15 @@ import QuickConnectionModal from '../../components/cmdb-components/QuickConnecti
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
+import ImportModal from '@/components/cmdb-components/ImportModal';
+import ImportPreviewModal from '@/components/cmdb-components/ImportPreviewModal';
 import ShareModal from '@/components/cmdb-components/ShareModal';
 import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import StorageFormModal from '../../components/cmdb-components/StorageFormModal';
 import { toast } from 'sonner';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { MousePointer2, GitBranch, Link, Pencil, Trash2, Eye, EyeOff, Search, ChevronsUpDown } from 'lucide-react';
+import { MousePointer2, GitBranch, Link, Pencil, Trash2, Eye, EyeOff, Search, ChevronsUpDown, Upload } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import { useUndoRedo } from '../../hooks/cmdb-hooks/useUndoRedo';
@@ -265,6 +267,8 @@ export default function CMDBVisualization() {
 
   // Modal states
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreviewId, setImportPreviewId] = useState(null);
   const [highlightMode, setHighlightMode] = useState(false);
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
@@ -856,6 +860,25 @@ export default function CMDBVisualization() {
     setServiceIconUploads({});
     setShowItemModal(true);
   }, []);
+
+  const handleOpenImport = useCallback(() => {
+    setShowImportModal(true);
+  }, []);
+
+  const handleImportComplete = useCallback((previewId) => {
+    setImportPreviewId(previewId);
+    setShowImportModal(false);
+  }, []);
+
+  const handleImportConfirm = useCallback((result) => {
+    // Refresh data after import
+    fetchAll();
+
+    // Emit socket update
+    if (socket) {
+      socket.emit('cmdb_update');
+    }
+  }, [fetchAll, socket]);
 
   const handleEditItem = useCallback((item) => {
     const itemServices = services[item.id] || [];
@@ -2724,6 +2747,7 @@ export default function CMDBVisualization() {
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
         onOpenExportModal={() => setShowExportModal(true)}
+        onOpenImportModal={handleOpenImport}
         onOpenShareModal={() => setShowShareModal(true)}
         showTableDrawer={showTableDrawer}
         onToggleTableDrawer={toggleTableDrawer}
@@ -3197,7 +3221,23 @@ export default function CMDBVisualization() {
       <ExportModal
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
+        workspaceId={currentWorkspace?.id}
         onExport={exportVisualization}
+      />
+
+      <ImportModal
+        show={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        workspaceId={currentWorkspace?.id}
+        onImportComplete={handleImportComplete}
+      />
+
+      <ImportPreviewModal
+        show={!!importPreviewId}
+        onClose={() => setImportPreviewId(null)}
+        workspaceId={currentWorkspace?.id}
+        previewId={importPreviewId}
+        onConfirm={handleImportConfirm}
       />
 
       <ShareModal

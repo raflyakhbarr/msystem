@@ -1,6 +1,6 @@
 import {
   Eye, Save, Plus, Layers, MousePointer2, Square,
-  GitBranch, Download, Hand, Undo2, Redo2,
+  GitBranch, Download, Upload, Hand, Undo2, Redo2,
   ToggleRight, ToggleLeft, Highlighter, ChevronDown, Table,
   Map, Crosshair, Maximize2, Share2, Tag
 } from 'lucide-react';
@@ -45,6 +45,7 @@ export default function VisualizationNavbar({
   onOpenAddItem,
   onOpenManageGroups,
   onOpenExportModal,
+  onOpenImportModal,
   onOpenShareModal,
   showTableDrawer,
   onToggleTableDrawer,
@@ -147,6 +148,17 @@ export default function VisualizationNavbar({
               >
                 <Download />
                 <span className="hidden lg:inline ml-1">Export</span>
+              </Button>
+
+              <Button
+                onClick={onOpenImportModal}
+                title="Import Data"
+                variant="secondary"
+                size="sm"
+                disabled={!currentWorkspace}
+              >
+                <Upload />
+                <span className="hidden lg:inline ml-1">Import</span>
               </Button>
 
               <Button
