@@ -54,6 +54,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           zIndex: 0,
           opacity: isHidden ? 0.3 : 1,
           pointerEvents: isHidden ? 'none' : 'all',
+          borderRadius: '8px',
         },
         draggable: !isHidden,
         hidden: isHidden,

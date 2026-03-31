@@ -19,9 +19,10 @@ const CustomGroupNode = memo(({ data, selected }) => {
         backgroundColor: data.color || 'hsl(var(--primary) / 0.15)',
         border: `${borderWidth} solid ${borderColor}`,
         padding: '5px',
-        minWidth: data.width || 200,
-        minHeight: data.height || 250,
+        minWidth: data.width || 300,
+        minHeight: data.height || 200,
         position: 'relative',
+        borderRadius: '8px',
         boxShadow: boxShadow,
         transition: isHovered ? 'all 0.2s ease-in-out' : 'none',
       }}

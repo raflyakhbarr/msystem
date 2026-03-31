@@ -41,8 +41,18 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   const totalRowHeights = rowHeights.reduce((sum, height) => sum + height, 0);
   const totalGapY = (rows - 1) * gapY;
 
-  const width = Math.min(itemsPerRow, itemCount) * (itemWidth + gapX) + padding * 2;
-  const height = totalRowHeights + totalGapY + padding * 2 + 40;
+  // Hitung width dan height dinamis
+  // Width: (jumlah kolom × lebar item) + (gap antar kolom) + padding kiri-kanan
+  const colCount = Math.min(itemsPerRow, itemCount);
+  const calculatedWidth = (colCount * itemWidth) + ((colCount - 1) * gapX) + padding * 2;
+  const calculatedHeight = totalRowHeights + totalGapY + padding * 2 + 40;
+
+  // Apply minimum size untuk group kosong
+  const minWidth = 200;  // Minimum width untuk group kosong
+  const minHeight = 150; // Minimum height untuk group kosong
+
+  const width = Math.max(calculatedWidth, minWidth);
+  const height = Math.max(calculatedHeight, minHeight);
 
   return {
     width,
@@ -70,13 +80,13 @@ export const getBestHandlePositions = (sourceNode, targetNode) => {
     let targetPosY = targetNode.position.y;
     
     if (sourceNode.type === 'group') {
-      sourcePosX += (sourceNode.data.width || 200) / 2;
-      sourcePosY += (sourceNode.data.height || 250) / 2;
+      sourcePosX += (sourceNode.data.width || 300) / 2;
+      sourcePosY += (sourceNode.data.height || 200) / 2;
     }
-    
+
     if (targetNode.type === 'group') {
-      targetPosX += (targetNode.data.width || 200) / 2;
-      targetPosY += (targetNode.data.height || 250) / 2;
+      targetPosX += (targetNode.data.width || 300) / 2;
+      targetPosY += (targetNode.data.height || 200) / 2;
     }
     
     const dx = targetPosX - sourcePosX;

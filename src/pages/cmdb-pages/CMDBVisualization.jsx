@@ -1907,8 +1907,8 @@ export default function CMDBVisualization() {
     const groups = currentNodes.filter(n => n.type === 'group');
 
     for (const group of groups) {
-      const groupWidth = group.data?.width || 200;
-      const groupHeight = group.data?.height || 250;
+      const groupWidth = group.data?.width;
+      const groupHeight = group.data?.height;
 
       // Hitung center dari node
       const nodeCenterX = nodePosition.x + nodeSize.width / 2;
@@ -1945,44 +1945,10 @@ export default function CMDBVisualization() {
 
     const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
 
-    // Hitung baris berdasarkan kumulatif tinggi baris
-    let row = 0;
-    let currentY = 0;
+    // Hitung baris menggunakan fixed height untuk smooth performance (O(1) complexity)
     const itemsInGroup = currentNodes.filter(n => n.parentNode === groupNode.id && n.id !== draggedNodeId);
-    const rowCount = Math.ceil(itemsInGroup.length / itemsPerRow);
-
-    // Cari baris yang sesuai dengan posisi Y
-    for (let r = 0; r < rowCount; r++) {
-      const startIdx = r * itemsPerRow;
-      const endIdx = Math.min(startIdx + itemsPerRow, itemsInGroup.length);
-      const itemsInRow = itemsInGroup.slice(startIdx, endIdx);
-
-      let maxRowHeight = DIMENSIONS.baseItemHeight;
-      if (groupNode.data?.rowHeights && groupNode.data.rowHeights[r]) {
-        maxRowHeight = groupNode.data.rowHeights[r];
-      } else {
-        for (const item of itemsInRow) {
-          const itemServices = item.data?.services || [];
-          const serviceCount = itemServices.length;
-          const itemHeight = DIMENSIONS.baseItemHeight + (serviceCount > 0 ? 20 + Math.ceil(serviceCount / DIMENSIONS.servicesPerRow) * DIMENSIONS.serviceHeight : 0);
-          maxRowHeight = Math.max(maxRowHeight, itemHeight);
-        }
-      }
-
-      const rowBottomY = currentY + maxRowHeight + gapY / 2;
-
-      if (relY <= rowBottomY) {
-        row = r;
-        break;
-      }
-
-      currentY += maxRowHeight + gapY;
-    }
-
-    // Jika posisi Y di luar semua baris, letakkan di baris terakhir
-    if (relY > currentY && rowCount > 0) {
-      row = rowCount - 1;
-    }
+    const itemHeight = DIMENSIONS.baseItemHeight;
+    const row = Math.max(0, Math.floor(Math.max(0, relY) / (itemHeight + gapY)));
 
     const newIndex = row * itemsPerRow + col;
     const maxIndex = itemsInGroup.length;
@@ -1990,12 +1956,8 @@ export default function CMDBVisualization() {
     // Batasi index agar tidak melebihi jumlah items
     const validIndex = Math.min(Math.max(0, newIndex), maxIndex);
 
-    // Hitung relativeY berdasarkan kumulatif tinggi baris sebelumnya
-    let targetRelativeY = padding + 40;
-    for (let r = 0; r < row; r++) {
-      const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
-      targetRelativeY += rowHeight + gapY;
-    }
+    // Hitung relativeY menggunakan fixed height untuk smooth performance
+    const targetRelativeY = padding + 40 + row * (itemHeight + gapY);
 
     return {
       groupId: groupNode.id,
@@ -2023,48 +1985,18 @@ export default function CMDBVisualization() {
 
       const col = Math.max(0, Math.min(itemsPerRow - 1, Math.round(relX / (itemWidth + gapX))));
 
-      // Hitung baris berdasarkan kumulatif tinggi baris dari groupNode
-      let row = 0;
-      let currentY = 0;
-      const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
-      const rowCount = Math.ceil(itemsInGroup.length / itemsPerRow);
-
-      // Cari baris yang sesuai dengan posisi Y
-      for (let r = 0; r < rowCount; r++) {
-        const startIdx = r * itemsPerRow;
-        const endIdx = Math.min(startIdx + itemsPerRow, itemsInGroup.length);
-        const itemsInRow = itemsInGroup.slice(startIdx, endIdx);
-
-        let maxRowHeight = DIMENSIONS.baseItemHeight;
-        if (groupNode.data?.rowHeights && groupNode.data.rowHeights[r]) {
-          maxRowHeight = groupNode.data.rowHeights[r];
-        } else {
-          for (const item of itemsInRow) {
-            const itemServices = item.data?.services || [];
-            const serviceCount = itemServices.length;
-            const itemHeight = DIMENSIONS.baseItemHeight + (serviceCount > 0 ? 20 + Math.ceil(serviceCount / DIMENSIONS.servicesPerRow) * DIMENSIONS.serviceHeight : 0);
-            maxRowHeight = Math.max(maxRowHeight, itemHeight);
-          }
-        }
-
-        const rowBottomY = currentY + maxRowHeight + gapY / 2;
-
-        if (relY <= rowBottomY) {
-          row = r;
-          break;
-        }
-
-        currentY += maxRowHeight + gapY;
-      }
+      // Hitung baris menggunakan fixed height seperti ServiceVisualization (O(1) complexity)
+      // Use fixed itemHeight for smooth performance during drag
+      const itemHeight = DIMENSIONS.baseItemHeight;
+      const row = Math.max(0, Math.floor(Math.max(0, relY) / (itemHeight + gapY)));
 
       const newIndex = row * itemsPerRow + col;
+      const itemsInGroup = currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode);
 
-      if (newIndex >= 0 && newIndex <= currentNodes.filter(n => n.parentNode === node.parentNode && n.id !== draggedNode).length) {
-        let targetRelativeY = padding + 40;
-        for (let r = 0; r < row; r++) {
-          const rowHeight = groupNode.data?.rowHeights?.[r] || DIMENSIONS.baseItemHeight;
-          targetRelativeY += rowHeight + gapY;
-        }
+      if (newIndex >= 0 && newIndex <= itemsInGroup.length) {
+        // Calculate targetRelativeY using fixed height for smooth performance
+        const itemHeight = DIMENSIONS.baseItemHeight;
+        const targetRelativeY = padding + 40 + row * (itemHeight + gapY);
 
         setHoverPosition({
           groupId: node.parentNode,

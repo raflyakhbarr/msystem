@@ -806,7 +806,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
       const itemCount = groupItems.length;
       const { itemsPerRow, itemWidth, itemHeight, gapX, gapY, padding, headerHeight } = DIMENSIONS;
       const rows = Math.ceil(itemCount / itemsPerRow);
-      const width = Math.max(200, padding * 2 + itemsPerRow * (itemWidth + gapX));
+      const colCount = Math.min(itemsPerRow, itemCount);
+      // Width: gunakan rumus yang sama dengan positioning: padding + colCount * (itemWidth + gapX) + padding
+      const width = Math.max(200, padding + colCount * (itemWidth + gapX) + padding);
       const height = Math.max(150, headerHeight + padding * 2 + rows * (itemHeight + gapY));
 
       const groupPos = parsePosition(group.position);
@@ -830,6 +832,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           width: width,
           height: height,
           zIndex: 0,
+          borderRadius: '8px',
         },
       });
 
