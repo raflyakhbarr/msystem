@@ -1,16 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Pencil, Trash2, Link, Plus, Layers, Eye } from 'lucide-react';
-import { Button } from "@/components/ui/button"; 
+import { Button } from "@/components/ui/button";
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
-import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace'; 
+import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
+import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
-import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitcher'; 
+import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitcher';
 import DataTable from '../../components/common/DataTable';
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from 'sonner'; 
@@ -103,6 +104,30 @@ export default function CMDBItem() {
     deleteGroup,
     loading,
   } = useCMDB(currentWorkspace?.id, viewAllMode);
+
+  // Services state
+  const [services, setServices] = useState({});
+
+  // Fetch services for all items
+  useEffect(() => {
+    const fetchServices = async () => {
+      const servicesMap = {};
+      for (const item of items) {
+        try {
+          const res = await api.get(`/services/${item.id}`);
+          servicesMap[item.id] = res.data;
+        } catch (err) {
+          console.error(`Failed to fetch services for item ${item.id}:`, err);
+          servicesMap[item.id] = [];
+        }
+      }
+      setServices(servicesMap);
+    };
+
+    if (items.length > 0) {
+      fetchServices();
+    }
+  }, [items]);
 
   const {
     selectedFiles,
@@ -561,6 +586,44 @@ export default function CMDBItem() {
           );
         },
       },
+      {
+        key: 'services',
+        label: 'Services',
+        searchable: false,
+        sortable: true,
+        render: (item) => {
+          const itemServices = services[item.id] || [];
+          const count = itemServices.length;
+          return (
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                count === 0
+                  ? 'bg-gray-100 text-gray-600'
+                  : 'bg-blue-100 text-blue-700'
+              }`}>
+                {count} Service{count !== 1 ? 's' : ''}
+              </span>
+              {count > 0 && (
+                <div className="flex gap-1">
+                  {itemServices.slice(0, 3).map((service, idx) => (
+                    <div
+                      key={idx}
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor: service.status === 'active' ? '#22c55e' : '#ef4444'
+                      }}
+                      title={`${service.name} (${service.status})`}
+                    />
+                  ))}
+                  {count > 3 && (
+                    <span className="text-xs text-gray-500">+{count - 3}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
       // TAMBAHKAN KOLOM WORKSPACE di View All Mode
       ...(viewAllMode ? [{
         key: 'workspace_id',
@@ -588,11 +651,43 @@ export default function CMDBItem() {
         searchable: false,
         sortable: false,
         render: (item) => {
-          const info = getConnectionInfo(item.id);
+          // Ambil semua koneksi dari item ini
+          const itemConnections = connections.filter(conn => conn.source_id === item.id);
+
+          if (itemConnections.length === 0) {
+            return <span className="text-gray-400 text-xs">Tidak ada koneksi</span>;
+          }
+
+          // Group koneksi berdasarkan tipe
+          const connectionsByType = {};
+          itemConnections.forEach(conn => {
+            const type = conn.connection_type || 'depends_on';
+            if (!connectionsByType[type]) {
+              connectionsByType[type] = [];
+            }
+            connectionsByType[type].push(conn);
+          });
+
           return (
-            <div className="text-xs">
-              <div className="text-blue-600">↑ {info.dependencies} dependencies</div>
-              <div className="text-green-600">↓ {info.dependents} dependents</div>
+            <div className="space-y-1">
+              {Object.entries(connectionsByType).map(([type, conns]) => {
+                const connType = CONNECTION_TYPES[type] || CONNECTION_TYPES.depends_on;
+                return (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 text-xs"
+                    title={connType.description}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: connType.color }}
+                    />
+                    <span className="text-gray-700">
+                      {connType.label}: {conns.length}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           );
         },
@@ -661,7 +756,7 @@ export default function CMDBItem() {
         ),
       },
     ],
-    [connections, groups, viewAllMode, workspaces] // TAMBAHKAN viewAllMode, workspaces
+    [connections, groups, viewAllMode, workspaces, services] // TAMBAHKAN services ke dependencies
   );
 
   return (
