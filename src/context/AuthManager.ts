@@ -10,6 +10,9 @@ interface AuthState {
   tokenExpiry: string | null;
 }
 
+// ⚠️ DEV MODE: Check apakah authentication harus dibypass
+const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === 'true' || import.meta.env.NODE_ENV === 'development';
+
 class AuthManager {
   private state: AuthState = {
     token: null,
@@ -22,18 +25,49 @@ class AuthManager {
   private listeners: Set<(state: AuthState) => void> = new Set();
 
   getState(): AuthState {
+    // 🔓 BYPASS MODE: Return mock state untuk development
+    if (BYPASS_AUTH && !this.state.token) {
+      return {
+        token: 'dev_bypass_token',
+        user: {
+          id: 0,
+          username: 'dev_user',
+          email: 'dev@example.com',
+          role: 'admin',
+        },
+        username: 'dev_user',
+        password: null,
+        tokenExpiry: null,
+      };
+    }
     return { ...this.state };
   }
 
   getToken(): string | null {
+    if (BYPASS_AUTH) {
+      return 'dev_bypass_token';
+    }
     return this.state.token;
   }
 
   getUser(): UserData | null {
+    if (BYPASS_AUTH) {
+      return {
+        id: 0,
+        username: 'dev_user',
+        email: 'dev@example.com',
+        role: 'admin',
+      };
+    }
     return this.state.user;
   }
 
   isAuthenticated(): boolean {
+    // 🔓 BYPASS MODE: Selalu return true di development
+    if (BYPASS_AUTH) {
+      console.log('🔓 [AuthManager] AUTH BYPASS MODE - Always authenticated');
+      return true;
+    }
     return !!this.state.token;
   }
 

@@ -216,7 +216,7 @@ export default function CMDBVisualization() {
   const [quickConnectionTarget, setQuickConnectionTarget] = useState(null);
 
   // Connection labels visibility
-  const [showConnectionLabels, setShowConnectionLabels] = useState(true);
+  const [showConnectionLabels, setShowConnectionLabels] = useState(false);
 
   // Edge Context Menu states
   const [edgeContextMenu, setEdgeContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, edge: null });
@@ -252,6 +252,7 @@ export default function CMDBVisualization() {
   const {
     workspaces,
     currentWorkspace,
+    viewAllMode,
     switchWorkspace,
     createWorkspace,
     updateWorkspace,
@@ -1742,7 +1743,6 @@ export default function CMDBVisualization() {
           { value: 'active', label: 'Active', color: STATUS_COLORS.active },
           { value: 'inactive', label: 'Inactive', color: STATUS_COLORS.inactive },
           { value: 'maintenance', label: 'Maintenance', color: STATUS_COLORS.maintenance },
-          { value: 'decommissioned', label: 'Decommissioned', color: STATUS_COLORS.decommissioned },
         ],
         searchable: true,
         sortable: true,
@@ -1767,7 +1767,7 @@ export default function CMDBVisualization() {
           const groupId = item.group_id;
           const group = groups.find(g => g.id === groupId);
           return group ? (
-            <span className="px-2 py-1 rounded text-xs" style={{
+            <span className="px-2 py-1 rounded text-xs text-black" style={{
               backgroundColor: group.color,
               border: '1px solid #6366f1'
             }}>
@@ -1779,16 +1779,106 @@ export default function CMDBVisualization() {
         },
       },
       {
+        key: 'services',
+        label: 'Services',
+        searchable: false,
+        sortable: true,
+        render: (item) => {
+          const itemServices = services[item.id] || [];
+          const count = itemServices.length;
+          return (
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                count === 0
+                  ? 'bg-gray-100 text-gray-600'
+                  : 'bg-blue-100 text-blue-700'
+              }`}>
+                {count} Service{count !== 1 ? 's' : ''}
+              </span>
+              {count > 0 && (
+                <div className="flex gap-1">
+                  {itemServices.slice(0, 3).map((service, idx) => (
+                    <div
+                      key={idx}
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor: service.status === 'active' ? '#22c55e' : '#ef4444'
+                      }}
+                      title={`${service.name} (${service.status})`}
+                    />
+                  ))}
+                  {count > 3 && (
+                    <span className="text-xs text-gray-500">+{count - 3}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      ...(viewAllMode ? [{
+        key: 'workspace_id',
+        label: 'Workspace',
+        sortable: true,
+        searchable: true,
+        isEnum: true,
+        enumOptions: [
+          ...workspaces.map(w => ({ value: w.id.toString(), label: w.name }))
+        ],
+        render: (item) => {
+          const workspace = workspaces.find(w => w.id === item.workspace_id);
+          return workspace ? (
+            <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-800 border border-purple-300">
+              {workspace.name}
+            </span>
+          ) : (
+            <span className="text-gray-400 text-xs">-</span>
+          );
+        },
+      }] : []),
+      {
         key: 'connections',
         label: 'Koneksi',
         searchable: false,
         sortable: false,
         render: (item) => {
-          const info = getConnectionInfo(item.id);
+          // Ambil semua koneksi dari item ini
+          const itemConnections = connections.filter(conn => conn.source_id === item.id);
+
+          if (itemConnections.length === 0) {
+            return <span className="text-gray-400 text-xs">Tidak ada koneksi</span>;
+          }
+
+          // Group koneksi berdasarkan tipe
+          const connectionsByType = {};
+          itemConnections.forEach(conn => {
+            const type = conn.connection_type || 'depends_on';
+            if (!connectionsByType[type]) {
+              connectionsByType[type] = [];
+            }
+            connectionsByType[type].push(conn);
+          });
+
           return (
-            <div className="text-xs">
-              <div className="text-blue-600">↑ {info.dependencies} dependencies</div>
-              <div className="text-green-600">↓ {info.dependents} dependents</div>
+            <div className="space-y-1">
+              {Object.entries(connectionsByType).map(([type, conns]) => {
+                const connType = CONNECTION_TYPES[type] || CONNECTION_TYPES.depends_on;
+                return (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 text-xs"
+                    title={connType.description}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: connType.color }}
+                    />
+                    <span className="text-gray-700">
+                      {connType.label}: {conns.length}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           );
         },
@@ -1853,7 +1943,7 @@ export default function CMDBVisualization() {
         ),
       },
     ],
-    [connections, groups, getConnectionInfo, handleOpenConnectionModal, handleEditItem, handleDeleteFromVisualization]
+    [connections, groups, viewAllMode, workspaces, services, getConnectionInfo, handleOpenConnectionModal, handleEditItem, handleDeleteFromVisualization]
   );
 
   const toggleNodeVisibility = useCallback((nodeId) => {
@@ -3034,6 +3124,9 @@ export default function CMDBVisualization() {
               onExport={(data) => {
                 return data.map(item => {
                   const group = groups.find(g => g.id === item.group_id);
+                  const itemServices = services[item.id] || [];
+                  const workspace = workspaces.find(w => w.id === item.workspace_id);
+
                   return {
                     'Nama': item.name || '',
                     'Type': item.type || '',
@@ -3043,7 +3136,10 @@ export default function CMDBVisualization() {
                     'Location': item.location || '',
                     'Group': group ? group.name : '-',
                     'Environment Type': item.env_type || '',
+                    'Services': itemServices.length,
+                    'Active Services': itemServices.filter(s => s.status === 'active').length,
                     'Description': item.description || '',
+                    ...(viewAllMode && workspace ? { 'Workspace': workspace.name } : {}),
                   };
                 });
               }}

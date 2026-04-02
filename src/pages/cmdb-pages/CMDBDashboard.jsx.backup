@@ -3,8 +3,7 @@ import {
   Activity, Server, AlertTriangle, CheckCircle2, XCircle, Wrench,
   Network, Clock, Eye, Zap, PieChart as PieChartIcon, BarChart as BarChartIcon,
   Check, Layers, TrendingUp, TrendingDown, Database, Calendar,
-  HardDrive, Wifi, WifiOff, MapPin, Info, Package, Box, Cpu,
-  Shield, AlertCircle, Settings, Grid3X3
+  HardDrive, Wifi, WifiOff, MapPin, Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,23 +18,17 @@ import WorkspaceSwitcher from '../../components/cmdb-components/WorkspaceSwitche
 import { io } from 'socket.io-client';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Area, AreaChart } from 'recharts';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
-import api from '../../services/api';
 
 const STATUS_CONFIG = {
   active: { label: 'Active', color: 'text-green-600', bgColor: 'bg-green-50', icon: CheckCircle2 },
-  inactive: { label: 'Inactive', color: 'text-red-600', bgColor: 'bg-red-50', icon: XCircle },
+  inactive: { label: 'Inactive', color: 'text-gray-600', bgColor: 'bg-gray-50', icon: XCircle },
   maintenance: { label: 'Maintenance', color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: Wrench },
-};
-
-const SERVICE_STATUS_CONFIG = {
-  active: { label: 'Active', color: 'text-green-600', bgColor: 'bg-green-50', icon: CheckCircle2 },
-  inactive: { label: 'Inactive', color: 'text-red-600', bgColor: 'bg-red-50', icon: XCircle },
-  disabled: { label: 'Disabled', color: 'text-gray-600', bgColor: 'bg-gray-50', icon: AlertCircle },
+  decommissioned: { label: 'Decommissioned', color: 'text-red-600', bgColor: 'bg-red-50', icon: AlertTriangle },
 };
 
 const CHART_COLORS = {
   'green-600': '#16a34a',
-  'gray-600': '#4b5563',
+  'gray-600': '#4b5563', 
   'yellow-600': '#ca8a04',
   'red-600': '#dc2626',
   'blue-600': '#2563eb',
@@ -57,28 +50,12 @@ const CustomTooltip = ({ active, payload, total }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const percentage = total > 0 ? (data.value / total) * 100 : 0;
-
+    
     return (
       <div className="bg-background border rounded-lg shadow-lg p-3">
         <p className="font-medium">{data.name}</p>
         <p className="text-sm text-muted-foreground">
           {data.value} item{data.value !== 1 ? 's' : ''} ({percentage.toFixed(1)}%)
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
-
-const ServiceTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-
-    return (
-      <div className="bg-background border rounded-lg shadow-lg p-3">
-        <p className="font-medium">{data.name}</p>
-        <p className="text-sm text-muted-foreground">
-          {data.value} service{data.value !== 1 ? 's' : ''}
         </p>
       </div>
     );
@@ -100,13 +77,13 @@ const InfoPopover = ({ title, description, formula, interpretation }) => (
           <h4 className="font-semibold text-sm mb-1">{title}</h4>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-
+        
         {formula && (
           <div className="bg-muted/50 p-2 rounded">
             <p className="text-xs font-mono">{formula}</p>
           </div>
         )}
-
+        
         {interpretation && (
           <div>
             <p className="text-xs font-semibold mb-1">Interpretasi:</p>
@@ -139,41 +116,15 @@ export default function CMDBDashboard() {
     duplicateWorkspace,
   } = useWorkspace();
 
+  // PERBAIKAN: Pass viewAllMode ke useCMDB
   const { items, groups, connections, groupConnections, fetchAll } = useCMDB(
     currentWorkspace?.id,
     viewAllMode
   );
 
-  // Services state
-  const [services, setServices] = useState({});
-  const [loadingServices, setLoadingServices] = useState(false);
-
   const [selectedTab, setSelectedTab] = useState('type');
   const [chartType, setChartType] = useState('progress');
   const [detailChartType, setDetailChartType] = useState('pie');
-
-  // Fetch services for all items
-  useEffect(() => {
-    const fetchServices = async () => {
-      setLoadingServices(true);
-      const servicesMap = {};
-      for (const item of items) {
-        try {
-          const res = await api.get(`/services/${item.id}`);
-          servicesMap[item.id] = res.data;
-        } catch (err) {
-          console.error(`Failed to fetch services for item ${item.id}:`, err);
-          servicesMap[item.id] = [];
-        }
-      }
-      setServices(servicesMap);
-      setLoadingServices(false);
-    };
-
-    if (items.length > 0) {
-      fetchServices();
-    }
-  }, [items]);
 
   useEffect(() => {
     const socket = io(API_BASE_URL, {
@@ -199,20 +150,16 @@ export default function CMDBDashboard() {
       fetchAll();
     });
 
-    socket.on('service_update', () => {
-      fetchAll();
-    });
-
     return () => {
       socket.off('cmdb_update');
       socket.off('item_updated');
       socket.off('connection_updated');
       socket.off('group_updated');
-      socket.off('service_update');
       socket.disconnect();
     };
   }, [fetchAll]);
 
+  // PERBAIKAN: Tidak perlu filter lagi karena sudah dihandle di useCMDB
   const filteredItems = items;
   const filteredConnections = connections;
   const filteredGroups = groups;
@@ -220,7 +167,7 @@ export default function CMDBDashboard() {
 
   const stats = useMemo(() => {
     const total = filteredItems.length;
-
+    
     const statusCount = filteredItems.reduce((acc, item) => {
       acc[item.status] = (acc[item.status] || 0) + 1;
       return acc;
@@ -260,6 +207,7 @@ export default function CMDBDashboard() {
       return acc;
     }, {});
 
+    // FITUR BARU: Workspace distribution (hanya untuk viewAllMode)
     const workspaceCount = filteredItems.reduce((acc, item) => {
       const key = item.workspace_id || 'unknown';
       acc[key] = (acc[key] || 0) + 1;
@@ -269,44 +217,16 @@ export default function CMDBDashboard() {
     const healthScore = total > 0 ? ((statusCount.active || 0) / total) * 100 : 0;
     const totalConnections = filteredConnections.length + filteredGroupConnections.length;
     const avgConnections = total > 0 ? totalConnections / total : 0;
+
+    // FITUR BARU: Connection density
     const connectionDensity = total > 0 ? (totalConnections / (total * (total - 1))) * 100 : 0;
 
+    // FITUR BARU: Items with no connections
     const itemsWithConnections = new Set([
       ...filteredConnections.map(c => c.source_id),
       ...filteredConnections.map(c => c.target_id),
     ]);
     const isolatedItems = total - itemsWithConnections.size;
-
-    // SERVICE METRICS
-    const allServices = Object.values(services).flat();
-    const totalServices = allServices.length;
-
-    const serviceStatusCount = allServices.reduce((acc, service) => {
-      acc[service.status] = (acc[service.status] || 0) + 1;
-      return acc;
-    }, {});
-
-    const serviceTypeCount = allServices.reduce((acc, service) => {
-      if (service.icon_type) {
-        acc[service.icon_type] = (acc[service.icon_type] || 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    const servicesByItem = filteredItems.reduce((acc, item) => {
-      const itemServices = services[item.id] || [];
-      acc[item.id] = itemServices.length;
-      return acc;
-    }, {});
-
-    const itemsWithServices = Object.values(servicesByItem).filter(count => count > 0).length;
-    const itemsWithoutServices = total - itemsWithServices;
-
-    const avgServicesPerItem = total > 0 ? totalServices / total : 0;
-
-    const serviceHealthScore = totalServices > 0
-      ? ((serviceStatusCount.active || 0) / totalServices) * 100
-      : 0;
 
     return {
       total,
@@ -322,23 +242,14 @@ export default function CMDBDashboard() {
       avgConnections,
       connectionDensity,
       isolatedItems,
-      // Service metrics
-      totalServices,
-      serviceStatusCount,
-      serviceTypeCount,
-      servicesByItem,
-      itemsWithServices,
-      itemsWithoutServices,
-      avgServicesPerItem,
-      serviceHealthScore,
     };
-  }, [filteredItems, filteredConnections, filteredGroupConnections, services]);
-
+  }, [filteredItems, filteredConnections, filteredGroupConnections]);
+  
   const chartData = useMemo(() => {
     return Object.entries(STATUS_CONFIG).map(([status, config]) => {
       const count = stats.statusCount[status] || 0;
       const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
-
+      
       return {
         name: config.label,
         value: count,
@@ -350,58 +261,11 @@ export default function CMDBDashboard() {
     }).filter(item => item.value > 0);
   }, [stats]);
 
-  // Service chart data
-  const serviceChartData = useMemo(() => {
-    return [
-      {
-        name: 'Active',
-        value: stats.serviceStatusCount.active || 0,
-        color: '#16a34a',
-        bgColor: 'bg-green-50',
-      },
-      {
-        name: 'Inactive',
-        value: stats.serviceStatusCount.inactive || 0,
-        color: '#dc2626',
-        bgColor: 'bg-red-50',
-      },
-      {
-        name: 'Disabled',
-        value: stats.serviceStatusCount.disabled || 0,
-        color: '#4b5563',
-        bgColor: 'bg-gray-50',
-      },
-    ];
-  }, [stats.serviceStatusCount]);
-
   const criticalItems = useMemo(() => {
     return filteredItems
       .filter(item => item.status === 'maintenance' || item.status === 'inactive')
       .slice(0, 5);
   }, [filteredItems]);
-
-  // Critical services
-  const criticalServices = useMemo(() => {
-    const allServices = Object.entries(services).flatMap(([itemId, itemServices]) =>
-      itemServices.map(service => ({ ...service, itemId }))
-    );
-
-    return allServices
-      .filter(service => service.status === 'inactive' || service.status === 'disabled')
-      .slice(0, 10);
-  }, [services]);
-
-  // Top items by service count
-  const topItemsByServiceCount = useMemo(() => {
-    return filteredItems
-      .map(item => ({
-        item,
-        serviceCount: (services[item.id] || []).length,
-        activeServiceCount: (services[item.id] || []).filter(s => s.status === 'active').length,
-      }))
-      .sort((a, b) => b.serviceCount - a.serviceCount)
-      .slice(0, 5);
-  }, [filteredItems, services]);
 
   const recentActivity = useMemo(() => {
     return filteredItems.slice(-5).reverse().map(item => ({
@@ -430,6 +294,7 @@ export default function CMDBDashboard() {
       .slice(0, 5);
   }, [filteredItems, filteredConnections]);
 
+  // FITUR BARU: Top locations by item count
   const topLocations = useMemo(() => {
     return Object.entries(stats.locationCount)
       .sort(([, a], [, b]) => b - a)
@@ -437,9 +302,10 @@ export default function CMDBDashboard() {
       .map(([name, value]) => ({ name, value }));
   }, [stats.locationCount]);
 
+  // FITUR BARU: Workspace distribution (untuk viewAll mode)
   const workspaceDistribution = useMemo(() => {
     if (!viewAllMode) return [];
-
+    
     return Object.entries(stats.workspaceCount)
       .map(([workspaceId, count]) => {
         const workspace = workspaces.find(w => w.id === parseInt(workspaceId));
@@ -452,8 +318,7 @@ export default function CMDBDashboard() {
       .sort((a, b) => b.value - a.value);
   }, [stats.workspaceCount, workspaces, viewAllMode]);
 
-  const renderDetailChart = (dataObj, title, isService = false) => {
-    const total = isService ? stats.totalServices : stats.total;
+  const renderDetailChart = (dataObj, title) => {
     const chartData = Object.entries(dataObj)
       .sort(([, a], [, b]) => b - a)
       .map(([name, value], index) => ({
@@ -473,7 +338,7 @@ export default function CMDBDashboard() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) =>
+                  label={({ name, percent }) => 
                     `${name}: ${(percent * 100).toFixed(0)}%`
                   }
                   outerRadius={100}
@@ -485,21 +350,21 @@ export default function CMDBDashboard() {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip content={isService ? <ServiceTooltip /> : <CustomTooltip total={total} />} />
+                <Tooltip content={<CustomTooltip total={stats.total} />} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
-
+          
           <div className="mt-6 grid grid-cols-2 gap-3 w-full">
             {chartData.map((item) => {
-              const percentage = total > 0 ? (item.value / total) * 100 : 0;
-
+              const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
+              
               return (
                 <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
+                    <div 
+                      className="w-3 h-3 rounded-full" 
                       style={{ backgroundColor: item.color }}
                     />
                     <span className="text-sm font-medium">{item.name}</span>
@@ -520,21 +385,21 @@ export default function CMDBDashboard() {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-            <XAxis
-              dataKey="name"
+            <XAxis 
+              dataKey="name" 
               stroke="hsl(var(--foreground))"
               fontSize={12}
               angle={-45}
               textAnchor="end"
               height={100}
             />
-            <YAxis
+            <YAxis 
               stroke="hsl(var(--foreground))"
               fontSize={12}
             />
-            <Tooltip content={isService ? <ServiceTooltip /> : <CustomTooltip total={total} />} />
-            <Bar
-              dataKey="value"
+            <Tooltip content={<CustomTooltip total={stats.total} />} />
+            <Bar 
+              dataKey="value" 
               radius={[4, 4, 0, 0]}
               fill="#8884d8"
             >
@@ -556,7 +421,7 @@ export default function CMDBDashboard() {
             const count = stats.statusCount[status] || 0;
             const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
             const Icon = config.icon;
-
+            
             return (
               <div key={status} className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -592,7 +457,7 @@ export default function CMDBDashboard() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) =>
+                      label={({ name, percent }) => 
                         `${name}: ${(percent * 100).toFixed(0)}%`
                       }
                       outerRadius={80}
@@ -601,9 +466,9 @@ export default function CMDBDashboard() {
                       nameKey="name"
                     >
                       {chartData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={CHART_COLORS[entry.colorKey] || "#8884d8"}
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={CHART_COLORS[entry.colorKey] || "#8884d8"} 
                         />
                       ))}
                     </Pie>
@@ -612,17 +477,17 @@ export default function CMDBDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-
+              
               <div className="mt-4 grid grid-cols-2 gap-3 w-full">
                 {chartData.map((item) => {
                   const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
                   const color = CHART_COLORS[item.colorKey] || "#8884d8";
-
+                  
                   return (
                     <div key={item.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
+                        <div 
+                          className="w-3 h-3 rounded-full" 
                           style={{ backgroundColor: color }}
                         />
                         <span className="text-sm font-medium">{item.name}</span>
@@ -651,25 +516,25 @@ export default function CMDBDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                <XAxis
-                  dataKey="name"
+                <XAxis 
+                  dataKey="name" 
                   stroke="hsl(var(--foreground))"
                   fontSize={12}
                 />
-                <YAxis
+                <YAxis 
                   stroke="hsl(var(--foreground))"
                   fontSize={12}
                 />
                 <Tooltip content={<CustomTooltip total={stats.total} />} />
-                <Bar
-                  dataKey="value"
+                <Bar 
+                  dataKey="value" 
                   radius={[4, 4, 0, 0]}
                   fill="#8884d8"
                 >
                   {chartData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={CHART_COLORS[entry.colorKey] || "#8884d8"}
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={CHART_COLORS[entry.colorKey] || "#8884d8"} 
                     />
                   ))}
                 </Bar>
@@ -706,17 +571,17 @@ export default function CMDBDashboard() {
               )}
               <div className="text-sm">
                 <p className="font-medium">
-                  {viewAllMode
-                    ? 'View All Workspaces'
-                    : currentWorkspace
-                      ? currentWorkspace.name
+                  {viewAllMode 
+                    ? 'View All Workspaces' 
+                    : currentWorkspace 
+                      ? currentWorkspace.name 
                       : 'No Workspace Selected'}
                 </p>
                 <p className="text-muted-foreground">
-                  {viewAllMode
-                    ? `${workspaces.length} workspaces • ${stats.total} total items`
-                    : currentWorkspace
-                      ? currentWorkspace.description || 'Selected workspace'
+                  {viewAllMode 
+                    ? `${workspaces.length} workspaces • ${stats.total} total items` 
+                    : currentWorkspace 
+                      ? currentWorkspace.description || 'Selected workspace' 
                       : 'Please select a workspace'}
                 </p>
               </div>
@@ -736,7 +601,7 @@ export default function CMDBDashboard() {
               />
             </div>
           </div>
-
+          
           {/* Live Updates Indicator */}
           <div className="flex items-center gap-1 text-xs text-green-600">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -772,7 +637,7 @@ export default function CMDBDashboard() {
         </div>
       )}
 
-      {/* MAIN ITEMS STATS CARDS */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -834,7 +699,8 @@ export default function CMDBDashboard() {
               <InfoPopover
                 title="Total Connections & Density"
                 description="Jumlah total koneksi antara items dan tingkat kepadatan jaringan dependencies."
-                formula="Connection Density = (Total Connections / Max Possible Connections) × 100%"
+                formula="Connection Density = (Total Connections / Max Possible Connections) × 100%
+Max Possible = Total Items × (Total Items - 1)"
                 interpretation={[
                   "Avg < 2: Item-item relatif independen",
                   "Avg 2-5: Interdependencies moderat",
@@ -896,126 +762,10 @@ export default function CMDBDashboard() {
         </Card>
       </div>
 
-      {/* SERVICE STATS CARDS - NEW! */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="hover:shadow-lg transition-shadow border-purple-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center">
-              <CardTitle className="text-sm font-medium">Total Services</CardTitle>
-              <InfoPopover
-                title="Total Services"
-                description="Total jumlah services yang terdaftar di semua items. Services adalah komponen-komponen kecil seperti microservices, modules, atau sub-systems."
-                interpretation={[
-                  "Track pertumbuhan services dari waktu ke waktu",
-                  "Banyak services = Kompleksitas sistem tinggi",
-                  "Rata-rata {stats.avgServicesPerItem.toFixed(1)} services per item"
-                ]}
-              />
-            </div>
-            <Package className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{stats.totalServices}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.avgServicesPerItem.toFixed(1)} avg per item
-            </p>
-            {loadingServices && (
-              <div className="mt-2 text-xs text-muted-foreground">Loading...</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow border-green-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center">
-              <CardTitle className="text-sm font-medium">Active Services</CardTitle>
-              <InfoPopover
-                title="Active Services"
-                description="Jumlah services yang berstatus 'Active' dan berjalan normal."
-                formula="Active Services % = (Active Services / Total Services) × 100%"
-                interpretation={[
-                  "Target: >90% services active",
-                  "< 80% perlu investigasi segera",
-                  "Monitor services yang sering inactive"
-                ]}
-              />
-            </div>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {stats.serviceStatusCount.active || 0}
-            </div>
-            <Progress value={stats.serviceHealthScore} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.serviceHealthScore.toFixed(1)}% health
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow border-red-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center">
-              <CardTitle className="text-sm font-medium">Inactive Services</CardTitle>
-              <InfoPopover
-                title="Inactive Services"
-                description="Jumlah services yang berstatus 'Inactive' atau tidak berjalan."
-                interpretation={[
-                  "Services inactive mungkin normal jika memang dimatikan",
-                  "Tapi jika banyak, perlu investigasi",
-                  "Cek connection dependencies sebelum restart"
-                ]}
-              />
-            </div>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {stats.serviceStatusCount.inactive || 0}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.totalServices > 0
-                ? `${((stats.serviceStatusCount.inactive || 0) / stats.totalServices * 100).toFixed(1)}% of total`
-                : '0% of total'
-              }
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow border-blue-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center">
-              <CardTitle className="text-sm font-medium">Items w/ Services</CardTitle>
-              <InfoPopover
-                title="Items with Services"
-                description="Jumlah items yang memiliki services dan items tanpa services."
-                interpretation={[
-                  "Items tanpa services mungkin standalone atau belum dikonfigurasi",
-                  "Idealnya semua items memiliki minimal 1 service",
-                  "Items without services: " + stats.itemsWithoutServices
-                ]}
-              />
-            </div>
-            <Box className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.itemsWithServices}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.itemsWithoutServices} without services
-            </p>
-            {stats.itemsWithoutServices > 0 && (
-              <div className="mt-2 text-xs text-orange-600">
-                {stats.itemsWithoutServices} items need configuration
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
+      {/* Main Content - Hanya tampilkan jika ada workspace atau viewAllMode */}
       {(currentWorkspace || viewAllMode) && (
         <>
-          {/* Workspace Distribution (view all mode only) */}
+          {/* FITUR BARU: Workspace Distribution (hanya di viewAll mode) */}
           {viewAllMode && workspaceDistribution.length > 0 && (
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
@@ -1045,9 +795,9 @@ export default function CMDBDashboard() {
                     <BarChart data={workspaceDistribution} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
                       <XAxis type="number" stroke="hsl(var(--foreground))" fontSize={12} />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
+                      <YAxis 
+                        type="category" 
+                        dataKey="name" 
                         stroke="hsl(var(--foreground))"
                         fontSize={12}
                         width={150}
@@ -1065,203 +815,8 @@ export default function CMDBDashboard() {
             </Card>
           )}
 
-          {/* Critical Alerts & Services */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Critical Items */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center">
-                  <CardTitle>Critical Items</CardTitle>
-                  <InfoPopover
-                    title="Critical Items"
-                    description="Daftar item yang membutuhkan perhatian segera karena status Maintenance atau Inactive."
-                    interpretation={[
-                      "Item dalam list ini perlu direview",
-                      "Maintenance: Dijadwalkan atau sedang maintenance",
-                      "Inactive: Bisa jadi masalah yang perlu diselesaikan",
-                      "Monitor secara regular untuk memastikan issue teratasi"
-                    ]}
-                  />
-                </div>
-                <CardDescription>Items requiring attention</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {criticalItems.length > 0 ? (
-                    criticalItems.map((item) => {
-                      const config = STATUS_CONFIG[item.status];
-                      return (
-                        <Alert
-                          key={item.id}
-                          className={`${config.bgColor} cursor-pointer hover:shadow-md transition-shadow`}
-                        >
-                          <AlertDescription className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${config.color.replace('text-', 'bg-')}`} />
-                              <span className="text-sm font-medium">{item.name}</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {config.label}
-                            </Badge>
-                          </AlertDescription>
-                        </Alert>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      <Check className="inline-block" /> No critical alerts
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Critical Services - NEW! */}
-            <Card className="hover:shadow-lg transition-shadow border-red-200">
-              <CardHeader>
-                <div className="flex items-center">
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
-                    Critical Services
-                  </CardTitle>
-                  <InfoPopover
-                    title="Critical Services"
-                    description="Services yang berstatus 'Inactive' atau 'Disabled' dan membutuhkan perhatian."
-                    interpretation={[
-                      "Inactive services tidak berjalan dan perlu investigasi",
-                      "Disabled services sengaja dimatikan (bukan error)",
-                      "Cek dependencies sebelum restart services",
-                      "Monitor service health secara regular",
-                      "Prioritaskan services yang critical untuk business"
-                    ]}
-                  />
-                </div>
-                <CardDescription>Services that need attention (Inactive or Disabled)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {criticalServices.length > 0 ? (
-                    criticalServices.map((service) => {
-                      const parentItem = filteredItems.find(i => i.id === parseInt(service.itemId));
-                      const isDisabled = service.status === 'disabled';
-                      const statusConfig = SERVICE_STATUS_CONFIG[service.status];
-
-                      return (
-                        <Alert
-                          key={service.id}
-                          className={isDisabled ? "bg-gray-50 border-gray-200" : "bg-red-50 border-red-200"}
-                        >
-                          <AlertDescription className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <statusConfig.icon className={`w-4 h-4 ${statusConfig.color}`} />
-                                <span className="text-sm font-medium">{service.name}</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Parent: {parentItem?.name || 'Unknown'}
-                              </p>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${
-                                isDisabled
-                                  ? "bg-gray-100 text-gray-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {statusConfig.label}
-                            </Badge>
-                          </AlertDescription>
-                        </Alert>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      <Check className="inline-block mr-1" /> All services are active!
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Top Items by Service Count - NEW! */}
-          {topItemsByServiceCount.length > 0 && topItemsByServiceCount[0].serviceCount > 0 && (
-            <Card className="hover:shadow-lg transition-shadow border-blue-200">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <CardTitle className="flex items-center gap-2">
-                      <Cpu className="w-5 h-5 text-blue-600" />
-                      Top Items by Service Count
-                    </CardTitle>
-                    <InfoPopover
-                      title="Top Items by Service Count"
-                      description="Items dengan jumlah services terbanyak."
-                      interpretation={[
-                        "Items dengan banyak services = kompleks",
-                        "Prioritaskan monitoring untuk items ini",
-                        "Pertimbangkan split jika terlalu banyak services",
-                        "Items ini critical untuk infrastruktur"
-                      ]}
-                    />
-                  </div>
-                </div>
-                <CardDescription>Items with the most services</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {topItemsByServiceCount.map(({ item, serviceCount, activeServiceCount }, index) => {
-                    const inactiveServiceCount = serviceCount - activeServiceCount;
-                    const healthPercentage = serviceCount > 0 ? (activeServiceCount / serviceCount) * 100 : 0;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <span className="text-lg font-bold text-blue-600">{index + 1}</span>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{item.name}</p>
-                            <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
-                              <span className="flex items-center gap-1">
-                                <Package size={12} className="text-blue-600" />
-                                {serviceCount} total
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <CheckCircle2 size={12} className="text-green-600" />
-                                {activeServiceCount} active
-                              </span>
-                              {inactiveServiceCount > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <XCircle size={12} className="text-red-600" />
-                                  {inactiveServiceCount} inactive
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge
-                            variant="secondary"
-                            className={healthPercentage >= 80 ? "bg-green-100 text-green-800" : healthPercentage >= 50 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}
-                          >
-                            {healthPercentage.toFixed(0)}% healthy
-                          </Badge>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Status Overview */}
+            {/* Status Breakdown */}
             <Card className="lg:col-span-2 hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -1273,8 +828,9 @@ export default function CMDBDashboard() {
                         description="Visualisasi distribusi status dari semua items dalam CMDB."
                         interpretation={[
                           "Active: Item sedang beroperasi normal",
-                          "Inactive: Item tidak aktif/mati, perlu investigasi segera",
+                          "Inactive: Item tidak aktif/mati, perlu investigasi",
                           "Maintenance: Sedang dalam perbaikan/update",
+                          "Decommissioned: Item sudah tidak digunakan, akan dihapus",
                           "Target: >80% Active untuk infrastruktur yang sehat"
                         ]}
                       />
@@ -1314,65 +870,260 @@ export default function CMDBDashboard() {
               </CardContent>
             </Card>
 
-            {/* Service Status Overview - NEW! */}
-            <Card className="hover:shadow-lg transition-shadow border-purple-200">
+            {/* Critical Alerts */}
+            <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-center">
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="w-5 h-5 text-purple-600" />
-                    Service Status
-                  </CardTitle>
+                  <CardTitle>Critical Alerts</CardTitle>
                   <InfoPopover
-                    title="Service Status Overview"
-                    description="Distribusi status dari semua services."
+                    title="Critical Alerts"
+                    description="Daftar item yang membutuhkan perhatian segera karena status Maintenance atau Inactive."
                     interpretation={[
-                      "Active services berjalan normal",
-                      "Inactive services perlu investigasi (error atau down)",
-                      "Disabled services sengaja dimatikan (bukan error)",
-                      "Target: >90% services active"
+                      "Item dalam list ini perlu direview",
+                      "Maintenance: Dijadwalkan atau sedang maintenance",
+                      "Inactive: Bisa jadi masalah yang perlu diselesaikan",
+                      "Monitor secara regular untuk memastikan issue teratasi"
                     ]}
                   />
                 </div>
-                <CardDescription>Distribution by status</CardDescription>
+                <CardDescription>Items requiring attention</CardDescription>
               </CardHeader>
               <CardContent>
-                {stats.totalServices > 0 ? (
-                  <div className="space-y-4">
-                    {serviceChartData.map((data) => (
-                      <div key={data.name} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: data.color }}
-                            />
-                            <span className="text-sm font-medium">{data.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">{data.value}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(data.value / stats.totalServices * 100).toFixed(0)}%)
-                            </span>
-                          </div>
-                        </div>
-                        <Progress
-                          value={(data.value / stats.totalServices) * 100}
-                          className="h-2"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Package className="mx-auto h-12 w-12 mb-2 opacity-50" />
-                    <p className="text-sm">No services found</p>
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {criticalItems.length > 0 ? (
+                    criticalItems.map((item) => {
+                      const config = STATUS_CONFIG[item.status];
+                      return (
+                        <Alert 
+                          key={item.id} 
+                          className={`${config.bgColor} cursor-pointer hover:shadow-md transition-shadow`}
+                        >
+                          <AlertDescription className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${config.color.replace('text-', 'bg-')}`} />
+                              <span className="text-sm font-medium">{item.name}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              {config.label}
+                            </Badge>
+                          </AlertDescription>
+                        </Alert>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      <Check className="inline-block" /> No critical alerts
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Detailed Analytics Tabs */}
+          {/* FITUR BARU: Top Locations */}
+          {topLocations.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-blue-600" />
+                        Top Locations
+                      </CardTitle>
+                      <InfoPopover
+                        title="Top Locations"
+                        description="5 lokasi dengan jumlah item terbanyak. Membantu mengidentifikasi konsentrasi aset di berbagai lokasi geografis."
+                        interpretation={[
+                          "Lokasi dengan banyak item mungkin butuh perhatian lebih",
+                          "Gunakan untuk disaster recovery planning",
+                          "Identifikasi lokasi yang perlu ekspansi atau konsolidasi"
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <CardDescription>Locations with most items</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {topLocations.map((location, index) => {
+                      const percentage = stats.total > 0 ? (location.value / stats.total) * 100 : 0;
+                      return (
+                        <div key={location.name} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600">
+                                {index + 1}
+                              </div>
+                              <span className="text-sm font-medium">{location.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-muted-foreground">{location.value}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({percentage.toFixed(0)}%)
+                              </span>
+                            </div>
+                          </div>
+                          <Progress value={percentage} className="h-2" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Network Health Card */}
+              <Card className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <CardTitle className="flex items-center gap-2">
+                        <Network className="w-5 h-5 text-green-600" />
+                        Network Health
+                      </CardTitle>
+                      <InfoPopover
+                        title="Network Health Metrics"
+                        description="Analisis kesehatan jaringan dependencies dan konektivitas antar items."
+                        interpretation={[
+                          "Connected Items: Item yang memiliki minimal 1 koneksi",
+                          "Isolated Items: Item tanpa koneksi sama sekali (bisa normal untuk standalone devices)",
+                          "Connection Density: Ukuran kompleksitas jaringan",
+                          "Density tinggi = Perubahan berisiko, butuh planning matang",
+                          "Banyak isolated items bisa indikasi dokumentasi kurang lengkap"
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <CardDescription>Connection and dependency metrics</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Wifi className="w-5 h-5 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium">Connected Items</p>
+                          <p className="text-xs text-muted-foreground">
+                            Items with dependencies
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-green-600">
+                          {stats.total - stats.isolatedItems}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stats.total > 0 ? ((stats.total - stats.isolatedItems) / stats.total * 100).toFixed(0) : 0}%
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <WifiOff className="w-5 h-5 text-orange-600" />
+                        <div>
+                          <p className="text-sm font-medium">Isolated Items</p>
+                          <p className="text-xs text-muted-foreground">
+                            No connections
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-orange-600">
+                          {stats.isolatedItems}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stats.total > 0 ? (stats.isolatedItems / stats.total * 100).toFixed(0) : 0}%
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <p className="text-sm font-medium">Connection Density</p>
+                          <p className="text-xs text-muted-foreground">
+                            Network complexity
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-blue-600">
+                          {stats.connectionDensity.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stats.avgConnections.toFixed(1)} avg
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Highly Connected Items */}
+          {highlyConnectedItems.length > 0 && (
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CardTitle className="flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-blue-600" />
+                      Highly Connected Items
+                    </CardTitle>
+                    <InfoPopover
+                      title="Highly Connected Items"
+                      description="Item dengan jumlah koneksi terbanyak. Item ini adalah critical points dalam infrastruktur Anda."
+                      interpretation={[
+                        "Dependencies: Item lain yang bergantung pada item ini (incoming connections)",
+                        "Dependents: Item yang dibutuhkan oleh item ini (outgoing connections)",
+                        "High connection count = Critical item, downtime berdampak luas",
+                        "Prioritaskan monitoring dan backup untuk item-item ini",
+                        "Pertimbangkan redundancy untuk highly connected items"
+                      ]}
+                    />
+                  </div>
+                </div>
+                <CardDescription>Items with the most dependencies and dependents</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {highlyConnectedItems.map(({ item, totalConnections, dependencies, dependents }) => (
+                    <div 
+                      key={item.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Network className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="dark:text-black">
+                            <p className="text-sm font-medium">{item.name}</p>
+                            <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
+                              <span className="flex items-center gap-1">
+                                <span className="text-blue-600">→</span> {dependencies} dependencies
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="text-green-600">←</span> {dependents} dependents
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="font-mono">
+                        {totalConnections}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Detailed Analytics */}
           <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
             <TabsList>
               <TabsTrigger value="type">By Type</TabsTrigger>
@@ -1380,10 +1131,6 @@ export default function CMDBDashboard() {
               <TabsTrigger value="environment">By Environment</TabsTrigger>
               <TabsTrigger value="group">By Group</TabsTrigger>
               <TabsTrigger value="category">By Category</TabsTrigger>
-              <TabsTrigger value="services" className="flex items-center gap-1">
-                <Package className="w-4 h-4" />
-                By Services
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="type" className="space-y-4">
@@ -1573,117 +1320,7 @@ export default function CMDBDashboard() {
                 </CardContent>
               </Card>
             </TabsContent>
-
-            <TabsContent value="services" className="space-y-4">
-              <Card className="hover:shadow-lg transition-shadow border-purple-200">
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <Package className="w-5 h-5 text-purple-600" />
-                        Services Distribution
-                      </CardTitle>
-                      <CardDescription>Services by icon type</CardDescription>
-                    </div>
-                    <Tabs value={detailChartType} onValueChange={setDetailChartType} className="w-auto">
-                      <TabsList className="grid w-[120px] grid-cols-2">
-                        <TabsTrigger value="pie" className="h-8 px-2">
-                          <div className="flex items-center gap-1">
-                            <PieChartIcon className="w-3 h-3" />
-                            <span className="text-xs">Pie</span>
-                          </div>
-                        </TabsTrigger>
-                        <TabsTrigger value="bar" className="h-8 px-2">
-                          <div className="flex items-center gap-1">
-                            <BarChartIcon className="w-3 h-3" />
-                            <span className="text-xs">Bar</span>
-                          </div>
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {Object.keys(stats.serviceTypeCount).length > 0 ? (
-                    renderDetailChart(
-                      Object.fromEntries(
-                        Object.entries(stats.serviceTypeCount).map(([type, count]) => {
-                          return [type === 'preset' ? 'Preset Icons' : 'Custom Uploads', count];
-                        })
-                      ),
-                      'Icon Type',
-                      true
-                    )
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Package className="mx-auto h-12 w-12 mb-2 opacity-50" />
-                      <p className="text-sm">No service data available</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
-
-          {/* Highly Connected Items */}
-          {highlyConnectedItems.length > 0 && (
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <CardTitle className="flex items-center gap-2">
-                      <Zap className="w-5 h-5 text-blue-600" />
-                      Highly Connected Items
-                    </CardTitle>
-                    <InfoPopover
-                      title="Highly Connected Items"
-                      description="Item dengan jumlah koneksi terbanyak. Item ini adalah critical points dalam infrastruktur Anda."
-                      interpretation={[
-                        "Dependencies: Item lain yang bergantung pada item ini (incoming connections)",
-                        "Dependents: Item yang dibutuhkan oleh item ini (outgoing connections)",
-                        "High connection count = Critical item, downtime berdampak luas",
-                        "Prioritaskan monitoring dan backup untuk item-item ini",
-                        "Pertimbangkan redundancy untuk highly connected items"
-                      ]}
-                    />
-                  </div>
-                </div>
-                <CardDescription>Items with the most dependencies and dependents</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {highlyConnectedItems.map(({ item, totalConnections, dependencies, dependents }) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <Network className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <div className="dark:text-black">
-                            <p className="text-sm font-medium">{item.name}</p>
-                            <div className="flex items-center gap-3 text-xs text-gray-600 mt-1">
-                              <span className="flex items-center gap-1">
-                                <span className="text-blue-600">→</span> {dependencies} dependencies
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="text-green-600">←</span> {dependents} dependents
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="font-mono">
-                        {totalConnections}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Recent Activity */}
           <Card className="hover:shadow-lg transition-shadow">

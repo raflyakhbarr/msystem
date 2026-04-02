@@ -523,13 +523,18 @@ export default function ServiceVisualization({ service, workspaceId }) {
         setExternalItemPositions(positions);
 
         // Fetch cross-service edge handles
+        // Filter hanya handles yang relevan untuk service ini (viewing service)
         const edgeHandlesResponse = await api.get(`/cross-service-connections/edge-handles/workspace/${workspaceId}`);
         const edgeHandlesMap = {};
         edgeHandlesResponse.data.forEach(handle => {
-          edgeHandlesMap[handle.edge_id] = {
-            sourceHandle: handle.source_handle,
-            targetHandle: handle.target_handle
-          };
+          // Hanya gunakan handle yang dibuat dari viewing service ini
+          // atau handle yang belum punya viewing_service_id (backward compatibility)
+          if (!handle.viewing_service_id || handle.viewing_service_id === service.id) {
+            edgeHandlesMap[handle.edge_id] = {
+              sourceHandle: handle.source_handle,
+              targetHandle: handle.target_handle
+            };
+          }
         });
         setCrossServiceEdgeHandles(edgeHandlesMap);
 
@@ -551,6 +556,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         // Get all external service items from these connections
         const externalItems = [];
         const externalItemIds = new Set();
+        const itemsNeedingAutoLayout = [];
 
         relevantConnections.forEach(conn => {
           // Check if source is from this service (local) or external
@@ -560,6 +566,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
             // Target is external
             if (!externalItemIds.has(conn.target_service_item_id)) {
               const savedPosition = positions[conn.target_service_item_id];
+              // Check if position exists and is explicitly set (not default {x: 0, y: 0})
+              const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
+
+              if (!hasExplicitPosition) {
+                // Queue for auto-layout
+                itemsNeedingAutoLayout.push(conn.target_service_item_id);
+              }
+
               externalItems.push({
                 id: conn.target_service_item_id,
                 name: conn.target_name,
@@ -569,7 +583,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 serviceId: conn.target_service_id,
                 serviceName: conn.target_service_name || 'Unknown Service',
                 cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
-                position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
+                position: hasExplicitPosition ? savedPosition : null, // null = needs auto-layout
               });
               externalItemIds.add(conn.target_service_item_id);
             }
@@ -577,6 +591,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
             // Source is external
             if (!externalItemIds.has(conn.source_service_item_id)) {
               const savedPosition = positions[conn.source_service_item_id];
+              // Check if position exists and is explicitly set (not default {x: 0, y: 0})
+              const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
+
+              if (!hasExplicitPosition) {
+                // Queue for auto-layout
+                itemsNeedingAutoLayout.push(conn.source_service_item_id);
+              }
+
               externalItems.push({
                 id: conn.source_service_item_id,
                 name: conn.source_name,
@@ -586,12 +608,57 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 serviceId: conn.source_service_id,
                 serviceName: conn.source_service_name || 'Unknown Service',
                 cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
-                position: savedPosition ? savedPosition : { x: 0, y: 0 }, // Use saved position or default
+                position: hasExplicitPosition ? savedPosition : null, // null = needs auto-layout
               });
               externalItemIds.add(conn.source_service_item_id);
             }
           }
         });
+
+        // Batch create default positions untuk items yang belum punya posisi
+        if (itemsNeedingAutoLayout.length > 0) {
+          try {
+            const autoLayoutResponse = await api.post('/external-item-positions/batch-auto-layout', {
+              workspaceId: workspaceId,
+              serviceId: service.id,
+              externalServiceItemIds: itemsNeedingAutoLayout
+            });
+
+            // Update positions dengan yang baru di-auto-layout
+            autoLayoutResponse.data.forEach(pos => {
+              positions[pos.external_service_item_id] = pos.position;
+            });
+
+            // Update external items dengan positions baru
+            externalItems.forEach(item => {
+              if (!item.position) {
+                item.position = positions[item.id];
+              }
+            });
+          } catch (autoLayoutErr) {
+            console.error('Failed to auto-layout external items:', autoLayoutErr);
+            // Fallback: gunakan manual calculation
+            let offsetX = 500;
+            let offsetY = 100;
+            let itemsInRow = 0;
+            const maxItemsPerRow = 4;
+
+            externalItems.forEach(item => {
+              if (!item.position) {
+                item.position = { x: offsetX, y: offsetY };
+
+                itemsInRow++;
+                if (itemsInRow >= maxItemsPerRow) {
+                  offsetX = 500;
+                  offsetY += 150;
+                  itemsInRow = 0;
+                } else {
+                  offsetX += 200;
+                }
+              }
+            });
+          }
+        }
 
         setExternalServiceItems(externalItems);
       } catch (error) {
@@ -609,38 +676,48 @@ export default function ServiceVisualization({ service, workspaceId }) {
     if (!socket || !service?.id || !workspaceId) return;
 
     const handleStatusUpdate = async (data) => {
-      // Only care about updates in the same workspace for external services
-      if (data.workspaceId === workspaceId && data.serviceId !== service.id) {
-        // Refresh cross-service connections to get updated external item statuses
-        try {
-          const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
-            params: { workspaceId }
-          });
-          const positions = {};
-          positionsResponse.data.forEach(pos => {
-            positions[pos.external_service_item_id] = pos.position;
-          });
-          setExternalItemPositions(positions);
+      // ONLY handle updates jika ini untuk service yang SEDANG AKTIF
+      // JANGAN refresh external items hanya karena item di service lain berubah
+      if (data.workspaceId !== workspaceId) return;
+      if (data.serviceId !== service.id) return; // ← KEY: Only handle if SAME service
 
-          const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
-          const connections = response.data;
-          const relevantConnections = connections.filter(conn => {
-            const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
-            return isRelevant;
-          });
+      // Refresh cross-service connections to get updated external item statuses
+      try {
+        const positionsResponse = await api.get(`/external-item-positions/service/${service.id}`, {
+          params: { workspaceId }
+        });
+        const positions = {};
+        positionsResponse.data.forEach(pos => {
+          positions[pos.external_service_item_id] = pos.position;
+        });
+        setExternalItemPositions(positions);
 
-          setCrossServiceConnections(relevantConnections);
-          setCrossServiceUpdateKey(prev => prev + 1);
+        const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+        const connections = response.data;
+        const relevantConnections = connections.filter(conn => {
+          const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
+          return isRelevant;
+        });
 
-          const externalItems = [];
-          const externalItemIds = new Set();
+        setCrossServiceConnections(relevantConnections);
+        setCrossServiceUpdateKey(prev => prev + 1);
 
-          relevantConnections.forEach(conn => {
+        const externalItems = [];
+        const externalItemIds = new Set();
+        const itemsNeedingAutoLayout = [];
+
+        relevantConnections.forEach(conn => {
             const isSourceLocal = conn.source_service_id === service.id;
 
             if (isSourceLocal) {
               if (!externalItemIds.has(conn.target_service_item_id)) {
                 const savedPosition = positions[conn.target_service_item_id];
+                const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
+
+                if (!hasExplicitPosition) {
+                  itemsNeedingAutoLayout.push(conn.target_service_item_id);
+                }
+
                 externalItems.push({
                   id: conn.target_service_item_id,
                   name: conn.target_name,
@@ -650,13 +727,19 @@ export default function ServiceVisualization({ service, workspaceId }) {
                   serviceId: conn.target_service_id,
                   serviceName: conn.target_service_name || 'Unknown Service',
                   cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
-                  position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                  position: hasExplicitPosition ? savedPosition : null,
                 });
                 externalItemIds.add(conn.target_service_item_id);
               }
             } else {
               if (!externalItemIds.has(conn.source_service_item_id)) {
                 const savedPosition = positions[conn.source_service_item_id];
+                const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
+
+                if (!hasExplicitPosition) {
+                  itemsNeedingAutoLayout.push(conn.source_service_item_id);
+                }
+
                 externalItems.push({
                   id: conn.source_service_item_id,
                   name: conn.source_name,
@@ -666,19 +749,41 @@ export default function ServiceVisualization({ service, workspaceId }) {
                   serviceId: conn.source_service_id,
                   serviceName: conn.source_service_name || 'Unknown Service',
                   cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
-                  position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                  position: hasExplicitPosition ? savedPosition : null,
                 });
                 externalItemIds.add(conn.source_service_item_id);
               }
             }
           });
 
+          // Batch auto-layout jika needed
+          if (itemsNeedingAutoLayout.length > 0) {
+            try {
+              const autoLayoutResponse = await api.post('/external-item-positions/batch-auto-layout', {
+                workspaceId: workspaceId,
+                serviceId: service.id,
+                externalServiceItemIds: itemsNeedingAutoLayout
+              });
+
+              autoLayoutResponse.data.forEach(pos => {
+                positions[pos.external_service_item_id] = pos.position;
+              });
+
+              externalItems.forEach(item => {
+                if (!item.position) {
+                  item.position = positions[item.id];
+                }
+              });
+            } catch (autoLayoutErr) {
+              console.error('Failed to auto-layout:', autoLayoutErr);
+            }
+          }
+
           setExternalServiceItems(externalItems);
         } catch (error) {
           console.error('Failed to refresh cross-service connections:', error);
         }
-      }
-    };
+      };
 
     socket.on('service_item_status_update', handleStatusUpdate);
 
@@ -712,13 +817,18 @@ export default function ServiceVisualization({ service, workspaceId }) {
         setExternalItemPositions(positions);
 
         // Fetch cross-service edge handles
+        // Filter hanya handles yang relevan untuk service ini (viewing service)
         const edgeHandlesResponse = await api.get(`/cross-service-connections/edge-handles/workspace/${workspaceId}`);
         const edgeHandlesMap = {};
         edgeHandlesResponse.data.forEach(handle => {
-          edgeHandlesMap[handle.edge_id] = {
-            sourceHandle: handle.source_handle,
-            targetHandle: handle.target_handle
-          };
+          // Hanya gunakan handle yang dibuat dari viewing service ini
+          // atau handle yang belum punya viewing_service_id (backward compatibility)
+          if (!handle.viewing_service_id || handle.viewing_service_id === service.id) {
+            edgeHandlesMap[handle.edge_id] = {
+              sourceHandle: handle.source_handle,
+              targetHandle: handle.target_handle
+            };
+          }
         });
         setCrossServiceEdgeHandles(edgeHandlesMap);
 
@@ -744,6 +854,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           if (isSourceLocal) {
             if (!externalItemIds.has(conn.target_service_item_id)) {
               const savedPosition = positions[conn.target_service_item_id];
+              const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
               externalItems.push({
                 id: conn.target_service_item_id,
                 name: conn.target_name,
@@ -753,13 +864,14 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 serviceId: conn.target_service_id,
                 serviceName: conn.target_service_name || 'Unknown Service',
                 cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
-                position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                position: hasExplicitPosition ? savedPosition : null,
               });
               externalItemIds.add(conn.target_service_item_id);
             }
           } else {
             if (!externalItemIds.has(conn.source_service_item_id)) {
               const savedPosition = positions[conn.source_service_item_id];
+              const hasExplicitPosition = savedPosition && (savedPosition.x !== 0 || savedPosition.y !== 0);
               externalItems.push({
                 id: conn.source_service_item_id,
                 name: conn.source_name,
@@ -768,8 +880,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
                 cmdbItemId: conn.source_cmdb_item_id,
                 serviceId: conn.source_service_id,
                 serviceName: conn.source_service_name || 'Unknown Service',
-                cmdbItemName: conn.source_cmdb_item_name || 'Unknown CMDB Item',
-                position: savedPosition ? savedPosition : { x: 0, y: 0 },
+                cmdbItemName: conn.target_cmdb_item_name || 'Unknown CMDB Item',
+                position: hasExplicitPosition ? savedPosition : null,
               });
               externalItemIds.add(conn.source_service_item_id);
             }
@@ -964,7 +1076,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
         // Use saved position if available, otherwise calculate new position
         let nodePosition = externalItem.position;
-        if (!nodePosition || (nodePosition.x === 0 && nodePosition.y === 0)) {
+        const needsAutoLayout = !nodePosition || (nodePosition.x === 0 && nodePosition.y === 0);
+
+        if (needsAutoLayout) {
           nodePosition = { x: offsetX, y: offsetY };
 
           // Update offset for next new item
@@ -1070,40 +1184,49 @@ export default function ServiceVisualization({ service, workspaceId }) {
         }
 
         // Recreate external nodes from externalServiceItems
-        const externalNodes = externalServiceItems.map(externalItem => ({
-          id: String(externalItem.id),
-          type: 'custom',
-          position: externalItem.position,
-          draggable: true,
-          data: {
-            label: externalItem.name,
-            name: externalItem.name,
-            type: externalItem.type,
-            description: '',
-            status: externalItem.status,
-            ip: '',
-            domain: '',
-            port: '',
-            category: 'external',
-            location: '',
-            parentService: null,
-            groupId: null,
-            orderInGroup: 0,
-            isExternal: true,
-            externalSource: {
-              serviceName: externalItem.serviceName,
-              cmdbItemName: externalItem.cmdbItemName,
-              serviceId: externalItem.serviceId,
-              cmdbItemId: externalItem.cmdbItemId,
+        const externalNodes = externalServiceItems.map(externalItem => {
+          // Use saved position or calculate auto-layout position
+          let nodePosition = externalItem.position;
+          if (!nodePosition || (nodePosition.x === 0 && nodePosition.y === 0)) {
+            // For new items without saved position, use default
+            nodePosition = { x: 0, y: 0 };
+          }
+
+          return {
+            id: String(externalItem.id),
+            type: 'custom',
+            position: nodePosition,
+            draggable: true,
+            data: {
+              label: externalItem.name,
+              name: externalItem.name,
+              type: externalItem.type,
+              description: '',
+              status: externalItem.status,
+              ip: '',
+              domain: '',
+              port: '',
+              category: 'external',
+              location: '',
+              parentService: null,
+              groupId: null,
+              orderInGroup: 0,
+              isExternal: true,
+              externalSource: {
+                serviceName: externalItem.serviceName,
+                cmdbItemName: externalItem.cmdbItemName,
+                serviceId: externalItem.serviceId,
+                cmdbItemId: externalItem.cmdbItemId,
+              },
             },
-          },
-          style: {
-            width: 160,
-            height: 80,
-            pointerEvents: 'all',
-          },
-          className: 'external-service-node',
-        }));
+            style: {
+              width: 160,
+              height: 80,
+              pointerEvents: 'all',
+            },
+            className: 'external-service-node',
+          };
+        });
 
         return [...currentNodes, ...externalNodes];
       });
@@ -1960,6 +2083,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const onNodeDragStop = useCallback(async (event, node) => {
     const dragDuration = Date.now() - dragStateRef.current.startTime;
     const originalParentId = dragStateRef.current.originalParentId;
+    const isExternalNode = node.data?.isExternal;
+
     dragStateRef.current = { isDragging: false, startTime: 0, originalParentId: null };
 
     // Clear hovered group visual feedback dan reordering state
@@ -1972,24 +2097,66 @@ export default function ServiceVisualization({ service, workspaceId }) {
       return;
     }
 
-    if (!draggedNode || !hoverPosition) {
+    // Save external item position FIRST (before any other logic)
+    // External nodes cannot be added to groups, so we always save their position
+    if (isExternalNode && service?.id) {
+      try {
+        // Use flag untuk mencegah socket refresh di services lain
+        // Kita tidak ingin service lain refresh saat kita hanya memindahkan external item
+        const response = await api.post('/external-item-positions', {
+          workspaceId: workspaceId,
+          serviceId: service.id,
+          externalServiceItemId: node.id,
+          position: node.position,
+          skipRefresh: true  // Flag untuk backend agar jangan emit socket event
+        });
+
+        // Update local state immediately tanpa menunggu refresh
+        setExternalItemPositions(prev => ({
+          ...prev,
+          [node.id]: node.position
+        }));
+
+        // Update node position di state
+        setNodes(prevNodes => prevNodes.map(n => {
+          if (n.id === node.id) {
+            return {
+              ...n,
+              position: node.position
+            };
+          }
+          return n;
+        }));
+
+        // Optionally show feedback
+        // toast.success('External item position saved!');
+      } catch (err) {
+        console.error('Failed to save external item position:', err);
+        toast.error('Failed to save external item position');
+      }
+
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
 
-      // Save external item position to database
-      if (node.data?.isExternal && service?.id) {
-        try {
-          await api.post('/external-item-positions', {
-            workspaceId: workspaceId,
-            serviceId: service.id,
-            externalServiceItemId: node.id,
-            position: node.position
+      // Save to history with lightweight clone (only for significant position changes)
+      if (dragDuration > 200) { // Only save if drag was significant (>200ms)
+        requestAnimationFrame(() => {
+          setPastNodes(prev => {
+            // Use structuredClone for better performance than JSON.parse/stringify
+            const snapshot = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
+            return [...prev.slice(-10), snapshot];
           });
-        } catch (err) {
-          console.error('Failed to save external item position:', err);
-        }
+          setFutureNodes([]);
+        });
       }
+      return; // Exit early for external nodes
+    }
+
+    if (!draggedNode || !hoverPosition) {
+      setDraggedNode(null);
+      setHoverPosition(null);
+      isReorderingRef.current = false;
 
       // Save to history with lightweight clone (only for significant position changes)
       if (dragDuration > 200) { // Only save if drag was significant (>200ms)
@@ -2627,17 +2794,20 @@ export default function ServiceVisualization({ service, workspaceId }) {
       const isCrossService = oldEdge.id.startsWith('cross-service-') || oldEdge.data?.isCrossService;
 
       if (isCrossService) {
-        // Save cross-service edge handle
+        // Save cross-service edge handle dengan viewing service context
+        // Ini memungkinkan setiap service visualization memiliki handle position sendiri
         const edgeData = oldEdge.data || {};
         await api.put(`/cross-service-connections/edge-handles/${oldEdge.id}`, {
           sourceServiceId: edgeData.sourceServiceId,
           targetServiceId: edgeData.targetServiceId,
+          viewingServiceId: service.id, // ← KEY: Service yang sedang melihat
           sourceHandle: newConnection.sourceHandle,
           targetHandle: newConnection.targetHandle,
-          workspaceId: workspaceId
+          workspaceId: workspaceId,
+          skipRefresh: true // ← Mencegah socket refresh ke services lain
         });
 
-        // Update cross-service edge handles state
+        // Update cross-service edge handles state immediately (tanpa reload)
         setCrossServiceEdgeHandles(prev => ({
           ...prev,
           [oldEdge.id]: {
