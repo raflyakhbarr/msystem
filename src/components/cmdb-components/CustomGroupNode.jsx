@@ -1,9 +1,39 @@
 import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
+// Fungsi untuk menentukan warna teks berdasarkan background (hitam atau putih)
+const getContrastColor = (hexColor) => {
+  if (!hexColor) return '#000000'; // Default black
+
+  // Handle HSL values (like 'hsl(var(--primary) / 0.15)')
+  if (hexColor.startsWith('hsl')) {
+    return '#000000'; // Default untuk HSL
+  }
+
+  // Konversi hex ke RGB
+  let hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+  if (hex.length !== 6) return '#000000';
+
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+
+  // Hitung luminance menggunakan rumus WCAG
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  // Return hitam untuk background terang, putih untuk background gelap
+  return luminance > 0.5 ? '#000000' : '#FFFFFF';
+};
+
 const CustomGroupNode = memo(({ data, selected }) => {
   // Warna handle berdasarkan primary color
   const handleColor = 'hsl(var(--primary))';
+
+  // Tentukan warna teks berdasarkan warna background group
+  const textColor = getContrastColor(data.color);
 
   // Cek jika group sedang di-hover oleh dragged node
   const isHovered = data.isHovered || false;
@@ -132,17 +162,17 @@ const CustomGroupNode = memo(({ data, selected }) => {
       />
 
       {/* GROUP CONTENT */}
-      <div className="font-bold text-lg mb-1" style={{ color: 'hsl(var(--primary))' }}>
+      <div className="font-bold text-lg mb-1" style={{ color: textColor }}>
         {data.name}
       </div>
 
       {data.description && (
-        <div className="text-xs text-muted-foreground mb-2">
+        <div className="text-xs mb-2" style={{ color: textColor, opacity: 0.8 }}>
           {data.description}
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground">
+      <div className="text-xs" style={{ color: textColor, opacity: 0.7 }}>
         {data.itemCount || 0} items
       </div>
     </div>

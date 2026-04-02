@@ -365,6 +365,9 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Minimap state
   const [showMiniMap, setShowMiniMap] = useState(false);
 
+  // Edge labels state
+  const [showEdgeLabels, setShowEdgeLabels] = useState(true);
+
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState('single');
 
@@ -1356,6 +1359,22 @@ export default function ServiceVisualization({ service, workspaceId }) {
           fillOpacity: 0,
         };
         edgeConfig.labelBgPadding = [0, 0];
+      } else if (showEdgeLabels) {
+        // Show connection type label if edge labels are enabled
+        const typeLabel = connectionType ? connectionType.replace(/_/g, ' ').toUpperCase() : '';
+        if (typeLabel) {
+          edgeConfig.label = typeLabel;
+          edgeConfig.labelStyle = {
+            fontSize: 9,
+            fontWeight: 500,
+            fill: edgeColor,
+          };
+          edgeConfig.labelBgStyle = {
+            fill: 'white',
+            fillOpacity: 0.8,
+          };
+          edgeConfig.labelBgPadding = [4, 4];
+        }
       }
 
       return edgeConfig;
@@ -1533,7 +1552,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         animated: true, // Re-enable animation for cross-service edges
         style: baseStyle,
         zIndex: uniqueZIndex,
-        label: showCrossMarker ? '✕' : (connectionType?.label || ''),
+        label: showCrossMarker ? '✕' : (showEdgeLabels ? (connectionType?.label || '') : ''),
         labelStyle: {
           fontSize: showCrossMarker ? 20 : 10,
           fontWeight: showCrossMarker ? 'bold' : 600,
@@ -1571,7 +1590,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
     prevGroupConnectionsRef.current = groupConnections;
     prevEdgeHandlesRef.current = edgeHandles;
     prevCrossServiceEdgeHandlesRef.current = crossServiceEdgeHandles;
-  }, [connections, groupConnections, edgeHandles, crossServiceConnections, crossServiceEdgeHandles, connectionTypes, crossServiceUpdateKey, items, externalServiceItems]);
+  }, [connections, groupConnections, edgeHandles, crossServiceConnections, crossServiceEdgeHandles, connectionTypes, crossServiceUpdateKey, items, externalServiceItems, showEdgeLabels]);
 
   const handleOpenAddModal = useCallback(() => {
     setItemFormData({
@@ -2050,11 +2069,23 @@ export default function ServiceVisualization({ service, workspaceId }) {
       // Save item positions
       const itemPromises = nodesToSave
         .filter(node => node.type === 'custom')
-        .map(node =>
-          api.put(`/service-items/items/${node.id}/position`, {
+        .map(node => {
+          // External items: save to external_item_positions table
+          if (node.data?.isExternal) {
+            return api.post('/external-item-positions', {
+              workspaceId: workspaceId,
+              serviceId: service.id,
+              externalServiceItemId: node.id,
+              position: node.position,
+              skipRefresh: true  // Prevent socket events to other services
+            });
+          }
+          // Internal items: save to service_items table
+          return api.put(`/service-items/items/${node.id}/position`, {
             position: node.position,
-          })
-        );
+            skipRefresh: false  // Allow normal service updates
+          });
+        });
 
       // Save group positions
       const groupPromises = nodesToSave
@@ -2269,16 +2300,20 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
           toast.success('Item berhasil dipindahkan ke group!');
 
-          // Simpan position baru ke database
-          try {
-            await api.put(`/service-items/items/${node.id}/position`, {
-              position: {
-                x: hoverPosition.relativeX,
-                y: hoverPosition.relativeY
-              }
-            });
-          } catch (posErr) {
-            console.error('Failed to save position:', posErr);
+          // Simpan position baru ke database (hanya untuk internal items)
+          // External items tidak bisa masuk group, jadi di-handle terpisah di onNodeDragStop
+          if (!node.data?.isExternal) {
+            try {
+              await api.put(`/service-items/items/${node.id}/position`, {
+                position: {
+                  x: hoverPosition.relativeX,
+                  y: hoverPosition.relativeY
+                },
+                skipRefresh: false  // Allow normal service updates
+              });
+            } catch (posErr) {
+              console.error('Failed to save position:', posErr);
+            }
           }
 
           // Reset reordering flag - jangan panggil fetchAll() manual, socket akan menanganinya
@@ -2547,11 +2582,23 @@ export default function ServiceVisualization({ service, workspaceId }) {
       // Save item positions
       const itemPromises = nodes
         .filter(node => node.type === 'custom')
-        .map(node =>
-          api.put(`/service-items/items/${node.id}/position`, {
+        .map(node => {
+          // External items: save to external_item_positions table
+          if (node.data?.isExternal) {
+            return api.post('/external-item-positions', {
+              workspaceId: workspaceId,
+              serviceId: service.id,
+              externalServiceItemId: node.id,
+              position: node.position,
+              skipRefresh: true  // Prevent socket events to other services
+            });
+          }
+          // Internal items: save to service_items table
+          return api.put(`/service-items/items/${node.id}/position`, {
             position: node.position,
-          })
-        );
+            skipRefresh: false  // Allow normal service updates
+          });
+        });
 
       // Save group positions
       const groupPromises = nodes
@@ -2583,6 +2630,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   const handleToggleMiniMap = useCallback(() => {
     setShowMiniMap(prev => !prev);
+  }, []);
+
+  const handleToggleEdgeLabels = useCallback(() => {
+    setShowEdgeLabels(prev => !prev);
   }, []);
 
   const handleNodeSearch = useCallback((node) => {
@@ -2879,6 +2930,8 @@ export default function ServiceVisualization({ service, workspaceId }) {
         onToggleMiniMap={handleToggleMiniMap}
         showExternalNodes={showExternalNodes}
         onToggleExternalNodes={() => setShowExternalNodes(!showExternalNodes)}
+        showEdgeLabels={showEdgeLabels}
+        onToggleEdgeLabels={handleToggleEdgeLabels}
       />
 
       {/* React Flow Canvas */}

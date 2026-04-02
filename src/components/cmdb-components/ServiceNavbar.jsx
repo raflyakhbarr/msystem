@@ -1,7 +1,7 @@
 import {
   Save, Plus, Layers, MousePointer2, Square,
   ToggleRight, ToggleLeft, Map, ChevronDown,
-  Undo2, Redo2, Globe, ExternalLink
+  Undo2, Redo2, Globe, ExternalLink, Tag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +35,8 @@ export default function ServiceNavbar({
   onToggleMiniMap,
   showExternalNodes,
   onToggleExternalNodes,
+  showEdgeLabels,
+  onToggleEdgeLabels,
 }) {
 
 
@@ -173,6 +175,18 @@ export default function ServiceNavbar({
               >
                 {showExternalNodes ? <Globe size={14} /> : <ExternalLink size={14} />}
                 <span className="hidden lg:inline ml-1">External</span>
+              </Button>
+
+              {/* EDGE LABELS TOGGLE BUTTON */}
+              <Button
+                onClick={onToggleEdgeLabels}
+                variant={showEdgeLabels ? "default" : "ghost"}
+                size="sm"
+                title={showEdgeLabels ? "Sembunyikan Label Koneksi" : "Tampilkan Label Koneksi"}
+                className={showEdgeLabels ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}
+              >
+                <Tag size={14} />
+                <span className="hidden lg:inline ml-1">Labels</span>
               </Button>
             </div>
           </div>
