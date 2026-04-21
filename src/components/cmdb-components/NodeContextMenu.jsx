@@ -17,7 +17,8 @@ export default function NodeContextMenu({
   if (!show || !node) return null;
 
   const isGroupNode = node.type === 'group';
-  const isInGroup = node.parentNode && !isGroupNode; // Item dalam group
+  const isLayananNode = node.type === 'layanan';
+  const isInGroup = node.parentNode && !isGroupNode && !isLayananNode; // Item dalam group (layanan tidak bisa dalam group)
 
   const items = [
     isGroupNode
@@ -124,7 +125,7 @@ export default function NodeContextMenu({
             boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
           }}
         >
-          {isGroupNode ? 'Group' : 'Node'}: {node.data?.name}
+          {isGroupNode ? 'Group' : (isLayananNode ? 'Layanan' : 'Node')}: {node.data?.name}
         </motion.div>
 
         {/* Center button */}

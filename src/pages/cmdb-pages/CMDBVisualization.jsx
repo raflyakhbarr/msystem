@@ -7,6 +7,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   reconnectEdge,
+  Position,
 } from 'reactflow';
 import {
   AlertDialog,
@@ -46,6 +47,7 @@ import 'reactflow/dist/style.css';
 import { Square } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
+import { useLayanan } from '../../hooks/cmdb-hooks/useLayanan';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
@@ -53,6 +55,7 @@ import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cm
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
+import CustomLayananNode from '../../components/cmdb-components/CustomLayananNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
 import NodeContextMenu from '../../components/cmdb-components/NodeContextMenu';
 import EdgeContextMenu from '../../components/cmdb-components/EdgeContextMenu';
@@ -65,6 +68,7 @@ import ExportModal from '@/components/cmdb-components/ExportModal';
 import ImportModal from '@/components/cmdb-components/ImportModal';
 import ImportPreviewModal from '@/components/cmdb-components/ImportPreviewModal';
 import ShareModal from '@/components/cmdb-components/ShareModal';
+import LayananFormModal from '../../components/cmdb-components/LayananFormModal';
 import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import StorageFormModal from '../../components/cmdb-components/StorageFormModal';
 import { toast } from 'sonner';
@@ -83,6 +87,7 @@ import WorkspaceSwitcher from '@/components/cmdb-components/WorkspaceSwitcher';
 const nodeTypes = {
   custom: CustomNode,
   group: CustomGroupNode,
+  layanan: CustomLayananNode,
 };
 
 const DIMENSIONS = {
@@ -207,6 +212,7 @@ export default function CMDBVisualization() {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
+  const [showLayananModal, setShowLayananModal] = useState(false);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -225,10 +231,17 @@ export default function CMDBVisualization() {
 
   const [itemFormData, setItemFormData] = useState(INITIAL_ITEM_FORM);
   const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
+  const [layananFormData, setLayananFormData] = useState({
+    name: '',
+    description: '',
+    status: 'active'
+  });
   const [editItemMode, setEditItemMode] = useState(false);
   const [editGroupMode, setEditGroupMode] = useState(false);
+  const [editLayananMode, setEditLayananMode] = useState(false);
   const [currentItemId, setCurrentItemId] = useState(null);
   const [currentGroupId, setCurrentGroupId] = useState(null);
+  const [currentLayananId, setCurrentLayananId] = useState(null);
 
   const [selectedItemForConnection, setSelectedItemForConnection] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
@@ -274,6 +287,7 @@ export default function CMDBVisualization() {
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
+  const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels);
 
   // Service handlers
@@ -352,7 +366,7 @@ export default function CMDBVisualization() {
     handleManageConnectionsFromVisualization,
     alertDialog,
     closeAlert,
-  } = useVisualizationActions(items, groups, fetchAll);
+  } = useVisualizationActions(items, groups, layananItems, fetchAll, fetchLayanaAll);
 
   const {
     highlightedNodeId,
@@ -654,6 +668,11 @@ export default function CMDBVisualization() {
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
+      // Skip layanan edges from highlight processing - they use their own styling
+      if (String(edge.id).startsWith('layanan-edge-')) {
+        return edge;
+      }
+
       let opacity = edge.style?.opacity || 1;
       let strokeWidth = edge.style?.strokeWidth || 2;
       let zIndex = edge.zIndex || 10;
@@ -707,9 +726,162 @@ export default function CMDBVisualization() {
 
   useEffect(() => {
     const { flowNodes, flowEdges } = transformToFlowData();
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  }, [transformToFlowData, setNodes, setEdges]);
+
+    // Add layanan nodes
+    const layananNodes = layananItems.map((layanan, index) => {
+      // Berikan posisi default yang berbeda untuk setiap node jika tidak ada position
+      const defaultPosition = layanan.position
+        ? layanan.position
+        : { x: 100 + (index * 250), y: 100 + (index * 150) }; // Spread out nodes
+
+      return {
+        id: `layanan-${layanan.id}`,
+        type: 'layanan',
+        position: defaultPosition,
+        data: {
+          id: layanan.id,
+          name: layanan.name,
+          description: layanan.description,
+          status: layanan.status,
+          workspaceId: layanan.workspace_id,
+          createdAt: layanan.created_at,
+          updatedAt: layanan.updated_at
+        }
+      };
+    });
+
+    // Add layanan connections (edges) with status-based styling
+    const layananEdges = layananConnections.map((conn) => {
+      const edgeId = `layanan-edge-${conn.id}`;
+
+      // PENTING: Semua node IDs harus STRING untuk ReactFlow
+      // Layanan nodes: 'layana-{id}' (string dengan prefix)
+      // CMDB nodes: String(id) (angka sebagai string, TANPA prefix)
+      const sourceId = conn.source_type === 'layanan'
+        ? `layanan-${conn.source_id}`
+        : String(conn.source_id);  // ← KONVERSI KE STRING!
+
+      const targetId = conn.target_type === 'layanan'
+        ? `layanan-${conn.target_id}`
+        : String(conn.target_id);  // ← KONVERSI KE STRING!
+
+      // Find source and target nodes to get their status
+      const allNodes = [...flowNodes, ...layananNodes];
+      const sourceNode = allNodes.find(n => n.id === sourceId);
+      const targetNode = allNodes.find(n => n.id === targetId);
+
+      if (!sourceNode || !targetNode) {
+        return null; // Skip edge jika node tidak ditemukan
+      }
+
+      // Determine edge status based on source and target
+      let edgeStatus = 'active';
+      let showCrossMarker = false;
+
+      if (sourceNode?.data?.status === 'inactive' || targetNode?.data?.status === 'inactive') {
+        edgeStatus = 'inactive';
+        showCrossMarker = true;
+      } else if (sourceNode?.data?.status === 'maintenance' || targetNode?.data?.status === 'maintenance') {
+        edgeStatus = 'maintenance';
+      }
+
+      // Get color based on status
+      const getStrokeColor = (status) => {
+        switch (status) {
+          case 'active': return '#a855f7'; // purple for layana connections
+          case 'inactive': return '#ef4444'; // red
+          case 'maintenance': return '#f59e0b'; // yellow
+          default: return '#a855f7';
+        }
+      };
+
+      const strokeColor = getStrokeColor(edgeStatus);
+
+      // Get handles from edgeHandles state, or use defaults
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        // Default handles based on node types
+        // Layanan nodes have handles: 'bottom' (source), 'top' (target), 'left' (source), 'right' (source), 'left-target' (target), 'right-target' (target)
+        // CMDB nodes have handles: 'source-bottom', 'target-bottom', 'source-top', 'target-top', 'source-left', 'target-left', 'source-right', 'target-right'
+
+        if (conn.source_type === 'layanan') {
+          // Source is Layanan node - use 'bottom' or 'right' for output
+          sourceHandle = 'bottom';
+        } else {
+          // Source is CMDB node - use 'source-bottom' for output
+          sourceHandle = 'source-bottom';
+        }
+
+        if (conn.target_type === 'layanan') {
+          // Target is Layanan node - use 'top' or 'left-target'/'right-target' for input
+          targetHandle = 'top';
+        } else {
+          // Target is CMDB node - use 'target-top' for input
+          targetHandle = 'target-top';
+        }
+      }
+
+      const edgeConfig = {
+        id: edgeId,
+        source: sourceId,
+        target: targetId,
+        sourceHandle,
+        targetHandle,
+        type: 'smoothstep',
+        animated: false,
+        markerEnd: { type: 'arrowclosed', color: strokeColor, strokeWidth: 3 },
+        style: {
+          stroke: strokeColor,
+          strokeWidth: 4,  // Lebih tebal untuk debugging
+          opacity: 1,
+        },
+        zIndex: 100,  // High z-index untuk memastikan muncul di atas
+        reconnectable: true,
+        // Add connection type label if enabled
+        ...(showConnectionLabels && {
+          label: conn.connection_type || 'connects_to',
+          labelStyle: {
+            fontSize: 10,
+            fontWeight: 600,
+            fill: strokeColor,
+            backgroundColor: 'white',
+            borderRadius: '4px',
+            padding: '2px 4px'
+          },
+          labelBgStyle: {
+            fill: 'white',
+            fillOpacity: 0.9
+          }
+        }),
+        // Add cross marker if inactive
+        ...(showCrossMarker && {
+          label: '✕',
+          labelStyle: {
+            fill: strokeColor,
+            fontWeight: 'bold',
+            fontSize: 20,
+            background: 'white',
+            borderRadius: '50%'
+          },
+          labelBgStyle: {
+            fill: 'white',
+            fillOpacity: 0
+          },
+          labelBgPadding: [6, 6]
+        })
+      };
+
+      return edgeConfig;
+    }).filter(Boolean); // Hapus edges yang null
+
+    const allEdges = [...flowEdges, ...layananEdges];
+
+    setNodes([...flowNodes, ...layananNodes]);
+    setEdges(allEdges);
+  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, showConnectionLabels, edgeHandles]);
 
   // Fetch services for all items
   useEffect(() => {
@@ -830,8 +1002,6 @@ export default function CMDBVisualization() {
             setNodes(newFlowNodes);
             setEdges(newFlowEdges);
 
-            console.log('✅ Nodes and edges re-rendered with updated service status');
-
             return updated;
           });
         } catch (err) {
@@ -860,6 +1030,24 @@ export default function CMDBVisualization() {
     setCurrentItemId(null);
     setServiceIconUploads({});
     setShowItemModal(true);
+  }, []);
+
+  const handleOpenAddLayanan = useCallback(() => {
+    setLayananFormData({ name: '', description: '', status: 'active' });
+    setEditLayananMode(false);
+    setCurrentLayananId(null);
+    setShowLayananModal(true);
+  }, []);
+
+  const handleEditLayanan = useCallback((layanan) => {
+    setLayananFormData({
+      name: layanan.name || '',
+      description: layanan.description || '',
+      status: layanan.status || 'active'
+    });
+    setEditLayananMode(true);
+    setCurrentLayananId(layanan.id);
+    setShowLayananModal(true);
   }, []);
 
   const handleOpenImport = useCallback(() => {
@@ -1085,6 +1273,57 @@ export default function CMDBVisualization() {
     }
   }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, currentItemId, serviceIconUploads, fetchAll]);
 
+  const handleLayananSubmit = useCallback(async (e) => {
+    e.preventDefault();
+
+    if (!currentWorkspace) {
+      toast.error('Pilih workspace terlebih dahulu');
+      return;
+    }
+
+    const initialPosition = getViewportCenter();
+
+    try {
+      const layananData = {
+        name: layananFormData.name,
+        description: layananFormData.description || null,
+        status: layananFormData.status,
+        position: initialPosition,
+        workspace_id: currentWorkspace.id
+      };
+
+      let result;
+
+      if (editLayananMode) {
+        // Update existing layanan
+        result = await updateLayanan(currentLayananId, {
+          name: layananData.name,
+          description: layananData.description,
+          status: layananData.status
+        });
+      } else {
+        // Create new layanan
+        result = await createLayanan(layananData);
+      }
+
+      if (result.success) {
+        toast.success(editLayananMode ? 'Layanan berhasil diupdate' : 'Layanan berhasil ditambahkan');
+        setShowLayananModal(false);
+
+        setTimeout(() => {
+          setLayananFormData({ name: '', description: '', status: 'active' });
+          setEditLayananMode(false);
+          setCurrentLayananId(null);
+        }, 100);
+      } else {
+        toast.error('Gagal: ' + result.error);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
+    }
+  }, [layananFormData, currentWorkspace, getViewportCenter, editLayananMode, currentLayananId, createLayanan, updateLayanan]);
+
   const handleOpenManageGroups = useCallback(() => {
     setGroupFormData(INITIAL_GROUP_FORM);
     setEditGroupMode(false);
@@ -1249,15 +1488,20 @@ export default function CMDBVisualization() {
 
   // Handler for drag-to-connect (Quick Connection Modal)
   const handleConnect = useCallback((connection) => {
-    // Detect if source or target is a group
+    // Detect if source or target is a group or layanan
     const isSourceGroup = String(connection.source).startsWith('group-');
     const isTargetGroup = String(connection.target).startsWith('group-');
+    const isSourceLayanan = String(connection.source).startsWith('layanan-');
+    const isTargetLayanan = String(connection.target).startsWith('layanan-');
 
-    let sourceItem, targetItem, sourceGroup, targetGroup;
+    let sourceItem, targetItem, sourceGroup, targetGroup, sourceLayanan, targetLayanan;
 
     if (isSourceGroup) {
       const sourceGroupId = Number(String(connection.source).replace('group-', ''));
       sourceGroup = groups.find(g => g.id === sourceGroupId);
+    } else if (isSourceLayanan) {
+      const sourceLayananId = Number(String(connection.source).replace('layanan-', ''));
+      sourceLayanan = layananItems.find(l => l.id === sourceLayananId);
     } else {
       sourceItem = items.find(item => item.id === Number(connection.source));
     }
@@ -1265,18 +1509,38 @@ export default function CMDBVisualization() {
     if (isTargetGroup) {
       const targetGroupId = Number(String(connection.target).replace('group-', ''));
       targetGroup = groups.find(g => g.id === targetGroupId);
+    } else if (isTargetLayanan) {
+      const targetLayananId = Number(String(connection.target).replace('layanan-', ''));
+      targetLayanan = layananItems.find(l => l.id === targetLayananId);
     } else {
       targetItem = items.find(item => item.id === Number(connection.target));
     }
 
     // Check if we have valid source and target
-    if ((!sourceItem && !sourceGroup) || (!targetItem && !targetGroup)) {
+    if ((!sourceItem && !sourceGroup && !sourceLayanan) || (!targetItem && !targetGroup && !targetLayanan)) {
+      return;
+    }
+
+    // Check for unsupported group-to-layanan connections
+    if ((sourceGroup && targetLayanan) || (sourceLayanan && targetGroup)) {
+      toast.error('Koneksi group-to-layanan tidak didukung. Gunakan item sebagai perantara.');
       return;
     }
 
     // Check if connection already exists
     let existingConn = null;
-    if (sourceItem && targetItem) {
+    if (sourceLayanan || targetLayanan) {
+      // Layanan connections - check in layananConnections
+      const sourceId = sourceLayanan ? sourceLayanan.id : null;
+      const targetId = targetLayanan ? targetLayanan.id : null;
+      const sourceType = sourceLayanan ? 'layanan' : 'cmdb';
+      const targetType = targetLayanan ? 'layanan' : 'cmdb';
+
+      existingConn = layananConnections.find(
+        conn => conn.source_id === sourceId && conn.source_type === sourceType &&
+                conn.target_id === targetId && conn.target_type === targetType
+      );
+    } else if (sourceItem && targetItem) {
       // Item-to-item
       existingConn = connections.find(
         conn => conn.source_id === sourceItem.id && conn.target_id === targetItem.id
@@ -1302,23 +1566,48 @@ export default function CMDBVisualization() {
       return;
     }
 
-    // Set source and target (can be item or group)
-    setQuickConnectionSource(sourceItem || sourceGroup);
-    setQuickConnectionTarget(targetItem || targetGroup);
+    // Set source and target (can be item, group, or layanan)
+    // Wrap in object with explicit type property for reliable detection
+    const sourceData = sourceLayanan || sourceGroup || sourceItem;
+    const targetData = targetLayanan || targetGroup || targetItem;
+
+    const sourceType = sourceLayanan ? 'layanan' : (sourceGroup ? 'group' : 'item');
+    const targetType = targetLayanan ? 'layanan' : (targetGroup ? 'group' : 'item');
+
+    setQuickConnectionSource({ ...sourceData, _entityType: sourceType });
+    setQuickConnectionTarget({ ...targetData, _entityType: targetType });
     setQuickConnectionMode('create');
     setQuickConnectionExistingType(null);
     setShowQuickConnectionModal(true);
-  }, [items, connections, groups]);
+  }, [items, connections, groups, layananItems, layananConnections]);
 
   const handleSaveQuickConnection = useCallback(async (connectionType) => {
     if (!quickConnectionSource || !quickConnectionTarget || !currentWorkspace) return;
 
     try {
-      // Detect if source or target is a group
-      const isSourceGroup = quickConnectionSource.color !== undefined; // Groups have color property
-      const isTargetGroup = quickConnectionTarget.color !== undefined;
+      // Detect if source or target is a group or layanan using _entityType property
+      const isSourceGroup = quickConnectionSource._entityType === 'group';
+      const isTargetGroup = quickConnectionTarget._entityType === 'group';
+      const isSourceLayanan = quickConnectionSource._entityType === 'layanan';
+      const isTargetLayanan = quickConnectionTarget._entityType === 'layanan';
+
+      // Check if this involves layanan
+      const involvesLayanan = isSourceLayanan || isTargetLayanan;
+
+      // Check if this involves groups with layanan (not supported by database)
+      const involvesGroupWithLayanan = (isSourceGroup && isTargetLayanan) || (isSourceLayanan && isTargetGroup);
+
+      if (involvesGroupWithLayanan) {
+        toast.error('Koneksi group-to-layanan tidak didukung. Gunakan item sebagai perantara.');
+        return;
+      }
 
       if (quickConnectionMode === 'edit') {
+        // Update existing connection - not supported for layanan yet
+        if (involvesLayanan) {
+          toast.info('Edit koneksi layanan: Hapus dan buat kembali dengan tipe baru.');
+          return;
+        }
         // Update existing connection
         if (!isSourceGroup && !isTargetGroup) {
           // Item-to-item
@@ -1349,7 +1638,62 @@ export default function CMDBVisualization() {
         }
       } else {
         // Create new connection
-        if (isSourceGroup && isTargetGroup) {
+        if (involvesLayanan) {
+          // Layanan connections
+          const response = await api.post('/layanan/connections', {
+            source_type: isSourceLayanan ? 'layanan' : 'cmdb',
+            source_id: quickConnectionSource.id,
+            target_type: isTargetLayanan ? 'layanan' : 'cmdb',
+            target_id: quickConnectionTarget.id,
+            workspace_id: currentWorkspace.id,
+            connection_type: connectionType
+          });
+
+          // Simpan edge handle untuk koneksi layanan yang baru dibuat
+          const newConnection = response.data;
+          if (newConnection && newConnection.id) {
+            const edgeId = `layanan-edge-${newConnection.id}`;
+
+            // Tentukan handle berdasarkan tipe node (layanan vs CMDB)
+            let sourceHandle, targetHandle;
+
+            if (isSourceLayanan) {
+              // Source is Layanan node - use 'bottom' for output
+              sourceHandle = 'bottom';
+            } else {
+              // Source is CMDB node - use 'source-bottom' for output
+              sourceHandle = 'source-bottom';
+            }
+
+            if (isTargetLayanan) {
+              // Target is Layanan node - use 'top' for input
+              targetHandle = 'top';
+            } else {
+              // Target is CMDB node - use 'target-top' for input
+              targetHandle = 'target-top';
+            }
+
+            // Simpan edge handle
+            const newEdgeHandles = {
+              ...edgeHandles,
+              [edgeId]: {
+                sourceHandle,
+                targetHandle,
+              }
+            };
+
+            await saveEdgeHandle(
+              edgeId,
+              sourceHandle,
+              targetHandle,
+              currentWorkspace?.id
+            );
+
+            setEdgeHandles(newEdgeHandles);
+          }
+
+          toast.success('Koneksi layanan berhasil dibuat!');
+        } else if (isSourceGroup && isTargetGroup) {
           // Group-to-group - use group connection endpoint
           await api.post('/groups/connections', {
             source_id: quickConnectionSource.id,
@@ -1392,7 +1736,8 @@ export default function CMDBVisualization() {
         }
       }
 
-      await fetchAll();
+      // Fetch both cmdb and layana data
+      await Promise.all([fetchAll(), fetchLayanaAll()]);
       setShowQuickConnectionModal(false);
       setQuickConnectionSource(null);
       setQuickConnectionTarget(null);
@@ -1400,7 +1745,7 @@ export default function CMDBVisualization() {
       console.error('Save connection error:', err);
       toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, getConnectionDirection]);
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, getConnectionDirection, saveEdgeHandle, edgeHandles]);
 
   // Edge Context Menu handlers
   const handleEdgeContextMenu = useCallback((event, edge) => {
@@ -1430,13 +1775,18 @@ export default function CMDBVisualization() {
     if (!edgeContextMenu.edge) return;
 
     try {
-      // Deteksi apakah koneksi group-to-item, item-to-group, atau group-to-group
+      // Deteksi apakah koneksi layanan, group-to-item, item-to-group, atau group-to-group
+      const isLayananEdge = String(edgeContextMenu.edge.id).startsWith('layanan-edge-');
       const isGroupToItem = String(edgeContextMenu.edge.source).startsWith('group-');
       const isItemToGroup = String(edgeContextMenu.edge.target).startsWith('group-');
       const isGroupToGroup = isGroupToItem && isItemToGroup;
 
       let deleteUrl;
-      if (isGroupToGroup) {
+      if (isLayananEdge) {
+        // Layanan edge: DELETE /api/layanan/connections/:id
+        const connectionId = String(edgeContextMenu.edge.id).replace('layanan-edge-', '');
+        deleteUrl = `/layanan/connections/${connectionId}`;
+      } else if (isGroupToGroup) {
         // Group-to-group: DELETE /api/groups/connections/:sourceId/:targetId
         const sourceGroupId = String(edgeContextMenu.edge.source).replace('group-', '');
         const targetGroupId = String(edgeContextMenu.edge.target).replace('group-', '');
@@ -1456,12 +1806,14 @@ export default function CMDBVisualization() {
 
       await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
-      await fetchAll();
+
+      // Fetch both cmdb and layana data
+      await Promise.all([fetchAll(), fetchLayanaAll()]);
     } catch (err) {
       console.error('Delete connection error:', err);
       toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [edgeContextMenu.edge, fetchAll]);
+  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll]);
 
   const handleEditEdge = useCallback(() => {
     if (!edgeContextMenu.edge) return;
@@ -1469,12 +1821,19 @@ export default function CMDBVisualization() {
     const edge = edgeContextMenu.edge;
 
     // Deteksi tipe koneksi
+    const isLayananEdge = String(edge.id).startsWith('layanan-edge-');
     const isGroupToItem = String(edge.source).startsWith('group-');
     const isItemToGroup = String(edge.target).startsWith('group-');
     const isGroupToGroup = isGroupToItem && isItemToGroup;
 
-    let sourceItem, targetItem, sourceGroup, targetGroup;
-    let connectionType = edge.data?.connectionType || 'depends_on';
+    let sourceItem, targetItem, sourceGroup, targetGroup, sourceLayanan, targetLayanan;
+    let connectionType = edge.data?.connectionType || edge.label || 'depends_on';
+
+    // Handle layanan edge - edit not supported yet
+    if (isLayananEdge) {
+      toast.info('Edit koneksi layanan: Hapus dan buat kembali dengan tipe baru.');
+      return;
+    }
 
     if (isGroupToGroup) {
       // Group-to-group - gunakan Group Connection Modal
@@ -1530,8 +1889,8 @@ export default function CMDBVisualization() {
         return;
       }
       // Open Quick Connection Modal for group-to-item
-      setQuickConnectionSource(sourceGroup);
-      setQuickConnectionTarget(targetItem);
+      setQuickConnectionSource({ ...sourceGroup, _entityType: 'group' });
+      setQuickConnectionTarget({ ...targetItem, _entityType: 'item' });
       setQuickConnectionMode('edit');
       setQuickConnectionExistingType(connectionType);
       setShowQuickConnectionModal(true);
@@ -1549,8 +1908,8 @@ export default function CMDBVisualization() {
         return;
       }
       // Open Quick Connection Modal for item-to-group
-      setQuickConnectionSource(sourceItem);
-      setQuickConnectionTarget(targetGroup);
+      setQuickConnectionSource({ ...sourceItem, _entityType: 'item' });
+      setQuickConnectionTarget({ ...targetGroup, _entityType: 'group' });
       setQuickConnectionMode('edit');
       setQuickConnectionExistingType(connectionType);
       setShowQuickConnectionModal(true);
@@ -1562,8 +1921,8 @@ export default function CMDBVisualization() {
     targetItem = items.find(item => item.id === Number(edge.target));
 
     if (sourceItem && targetItem) {
-      setQuickConnectionSource(sourceItem);
-      setQuickConnectionTarget(targetItem);
+      setQuickConnectionSource({ ...sourceItem, _entityType: 'item' });
+      setQuickConnectionTarget({ ...targetItem, _entityType: 'item' });
       setQuickConnectionMode('edit');
       setQuickConnectionExistingType(edge.data?.connectionType || 'depends_on');
       setShowQuickConnectionModal(true);
@@ -2439,6 +2798,13 @@ export default function CMDBVisualization() {
               skipEmit: true // Skip individual emits
             })
           );
+        } else if (node.type === 'layanan') {
+          const layananId = node.id.replace('layanan-', '');
+          updatePromises.push(
+            api.put(`/layanan/${layananId}/position`, {
+              position: { x: node.position.x, y: node.position.y }
+            })
+          );
         }
       });
 
@@ -2500,6 +2866,13 @@ export default function CMDBVisualization() {
               skipEmit: true // Skip individual emits
             })
           );
+        } else if (node.type === 'layanan') {
+          const layananId = node.id.replace('layanan-', '');
+          updatePromises.push(
+            api.put(`/layanan/${layananId}/position`, {
+              position: { x: node.position.x, y: node.position.y }
+            })
+          );
         }
       });
 
@@ -2529,10 +2902,12 @@ export default function CMDBVisualization() {
     const editData = handleEditFromVisualization(contextMenu.node);
     if (editData.type === 'group') {
       handleEditGroup(editData.data);
+    } else if (editData.type === 'layanan') {
+      handleEditLayanan(editData.data);
     } else {
       handleEditItem(editData.data);
     }
-  }, [contextMenu.node, handleEditFromVisualization, handleEditGroup, handleEditItem]);
+  }, [contextMenu.node, handleEditFromVisualization, handleEditGroup, handleEditLayanan, handleEditItem]);
 
   const handleContextDelete = useCallback(async () => {
     await handleDeleteFromVisualization(contextMenu.node);
@@ -2542,6 +2917,8 @@ export default function CMDBVisualization() {
     const item = handleManageConnectionsFromVisualization(contextMenu.node);
     if (item) {
       handleOpenConnectionModal(item);
+    } else if (contextMenu.node?.type === 'layanan') {
+      toast.info('Layanan menggunakan drag-to-connect. Drag dari handle ke node lain untuk membuat koneksi.');
     }
   }, [contextMenu.node, handleManageConnectionsFromVisualization, handleOpenConnectionModal]);
 
@@ -2562,7 +2939,12 @@ export default function CMDBVisualization() {
   }, [contextMenu.node, toggleNodeVisibility]);
 
   const handleContextRemoveFromGroup = useCallback(async () => {
-    if (!contextMenu.node || !contextMenu.node.parentNode) {
+    if (!contextMenu.node || contextMenu.node.type === 'layanan') {
+      toast.error('Layanan tidak dapat berada dalam group');
+      return;
+    }
+
+    if (!contextMenu.node.parentNode) {
       toast.error('Item tidak dalam group');
       return;
     }
@@ -2781,6 +3163,7 @@ export default function CMDBVisualization() {
         onSavePositions={handleSavePositions}
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
+        onOpenAddLayanan={handleOpenAddLayanan}
         onOpenExportModal={() => setShowExportModal(true)}
         onOpenImportModal={handleOpenImport}
         onOpenShareModal={() => setShowShareModal(true)}
@@ -3192,6 +3575,24 @@ export default function CMDBVisualization() {
         onServiceIconUpload={handleServiceIconUpload}
         onStorageClick={handleStorageClick}
         onStorageDelete={handleStorageDelete}
+      />
+
+      <LayananFormModal
+        show={showLayananModal}
+        editMode={editLayananMode}
+        formData={layananFormData}
+        currentWorkspace={currentWorkspace}
+        onClose={() => {
+          setShowLayananModal(false);
+          setLayananFormData({ name: '', description: '', status: 'active' });
+          setEditLayananMode(false);
+          setCurrentLayananId(null);
+        }}
+        onSubmit={handleLayananSubmit}
+        onInputChange={(e) => {
+          const { name, value } = e.target;
+          setLayananFormData(prev => ({ ...prev, [name]: value }));
+        }}
       />
 
       <StorageFormModal
