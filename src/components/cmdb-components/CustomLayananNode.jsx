@@ -1,6 +1,12 @@
 import { Handle, Position } from 'reactflow';
-import { MoreHorizontal, Briefcase } from 'lucide-react';
+import { MoreHorizontal, Briefcase, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const statusColors = {
   active: 'bg-green-500',
@@ -84,6 +90,39 @@ export default function CustomLayananNode({ data, id }) {
 
         {/* Status Badge */}
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Info Icon with Tooltip */}
+          {data.connections && data.connections.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <Info className="w-3.5 h-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm">Koneksi Terhubung:</p>
+                    {data.connections.map((conn, idx) => (
+                      <div key={idx} className="text-xs">
+                        <p className="font-medium">• {conn.type}</p>
+                        <p className="text-gray-600 ml-2">{conn.name}</p>
+                        {conn.status && (
+                          <p className={`ml-2 ${
+                            conn.status === 'active' ? 'text-green-600' :
+                            conn.status === 'inactive' ? 'text-red-600' :
+                            conn.status === 'maintenance' ? 'text-yellow-600' :
+                            'text-gray-600'
+                          }`}>
+                            Status: {conn.status}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <div className={`w-2 h-2 rounded-full ${statusColor}`} title={statusLabel} />
         </div>
       </div>
