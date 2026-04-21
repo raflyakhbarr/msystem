@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
 import api from '../../services/api';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Command,
   CommandEmpty,
@@ -22,7 +26,7 @@ import {
 import {
   ArrowUpRight, ArrowDownRight, Link2, Layers, Shield, TrendingUp, RefreshCw, ArrowRight,
   Server, Key, Puzzle, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap,
-  Database, Workflow, Route, Search, Check
+  Database, Workflow, Route, Search, Check, Briefcase, ChevronDown, ChevronRight, X
 } from 'lucide-react';
 
 // Helper function to get icon for connection type
@@ -260,6 +264,8 @@ export default function ConnectionModal({
   existingConnectionTypes = {},
   itemToGroupConnectionTypes = {},
   onItemToGroupTypeChange,
+  workspaceId = null,
+  nodes = [],
 }) {
   const [connectionSearch, setConnectionSearch] = useState('');
   const [connectionTargetType, setConnectionTargetType] = useState('item');
@@ -267,6 +273,21 @@ export default function ConnectionModal({
   const [selectedType, setSelectedType] = useState(selectedConnectionType || 'depends_on');
   const [itemConnectionTypes, setItemConnectionTypes] = useState({});
   const [groupConnectionTypes, setGroupConnectionTypes] = useState({});
+
+  // Service item selection states for layanan connections
+  const [isLayananConnection, setIsLayananConnection] = useState(false);
+  const [cmdbItemsWithServices, setCmdbItemsWithServices] = useState([]);
+  const [expandedItems, setExpandedItems] = useState(new Set());
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedServiceItem, setSelectedServiceItem] = useState(null);
+  const [propagationEnabled, setPropagationEnabled] = useState(true);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [layananConnectionTargetType, setLayananConnectionTargetType] = useState('service_item');
+  const [selectedDirectService, setSelectedDirectService] = useState(null);
+
+  // Existing layanan service connections
+  const [existingLayanaConnections, setExistingLayanaConnections] = useState([]);
+  const [loadingLayanaConnections, setLoadingLayanaConnections] = useState(false);
 
   useEffect(() => {
     const fetchConnectionTypes = async () => {
@@ -322,6 +343,201 @@ export default function ConnectionModal({
     }
   }, [show, itemToGroupConnectionTypes]);
 
+  // Check if this is a layanan connection and load services
+  useEffect(() => {
+    if (show && selectedItem && workspaceId) {
+      console.log('[ConnectionModal] Checking if layanan node:', selectedItem);
+      const isLayanan = isLayananNode(selectedItem);
+      console.log('[ConnectionModal] Is layanan?', isLayanan);
+      if (isLayanan) {
+        setIsLayananConnection(true);
+        setConnectionTargetType('layanan'); // Auto-switch to layanan tab
+        fetchCmdbItemsWithServices();
+      } else {
+        setIsLayananConnection(false);
+        setConnectionTargetType('item'); // Reset to item tab
+      }
+    }
+  }, [show, selectedItem, workspaceId]);
+
+  // Helper function to check if item is a layanan node
+  const isLayananNode = (item) => {
+    if (!item) return false;
+
+    // Check if it's a layanan object (has layana-specific properties)
+    if (item.type === 'layanan' || item._entityType === 'layanan') {
+      return true;
+    }
+
+    // Check data type (for ReactFlow nodes)
+    if (item.data?.type === 'layanan') {
+      return true;
+    }
+
+    // Check ID with prefix layanan-
+    if (item.id && String(item.id).startsWith('layanan-')) {
+      return true;
+    }
+
+    // Check in nodes array based on ID
+    if (item.id && nodes && nodes.length > 0) {
+      const node = nodes.find(n => String(n.id) === String(item.id));
+      if (node && node.type === 'layanan') {
+        return true;
+      }
+    }
+
+    // Check if it has layana-specific fields (no type/category/ip like CMDB items)
+    // Layana items have: id, name, description, status, position, workspace_id
+    // CMDB items have: id, name, type, category, location, ip, etc.
+    if (!item.type && !item.category && !item.ip && !item.location && item.name && item.status && item.workspace_id) {
+      // Likely a layana object
+      console.log('[isLayananNode] Detected layana by field absence:', item.name);
+      return true;
+    }
+
+    return false;
+  };
+
+  // Fetch existing layanan service connections
+  const fetchExistingLayanaConnections = async () => {
+    if (!workspaceId || !selectedItem) return;
+
+    setLoadingLayanaConnections(true);
+    try {
+      const layananId = selectedItem.id;
+      // Fetch existing layana-service connections using the layanan-specific endpoint
+      const response = await api.get(`/layanan-service-connections/layanan/${layananId}`);
+      setExistingLayanaConnections(response.data || []);
+      console.log('[ConnectionModal] Existing layana connections:', response.data);
+    } catch (err) {
+      console.error('Failed to fetch existing layana connections:', err);
+      setExistingLayanaConnections([]);
+    } finally {
+      setLoadingLayanaConnections(false);
+    }
+  };
+
+  // Fetch CMDB items with their services (only target items for layanan)
+  const fetchCmdbItemsWithServices = async () => {
+    if (!workspaceId || !selectedItem) return;
+
+    setLoadingServices(true);
+    try {
+      // Fetch existing layana connections first
+      await fetchExistingLayanaConnections();
+
+      // For layanan items, fetch all CMDB items that could be targets
+      const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
+
+      // Fetch services for all CMDB items
+      const itemsWithServices = await Promise.all(
+        response.data.map(async (item) => {
+          try {
+            const servicesResponse = await api.get(`/services/${item.id}`);
+
+            // Fetch service items for each service
+            const servicesWithItems = await Promise.all(
+              servicesResponse.data.map(async (service) => {
+                try {
+                  const serviceItemsResponse = await api.get(`/service-items/${service.id}/items`, {
+                    params: { workspace_id: workspaceId }
+                  });
+                  return {
+                    ...service,
+                    items: serviceItemsResponse.data || []
+                  };
+                } catch (err) {
+                  console.error(`Failed to fetch service items for service ${service.id}:`, err);
+                  return {
+                    ...service,
+                    items: []
+                  };
+                }
+              })
+            );
+
+            return {
+              ...item,
+              services: servicesWithItems || [],
+            };
+          } catch (err) {
+            console.error(`Failed to fetch services for item ${item.id}:`, err);
+            return {
+              ...item,
+              services: [],
+            };
+          }
+        })
+      );
+
+      // Filter items that have services
+      const itemsWithServicesOnly = itemsWithServices.filter(
+        (item) => item.services && item.services.length > 0
+      );
+
+      setCmdbItemsWithServices(itemsWithServicesOnly);
+    } catch (err) {
+      console.error('Failed to fetch CMDB items:', err);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
+  // Check if a service or service item is already connected
+  const isConnected = (serviceId, serviceItemId = null) => {
+    return existingLayanaConnections.some(conn => {
+      if (serviceItemId) {
+        return conn.service_item_id === serviceItemId;
+      } else {
+        return conn.service_id === serviceId && !conn.service_item_id;
+      }
+    });
+  };
+
+  // Handle delete existing layana connection
+  const handleDeleteLayanaConnection = async (connectionId) => {
+    try {
+      await api.delete(`/layanan-service-connections/${connectionId}`);
+      toast.success('Koneksi layanan berhasil dihapus');
+      await fetchExistingLayanaConnections();
+    } catch (err) {
+      console.error('Failed to delete layana connection:', err);
+      toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Helper functions for service item selection UI
+  const toggleItemExpansion = (itemId) => {
+    setExpandedItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleServiceExpansion = (itemId, serviceId) => {
+    setExpandedItems((prev) => {
+      const newSet = new Set(prev);
+      const key = `${itemId}-${serviceId}`;
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectServiceItem = (service, serviceItem) => {
+    setSelectedService(service);
+    setSelectedServiceItem(serviceItem);
+  };
+
   // Update group connection types when selectedGroupConnections change
   useEffect(() => {
     setGroupConnectionTypes(prev => {
@@ -362,6 +578,36 @@ export default function ConnectionModal({
     }));
     if (onItemToGroupTypeChange) {
       onItemToGroupTypeChange(groupId, typeSlug);
+    }
+  };
+
+  const handleSaveWithLayana = () => {
+    if (isLayananConnection) {
+      // For layanan connections, save service selection
+      if (layananConnectionTargetType === 'service_item') {
+        if (!selectedService || !selectedServiceItem) {
+          alert('Silakan pilih service item terlebih dahulu untuk koneksi layanan.');
+          return;
+        }
+        onSave(itemConnectionTypes, groupConnectionTypes, {
+          connectionTargetType: 'service_item',
+          serviceId: selectedService.id,
+          serviceItemId: selectedServiceItem.id,
+          propagationEnabled: propagationEnabled,
+        });
+      } else {
+        if (!selectedDirectService) {
+          alert('Silakan pilih service terlebih dahulu untuk koneksi layanan.');
+          return;
+        }
+        onSave(itemConnectionTypes, groupConnectionTypes, {
+          connectionTargetType: 'service',
+          serviceId: selectedDirectService.id,
+          propagationEnabled: propagationEnabled,
+        });
+      }
+    } else {
+      onSave(itemConnectionTypes, groupConnectionTypes);
     }
   };
 
@@ -410,13 +656,18 @@ export default function ConnectionModal({
           </div>
 
           <Tabs value={connectionTargetType} onValueChange={setConnectionTargetType}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={`grid w-full ${isLayananConnection ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="item">
                 Ke Items ({selectedConnections.length})
               </TabsTrigger>
               <TabsTrigger value="group">
                 Ke Groups ({selectedGroupConnections.length})
               </TabsTrigger>
+              {isLayananConnection && (
+                <TabsTrigger value="layanan">
+                  Ke Service/Item ({existingLayanaConnections.length})
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="item" className="space-y-3 mt-4">
@@ -607,6 +858,295 @@ export default function ConnectionModal({
                 )}
               </div>
             </TabsContent>
+
+            {/* Layanan Service/Service Item Selection Tab */}
+            {isLayananConnection && (
+              <TabsContent value="layanan" className="space-y-3 mt-4">
+                <Label className="text-base font-semibold">
+                  Pilih Service di CMDB Item
+                  <span className="text-red-500 ml-1">*</span>
+                </Label>
+
+                {/* Existing Connections Section */}
+                {existingLayanaConnections.length > 0 && (
+                  <div className="p-3 bg-green-50 border border-green-500 rounded">
+                    <p className="font-semibold text-sm mb-3">Koneksi yang Sudah Ada ({existingLayanaConnections.length})</p>
+                    <div className="space-y-2">
+                      {existingLayanaConnections.map((conn) => (
+                        <div
+                          key={conn.id}
+                          className="flex items-center justify-between p-2 bg-white rounded border border-green-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Briefcase className="w-4 h-4 text-green-600" />
+                            <div className="text-sm">
+                              <span className="font-medium">{conn.service_name}</span>
+                              {conn.service_item_name && (
+                                <span className="text-muted-foreground"> → {conn.service_item_name}</span>
+                              )}
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {conn.connection_type}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteLayanaConnection(conn.id)}
+                            className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <X size={14} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Connection Target Type Selector */}
+                <div className="flex items-center gap-4 p-3 bg-gray-50 border rounded">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      id="connect-service"
+                      name="layanan-connection-target"
+                      value="service"
+                      checked={layananConnectionTargetType === 'service'}
+                      onChange={(e) => {
+                        setLayananConnectionTargetType(e.target.value);
+                        setSelectedService(null);
+                        setSelectedServiceItem(null);
+                        setSelectedDirectService(null);
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="connect-service" className="text-sm font-medium cursor-pointer">
+                      Koneksi ke Service
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      id="connect-service-item"
+                      name="layanan-connection-target"
+                      value="service_item"
+                      checked={layananConnectionTargetType === 'service_item'}
+                      onChange={(e) => {
+                        setLayananConnectionTargetType(e.target.value);
+                        setSelectedService(null);
+                        setSelectedServiceItem(null);
+                        setSelectedDirectService(null);
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="connect-service-item" className="text-sm font-medium cursor-pointer">
+                      Koneksi ke Service Item
+                    </label>
+                  </div>
+                </div>
+
+                {loadingServices ? (
+                  <div className="p-4 text-center text-sm text-gray-500 border rounded">
+                    Loading services...
+                  </div>
+                ) : cmdbItemsWithServices.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500 border rounded">
+                    Tidak ada CMDB item dengan services ditemukan
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[300px] border rounded">
+                    <div className="p-2">
+                      {cmdbItemsWithServices.map((item) => (
+                        <div key={item.id} className="mb-2">
+                          {/* CMDB Item */}
+                          <div
+                            className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
+                            onClick={() => toggleItemExpansion(item.id)}
+                          >
+                            {expandedItems.has(item.id) ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                            <Server className="w-4 h-4 text-blue-600" />
+                            <span className="font-medium text-sm">{item.name}</span>
+                            <span className="text-xs text-gray-500">
+                              ({item.services.length} services)
+                            </span>
+                          </div>
+
+                          {/* Services */}
+                          {expandedItems.has(item.id) && (
+                            <div className="ml-6 border-l-2 border-gray-200 pl-2">
+                              {item.services.map((service) => (
+                                <div key={service.id}>
+                                  {layananConnectionTargetType === 'service' ? (
+                                    // Direct Service Selection
+                                    <div
+                                      className={`flex items-center gap-2 p-2 rounded ${
+                                        selectedDirectService?.id === service.id
+                                          ? 'bg-purple-50 border-2 border-purple-500'
+                                          : isConnected(service.id)
+                                          ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                                          : 'hover:bg-gray-100 cursor-pointer'
+                                      }`}
+                                      onClick={() => {
+                                        if (isConnected(service.id)) return;
+                                        setSelectedDirectService(service);
+                                        setSelectedService(null);
+                                        setSelectedServiceItem(null);
+                                      }}
+                                    >
+                                      <div
+                                        className={`w-4 h-4 border rounded flex items-center justify-center ${
+                                          selectedDirectService?.id === service.id
+                                            ? 'bg-purple-500 border-purple-500'
+                                            : isConnected(service.id)
+                                            ? 'bg-gray-400 border-gray-400'
+                                            : 'border-gray-300'
+                                        }`}
+                                      >
+                                        {selectedDirectService?.id === service.id && !isConnected(service.id) && (
+                                          <Check className="w-3 h-3 text-white" />
+                                        )}
+                                        {isConnected(service.id) && (
+                                          <Check className="w-3 h-3 text-white" />
+                                        )}
+                                      </div>
+                                      <Briefcase className="w-4 h-4 text-purple-600" />
+                                      <span className="text-sm font-medium">{service.name}</span>
+                                      <span className="text-xs text-gray-500">
+                                        ({service.items?.length || 0} items)
+                                      </span>
+                                      {isConnected(service.id) && (
+                                        <Badge variant="secondary" className="ml-2 text-xs">Terhubung</Badge>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    // Service Item Selection (with expand/collapse)
+                                    <>
+                                      <div
+                                        className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
+                                        onClick={() => toggleServiceExpansion(item.id, service.id)}
+                                      >
+                                        {expandedItems.has(`${item.id}-${service.id}`) ? (
+                                          <ChevronDown className="w-4 h-4" />
+                                        ) : (
+                                          <ChevronRight className="w-4 h-4" />
+                                        )}
+                                        <Briefcase className="w-4 h-4 text-purple-600" />
+                                        <span className="text-sm font-medium">{service.name}</span>
+                                      </div>
+
+                                      {/* Service Items */}
+                                      {expandedItems.has(`${item.id}-${service.id}`) && (
+                                        <div className="ml-6 border-l-2 border-gray-200 pl-2">
+                                          {service.items && service.items.length > 0 ? (
+                                            service.items.map((serviceItem) => {
+                                              const itemConnected = isConnected(service.id, serviceItem.id);
+                                              return (
+                                                <div
+                                                  key={serviceItem.id}
+                                                  className={`flex items-center gap-2 p-2 rounded ${
+                                                    selectedServiceItem?.id === serviceItem.id
+                                                      ? 'bg-blue-50 border-2 border-blue-500'
+                                                      : itemConnected
+                                                      ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                                                      : 'hover:bg-gray-100 cursor-pointer'
+                                                  }`}
+                                                  onClick={() => {
+                                                    if (itemConnected) return;
+                                                    handleSelectServiceItem(service, serviceItem);
+                                                  }}
+                                                >
+                                                  <div
+                                                    className={`w-4 h-4 border rounded flex items-center justify-center ${
+                                                      selectedServiceItem?.id === serviceItem.id
+                                                        ? 'bg-blue-500 border-blue-500'
+                                                        : itemConnected
+                                                        ? 'bg-gray-400 border-gray-400'
+                                                        : 'border-gray-300'
+                                                    }`}
+                                                  >
+                                                    {selectedServiceItem?.id === serviceItem.id && !itemConnected && (
+                                                      <Check className="w-3 h-3 text-white" />
+                                                    )}
+                                                    {itemConnected && (
+                                                      <Check className="w-3 h-3 text-white" />
+                                                    )}
+                                                  </div>
+                                                  <span className="text-sm">{serviceItem.name}</span>
+                                                  <span
+                                                    className={`text-xs px-2 py-0.5 rounded ${
+                                                      serviceItem.status === 'active'
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : serviceItem.status === 'inactive'
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : serviceItem.status === 'maintenance'
+                                                        ? 'bg-yellow-100 text-yellow-700'
+                                                        : 'bg-gray-100 text-gray-700'
+                                                    }`}
+                                                  >
+                                                    {serviceItem.status}
+                                                  </span>
+                                                  {itemConnected && (
+                                                    <Badge variant="secondary" className="ml-2 text-xs">Terhubung</Badge>
+                                                  )}
+                                                </div>
+                                              );
+                                            })
+                                          ) : (
+                                            <div className="p-2 text-sm text-gray-500">
+                                              No service items found
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+
+                {/* Selection Info */}
+                {layananConnectionTargetType === 'service' && selectedDirectService && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded">
+                    <div className="text-sm">
+                      <span className="font-medium">Selected Service:</span> {selectedDirectService.name}
+                    </div>
+                  </div>
+                )}
+
+                {layananConnectionTargetType === 'service_item' && selectedService && selectedServiceItem && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                    <div className="text-sm">
+                      <span className="font-medium">Selected:</span> {selectedService.name} →{' '}
+                      {selectedServiceItem.name}
+                    </div>
+                  </div>
+                )}
+
+                {/* Propagation Toggle */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="propagation"
+                    checked={propagationEnabled}
+                    onChange={(e) => setPropagationEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="propagation" className="text-sm font-medium">
+                    Enable Status Propagation (Service status affects Layanan)
+                  </label>
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
 
@@ -615,8 +1155,11 @@ export default function ConnectionModal({
             <Button variant="secondary" onClick={onClose}>
               Batal
             </Button>
-            <Button onClick={() => onSave(itemConnectionTypes, groupConnectionTypes)}>
-              Simpan ({selectedConnections.length + selectedGroupConnections.length})
+            <Button onClick={handleSaveWithLayana}>
+              Simpan {isLayananConnection && (selectedServiceItem || selectedDirectService)
+                ? '(1 Koneksi Layanan)'
+                : `(${selectedConnections.length + selectedGroupConnections.length})`
+              }
             </Button>
           </div>
         </div>

@@ -152,11 +152,34 @@ export default function QuickConnectionModal({
 
     setLoadingServices(true);
     try {
-      const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
+      // Determine which CMDB items to fetch based on connection type
+      let itemsToFetch = [];
 
-      // Fetch services for each CMDB item
+      if (isLayananNode(sourceItem) && !isLayananNode(targetItem)) {
+        // Layanan -> CMDB Item: Only fetch services from the target CMDB item
+        const targetData = getItemData(targetItem);
+        if (targetData && targetData.id) {
+          itemsToFetch = [targetData];
+        }
+      } else if (!isLayananNode(sourceItem) && isLayananNode(targetItem)) {
+        // CMDB Item -> Layanan: Only fetch services from the source CMDB item
+        const sourceData = getItemData(sourceItem);
+        if (sourceData && sourceData.id) {
+          itemsToFetch = [sourceData];
+        }
+      } else if (isLayananNode(sourceItem) && isLayananNode(targetItem)) {
+        // Layanan -> Layanan: Fetch all CMDB items (keep original behavior)
+        const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
+        itemsToFetch = response.data;
+      } else {
+        // CMDB Item -> CMDB Item: Fetch all items (keep original behavior for non-layanan connections)
+        const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
+        itemsToFetch = response.data;
+      }
+
+      // Fetch services only for the target CMDB items
       const itemsWithServices = await Promise.all(
-        response.data.map(async (item) => {
+        itemsToFetch.map(async (item) => {
           try {
             const servicesResponse = await api.get(`/services/${item.id}`);
 
@@ -503,6 +526,28 @@ export default function QuickConnectionModal({
                 <span className="text-red-500 ml-1">*</span>
               </Label>
 
+              {/* Info message showing which CMDB item is being filtered */}
+              {/* {!loadingServices && cmdbItemsWithServices.length > 0 && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="text-sm">
+                    <span className="font-semibold text-blue-800 dark:text-blue-200">ℹ️ Info:</span>{' '}
+                    {isLayananNode(sourceItem) && !isLayananNode(targetItem) ? (
+                      <span>
+                        Menampilkan services dari <strong>{getItemData(targetItem).name}</strong> (target CMDB item)
+                      </span>
+                    ) : !isLayananNode(sourceItem) && isLayananNode(targetItem) ? (
+                      <span>
+                        Menampilkan services dari <strong>{getItemData(sourceItem).name}</strong> (source CMDB item)
+                      </span>
+                    ) : (
+                      <span>
+                        Menampilkan services dari semua CMDB items (layanan ke layanan)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )} */}
+
               {/* Connection Target Type Selector */}
               <div className="flex items-center gap-4 p-3 bg-gray-50 border rounded">
                 <div className="flex items-center gap-2">
@@ -551,7 +596,23 @@ export default function QuickConnectionModal({
                 </div>
               ) : cmdbItemsWithServices.length === 0 ? (
                 <div className="p-4 text-center text-sm text-gray-500 border rounded">
-                  Tidak ada CMDB item dengan services ditemukan
+                  {isLayananNode(sourceItem) && !isLayananNode(targetItem) ? (
+                    <div>
+                      <p className="font-semibold mb-1">Tidak ada services ditemukan</p>
+                      <p className="text-xs">
+                        CMDB item <strong>{getItemData(targetItem).name}</strong> tidak memiliki services.
+                      </p>
+                    </div>
+                  ) : !isLayananNode(sourceItem) && isLayananNode(targetItem) ? (
+                    <div>
+                      <p className="font-semibold mb-1">Tidak ada services ditemukan</p>
+                      <p className="text-xs">
+                        CMDB item <strong>{getItemData(sourceItem).name}</strong> tidak memiliki services.
+                      </p>
+                    </div>
+                  ) : (
+                    <p>Tidak ada CMDB item dengan services ditemukan di workspace ini</p>
+                  )}
                 </div>
               ) : (
                 <ScrollArea className="h-[300px] border rounded">

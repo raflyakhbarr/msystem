@@ -3250,8 +3250,6 @@ export default function CMDBVisualization() {
     const item = handleManageConnectionsFromVisualization(contextMenu.node);
     if (item) {
       handleOpenConnectionModal(item);
-    } else if (contextMenu.node?.type === 'layanan') {
-      toast.info('Layanan menggunakan drag-to-connect. Drag dari handle ke node lain untuk membuat koneksi.');
     }
   }, [contextMenu.node, handleManageConnectionsFromVisualization, handleOpenConnectionModal]);
 
@@ -3951,6 +3949,8 @@ export default function CMDBVisualization() {
         existingConnectionTypes={itemConnectionTypes}
         itemToGroupConnectionTypes={itemToGroupConnectionTypes}
         onItemToGroupTypeChange={handleItemToGroupTypeChange}
+        workspaceId={currentWorkspace?.id}
+        nodes={nodes}
       />
 
       <GroupModal
