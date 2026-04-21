@@ -785,13 +785,13 @@ export default function CMDBVisualization() {
         edgeStatus = 'maintenance';
       }
 
-      // Get color based on status
+      // Get color based on status (SAMA SEPERTI CMDB)
       const getStrokeColor = (status) => {
         switch (status) {
-          case 'active': return '#a855f7'; // purple for layana connections
+          case 'active': return '#10b981'; // green (SAMA DENGAN CMDB)
           case 'inactive': return '#ef4444'; // red
           case 'maintenance': return '#f59e0b'; // yellow
-          default: return '#a855f7';
+          default: return '#10b981'; // green (SAMA DENGAN CMDB)
         }
       };
 
@@ -832,13 +832,13 @@ export default function CMDBVisualization() {
         targetHandle,
         type: 'smoothstep',
         animated: false,
-        markerEnd: { type: 'arrowclosed', color: strokeColor, strokeWidth: 3 },
+        markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: {
           stroke: strokeColor,
-          strokeWidth: 4,  // Lebih tebal untuk debugging
+          strokeWidth: 2,  // SAMA DENGAN CMDB (normal = 2)
           opacity: 1,
         },
-        zIndex: 100,  // High z-index untuk memastikan muncul di atas
+        zIndex: 10,  // SAMA DENGAN CMDB (normal = 10)
         reconnectable: true,
         // Add connection type label if enabled
         ...(showConnectionLabels && {
