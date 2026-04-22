@@ -475,14 +475,34 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       const edgeId = `service-connection-${conn.id}`;
       const isEdgeHidden = hiddenNodes.has(String(sourceItemId)) || hiddenNodes.has(String(targetItemId));
 
-      // Get connection type info for styling
-      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+      // ==================== STATUS-BASED STYLING (Service Propagation) ====================
+      const sourceStatus = conn.source_service_status || 'active';
+      const targetStatus = conn.target_service_status || 'active';
 
-      // Use connection type color, with fallback to a distinctive color
-      let strokeColor = connectionTypeInfo?.color || '#ec4899'; // Pink for service-to-service
+      let edgeStatus = 'active';
+      let showCrossMarker = false;
 
-      // Add dash array to distinguish from direct item connections
-      const strokeDasharray = conn.connection_type === 'connects_to' ? '3,3' : '5,5';
+      // Priority: inactive > maintenance > active
+      if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
+        edgeStatus = 'inactive';
+        showCrossMarker = true;
+      } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
+        edgeStatus = 'maintenance';
+      }
+
+      // Get stroke color based on STATUS (SAMA seperti CMDB item edges)
+      const strokeColor = getStatusColor(edgeStatus, false); // false = not propagated
+
+      // Add dash array based on direction (ONLY for active status, inactive/maintenance get solid lines)
+      let strokeDasharray;
+      if (edgeStatus === 'inactive') {
+        strokeDasharray = '8 4'; // Dotted for inactive
+      } else if (edgeStatus === 'maintenance') {
+        strokeDasharray = '12 6'; // Dashed for maintenance
+      } else {
+        // Active status - show direction with dash
+        strokeDasharray = conn.connection_type === 'connects_to' ? 'none' : '5,5';
+      }
 
       let sourceHandle, targetHandle;
       if (edgeHandles[edgeId]) {
@@ -494,6 +514,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         targetHandle = handles.targetHandle;
       }
 
+      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
       const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
 
       const edgeConfig = {
@@ -506,9 +527,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: {
           stroke: strokeColor,
-          strokeWidth: 2,
+          strokeWidth: edgeStatus === 'inactive' ? 2.5 : 2, // Lebih tebal jika inactive
           strokeDasharray: strokeDasharray,
-          opacity: isEdgeHidden ? 0.2 : 1,
+          opacity: isEdgeHidden ? 0.2 : (edgeStatus === 'inactive' ? 0.8 : 0.6),
         },
         zIndex: 6, // Lower than direct connections but higher than group connections
         reconnectable: true,
@@ -518,11 +539,28 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           connectionType: conn.connection_type,
           sourceServiceId: conn.source_service_id,
           targetServiceId: conn.target_service_id,
+          edgeStatus, // Add edge status for context menu
         },
       };
 
-      // Add label if enabled and connection type exists
-      if (showConnectionLabels && connectionTypeLabel) {
+      // Add cross marker for INACTIVE status
+      if (showCrossMarker) {
+        edgeConfig.label = '✕';
+        edgeConfig.labelStyle = {
+          fill: strokeColor,
+          fontWeight: 'bold',
+          fontSize: 20,
+          background: 'white',
+          borderRadius: '50%',
+        };
+        edgeConfig.labelBgStyle = {
+          fill: 'white',
+          fillOpacity: 0.9,
+        };
+        edgeConfig.labelBgPadding = [8, 8];
+        edgeConfig.labelBgBorderRadius = 50;
+      } else if (showConnectionLabels && connectionTypeLabel) {
+        // Only show connection type label if NOT showing cross marker
         edgeConfig.label = connectionTypeLabel;
         edgeConfig.labelStyle = {
           fontSize: 11,
