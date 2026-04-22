@@ -49,6 +49,7 @@ import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useLayanan } from '../../hooks/cmdb-hooks/useLayanan';
 import { useLayananServiceConnections } from '../../hooks/cmdb-hooks/useLayananServiceConnections';
+import { useServiceToServiceConnections } from '../../hooks/cmdb-hooks/useServiceToServiceConnections';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
@@ -291,6 +292,7 @@ export default function CMDBVisualization() {
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
   const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
+  const { connections: serviceToServiceConnections, fetchConnectionsByItemId: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
   const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels);
 
   // Service handlers
@@ -529,10 +531,32 @@ export default function CMDBVisualization() {
   };
 
   const handleServiceClick = useCallback((service, nodeData) => {
+    const parentItem = items.find(i => i.id === parseInt(nodeData.id));
+
+    console.log('🔍 handleServiceClick:', {
+      serviceId: service.id,
+      serviceName: service.name,
+      nodeName: nodeData.name,
+      nodeId: nodeData.id,
+      parsedId: parseInt(nodeData.id),
+      parentItemFound: !!parentItem,
+      parentItem: parentItem ? {
+        id: parentItem.id,
+        name: parentItem.name
+      } : null,
+      totalItems: items.length
+    });
+
+    if (!parentItem) {
+      console.error('❌ handleServiceClick: Parent item not found!');
+      console.error('❌ nodeData.id:', nodeData.id, 'parsed:', parseInt(nodeData.id));
+      console.error('❌ Available items:', items.map(i => ({ id: i.id, name: i.name })));
+    }
+
     setServiceDialog({
       show: true,
       service,
-      parentItem: items.find(i => i.id === parseInt(nodeData.id))
+      parentItem
     });
   }, [items]);
 
@@ -4044,6 +4068,7 @@ export default function CMDBVisualization() {
         show={serviceDialog.show}
         service={serviceDialog.service}
         workspaceId={currentWorkspace?.id}
+        cmdbItem={serviceDialog.parentItem}
         onClose={() => setServiceDialog({ show: false, service: null, parentItem: null })}
       />
 

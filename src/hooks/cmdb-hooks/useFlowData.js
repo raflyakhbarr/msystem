@@ -92,6 +92,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           parentNode: groupNodeId,
           extent: 'parent',
           data: {
+            id: item.id, // Add item ID for parent item lookup
             label: item.name, // Add label for search
             name: item.name,
             type: item.type,
@@ -138,6 +139,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         type: 'custom',
         position: pos,
         data: {
+          id: item.id, // Add item ID for parent item lookup
           label: item.name, // Add label for search
           name: item.name,
           type: item.type,

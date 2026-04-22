@@ -7,8 +7,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import ServiceIcon from './ServiceIcon';
 import ServiceVisualization from './ServiceVisualization';
+import ServiceToServiceConnectionModal from './ServiceToServiceConnectionModal';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import api from "@/services/api";
 import { toast } from "sonner";
@@ -19,16 +22,59 @@ import {
   MapPin,
   AlertCircle,
   CheckCircle2,
-  Clock
+  Clock,
+  Network,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
 
-export default function ServiceDetailDialog({ show, service, workspaceId, onClose }) {
+export default function ServiceDetailDialog({ show, service, workspaceId, onClose, cmdbItem }) {
   const [localStatus, setLocalStatus] = useState(service?.status || 'active');
   const [isUpdating, setIsUpdating] = useState(false);
   const isLocalUpdateRef = useRef(false);
   const { socket } = useSocket();
+
+  // Service-to-service connections state
+  const [showServiceConnectionModal, setShowServiceConnectionModal] = useState(false);
+  const [allServices, setAllServices] = useState([]);
+  const [serviceConnections, setServiceConnections] = useState([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
+
+  // Connection type options
+  const connectionTypes = [
+    { value: 'depends_on', label: 'Depends On', color: 'bg-red-500' },
+    { value: 'consumed_by', label: 'Consumed By', color: 'bg-orange-500' },
+    { value: 'connects_to', label: 'Connects To', color: 'bg-blue-500' },
+    { value: 'contains', label: 'Contains', color: 'bg-purple-500' },
+    { value: 'managed_by', label: 'Managed By', color: 'bg-cyan-500' },
+    { value: 'data_flow_to', label: 'Data Flow To', color: 'bg-green-500' },
+    { value: 'backup_to', label: 'Backup To', color: 'bg-indigo-500' },
+    { value: 'hosted_on', label: 'Hosted On', color: 'bg-amber-500' },
+    { value: 'related_to', label: 'Related To', color: 'bg-gray-500' },
+  ];
+
+  // Debug: Log props when dialog opens
+  useEffect(() => {
+    if (show) {
+      console.log('🔍 ServiceDetailDialog props:', {
+        show,
+        serviceId: service?.id,
+        serviceName: service?.name,
+        workspaceId,
+        cmdbItemId: cmdbItem?.id,
+        cmdbItemName: cmdbItem?.name,
+        cmdbItemExists: !!cmdbItem,
+        allServicesCount: allServices.length
+      });
+
+      if (!cmdbItem) {
+        console.warn('⚠️ ServiceDetailDialog: cmdbItem is null/undefined!');
+        console.warn('⚠️ This means parent item lookup failed in handleServiceClick');
+      }
+    }
+  }, [show, service, workspaceId, cmdbItem, allServices.length]);
 
   // Update local status when service prop changes (when dialog opens with new data)
   useEffect(() => {
@@ -87,6 +133,101 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     };
   }, [socket, service?.id, workspaceId]);
 
+  // Fetch ALL services in workspace (not just parent CMDB item) for cross-item connections
+  useEffect(() => {
+    if (!show || !workspaceId) {
+      setAllServices([]);
+      return;
+    }
+
+    const fetchAllWorkspaceServices = async () => {
+      console.log('🔍 ServiceDetailDialog: Fetching ALL services in workspace:', workspaceId);
+      try {
+        // Fetch all CMDB items in workspace first
+        const itemsResponse = await api.get(`/cmdb?workspace_id=${workspaceId}`);
+        const items = itemsResponse.data || [];
+
+        // Fetch services for each CMDB item
+        const servicesPromises = items.map(async (item) => {
+          try {
+            const servicesResponse = await api.get(`/services/${item.id}`);
+            return (servicesResponse.data || []).map(svc => ({
+              ...svc,
+              cmdb_item_id: item.id,
+              cmdb_item_name: item.name
+            }));
+          } catch (err) {
+            console.error(`Failed to fetch services for item ${item.id}:`, err);
+            return [];
+          }
+        });
+
+        const allServicesArrays = await Promise.all(servicesPromises);
+        const flatServices = allServicesArrays.flat();
+
+        console.log('✅ ServiceDetailDialog: Fetched', flatServices.length, 'services from', items.length, 'CMDB items');
+        setAllServices(flatServices);
+      } catch (err) {
+        console.error('❌ Failed to fetch workspace services:', err);
+        setAllServices([]);
+      }
+    };
+
+    fetchAllWorkspaceServices();
+  }, [show, workspaceId]);
+
+  // Fetch service-to-service connections
+  useEffect(() => {
+    if (!show || !cmdbItem) {
+      setServiceConnections([]);
+      return;
+    }
+
+    const fetchServiceConnections = async () => {
+      setLoadingConnections(true);
+      try {
+        const response = await api.get(`/service-to-service-connections/item/${cmdbItem.id}`);
+        setServiceConnections(response.data || []);
+      } catch (err) {
+        console.error('Failed to fetch service connections:', err);
+        setServiceConnections([]);
+      } finally {
+        setLoadingConnections(false);
+      }
+    };
+
+    fetchServiceConnections();
+  }, [show, cmdbItem]);
+
+  const handleConnectionUpdate = async () => {
+    if (!cmdbItem) return;
+
+    // Refresh connections after modal closes
+    try {
+      const response = await api.get(`/service-to-service-connections/item/${cmdbItem.id}`);
+      setServiceConnections(response.data || []);
+    } catch (err) {
+      console.error('Failed to refresh connections:', err);
+    }
+  };
+
+  const handleDeleteConnection = async (connectionId) => {
+    if (!confirm('Are you sure you want to delete this connection?')) return;
+
+    try {
+      await api.delete(`/service-to-service-connections/${connectionId}`);
+
+      // Refresh connections
+      const response = await api.get(`/service-to-service-connections/item/${cmdbItem.id}`);
+      setServiceConnections(response.data || []);
+
+      toast.success('Connection deleted successfully!');
+    } catch (err) {
+      console.error('Failed to delete connection:', err);
+      toast.error(err.response?.data?.error || 'Failed to delete connection');
+    }
+  };
+
   const handleStatusChange = async (newStatus) => {
     if (!service) return;
 
@@ -105,6 +246,10 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const getConnectionTypeLabel = (type) => {
+    return connectionTypes.find(ct => ct.value === type)?.label || type;
   };
 
   const getStatusConfig = (status) => {
@@ -304,6 +449,145 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                 </div>
               </div>
 
+              {/* Service-to-Service Connections */}
+              <>
+                <Separator className="bg-slate-200/60" />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Service Connections
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {serviceConnections.length} {serviceConnections.length !== 1 ? 'Connections' : 'Connection'}
+                      </Badge>
+                      {cmdbItem && allServices.length >= 2 && (
+                        <Button
+                          onClick={() => setShowServiceConnectionModal(true)}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                        >
+                          <Plus size={14} className="mr-1" />
+                          Add
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {cmdbItem ? (
+                    loadingConnections ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      </div>
+                    ) : serviceConnections.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Network size={32} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm text-slate-500">No service connections yet.</p>
+                        {allServices.length >= 2 ? (
+                          <p className="text-xs text-slate-400 mt-1">
+                            Click "Add" to create a connection between services.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 mt-1">
+                            You need at least 2 services to create connections.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[200px] pr-4">
+                        <div className="space-y-2">
+                          {serviceConnections.map((conn) => {
+                            const sourceService = allServices.find(s => s.id === conn.source_service_id);
+                            const targetService = allServices.find(s => s.id === conn.target_service_id);
+                            const connectionTypeConfig = connectionTypes.find(ct => ct.value === conn.connection_type);
+
+                            return (
+                              <div
+                                key={conn.id}
+                                className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-accent/5 transition-colors text-xs"
+                              >
+                                {/* Source Service */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <div
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        sourceService?.status === 'active' ? 'bg-green-500' :
+                                        sourceService?.status === 'inactive' ? 'bg-red-500' :
+                                        sourceService?.status === 'maintenance' ? 'bg-yellow-500' :
+                                        'bg-gray-500'
+                                      }`}
+                                    />
+                                    <span className="font-medium truncate">{sourceService?.name || 'Unknown'}</span>
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {sourceService?.cmdb_item_name || 'Unknown CMDB'}
+                                  </div>
+                                </div>
+
+                                {/* Connection Type & Direction */}
+                                <div className="flex flex-col items-center gap-0.5 px-2">
+                                  <Badge className="text-[10px] px-1.5 py-0" variant="secondary">
+                                    {connectionTypeConfig?.label || conn.connection_type}
+                                  </Badge>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {conn.direction === 'forward' ? '→' : conn.direction === 'backward' ? '←' : '↔'}
+                                  </span>
+                                </div>
+
+                                {/* Target Service */}
+                                <div className="flex-1 min-w-0 text-right">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <span className="font-medium truncate">{targetService?.name || 'Unknown'}</span>
+                                    <div
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        targetService?.status === 'active' ? 'bg-green-500' :
+                                        targetService?.status === 'inactive' ? 'bg-red-500' :
+                                        targetService?.status === 'maintenance' ? 'bg-yellow-500' :
+                                        'bg-gray-500'
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {targetService?.cmdb_item_name || 'Unknown CMDB'}
+                                  </div>
+                                </div>
+
+                                {/* Delete Button */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteConnection(conn.id)}
+                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    )
+                  ) : (
+                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-200/60">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-amber-100 rounded-lg">
+                          <AlertCircle size={18} className="text-amber-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-700 mb-1">
+                            CMDB Item Not Available
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Unable to load CMDB item information. Please check browser console for details.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+
               {/* Additional Information */}
               {(service.location || service.owner) && (
                 <>
@@ -370,6 +654,46 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
         </div>
       </DialogContent>
     </Dialog>
-    </>
+
+    {/* Service-to-Service Connections Modal */}
+    {showServiceConnectionModal && (
+      <ServiceToServiceConnectionModal
+        show={showServiceConnectionModal}
+        onClose={() => setShowServiceConnectionModal(false)}
+        cmdbItem={cmdbItem}
+        services={allServices}
+        currentService={service}
+        onConnectionUpdate={async () => {
+          if (!workspaceId) return;
+          // Refresh ALL workspace services after connection update (for cross-item connections)
+          try {
+            console.log('🔄 Refreshing ALL workspace services after connection update...');
+            const itemsResponse = await api.get(`/cmdb?workspace_id=${workspaceId}`);
+            const items = itemsResponse.data || [];
+
+            const servicesPromises = items.map(async (item) => {
+              const response = await api.get(`/services/${item.id}`);
+              return (response.data || []).map(svc => ({
+                ...svc,
+                cmdb_item_id: item.id,
+                cmdb_item_name: item.name
+              }));
+            });
+
+            const allServicesArrays = await Promise.all(servicesPromises);
+            const flatServices = allServicesArrays.flat();
+
+            setAllServices(flatServices);
+            console.log('✅ All workspace services refreshed:', flatServices.length);
+
+            // Also refresh service connections list
+            await handleConnectionUpdate();
+          } catch (err) {
+            console.error('❌ Failed to refresh services:', err);
+          }
+        }}
+      />
+    )}
+  </>
   );
 }

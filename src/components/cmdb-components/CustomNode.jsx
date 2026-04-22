@@ -25,6 +25,7 @@ import {
   Plus
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
+import ServiceToServiceConnections from './ServiceToServiceConnections';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import api from '@/services/api';
 import { useSocket } from '../../context/SocketContext';
@@ -37,6 +38,9 @@ export default function CustomNode({ data, id }) {
   // Local state for service items (for hover card)
   const [serviceItemsMap, setServiceItemsMap] = useState({});
   const [fetchingServiceId, setFetchingServiceId] = useState(null);
+
+  // State for service-to-service connections
+  const [serviceToServiceConns, setServiceToServiceConns] = useState([]);
 
   // Listen for service item status updates from SocketContext using callback
   useEffect(() => {
@@ -124,6 +128,30 @@ export default function CustomNode({ data, id }) {
     fetchAllServiceItems();
   }, [data.workspaceId, services]);
 
+  // Fetch service-to-service connections for this CMDB item
+  useEffect(() => {
+    if (!id || !data.workspaceId) return;
+
+    const fetchServiceToServiceConnections = async () => {
+      try {
+        // ID is already a string from ReactFlow, just need to parse it
+        const itemId = parseInt(id);
+        if (isNaN(itemId)) {
+          console.warn('Invalid item ID for service-to-service connections:', id);
+          return;
+        }
+
+        const response = await api.get(`/service-to-service-connections/item/${itemId}`);
+        setServiceToServiceConns(response.data || []);
+      } catch (err) {
+        console.error('Failed to fetch service-to-service connections:', err);
+        setServiceToServiceConns([]);
+      }
+    };
+
+    fetchServiceToServiceConnections();
+  }, [id, data.workspaceId]);
+
   // Listen for service updates to refresh service items only
   // (Service status will be updated via props from parent CMDBVisualization)
   useEffect(() => {
@@ -165,6 +193,30 @@ export default function CustomNode({ data, id }) {
       socket.off('service_update', handleServiceUpdate);
     };
   }, [socket, data.workspaceId, services]);
+
+  // Listen for cmdb_update to refresh service-to-service connections
+  useEffect(() => {
+    if (!socket || !data.workspaceId || !id) return;
+
+    const handleCmdbUpdate = async () => {
+      // Refresh service-to-service connections
+      try {
+        const itemId = parseInt(id);
+        if (isNaN(itemId)) return;
+
+        const response = await api.get(`/service-to-service-connections/item/${itemId}`);
+        setServiceToServiceConns(response.data || []);
+      } catch (err) {
+        console.error('Failed to refresh service-to-service connections after cmdb_update:', err);
+      }
+    };
+
+    socket.on('cmdb_update', handleCmdbUpdate);
+
+    return () => {
+      socket.off('cmdb_update', handleCmdbUpdate);
+    };
+  }, [socket, data.workspaceId, id]);
 
   // Fetch service items when hover opens
   const handleFetchServiceItems = async (serviceId) => {
@@ -539,7 +591,19 @@ export default function CustomNode({ data, id }) {
 
           {/* Services */}
           {services.length > 0 && (
-            <div className="mt-3 pt-2 border-t border-border">
+            <div className="mt-3 pt-2 border-t border-border relative">
+              {/* Service-to-Service Connections Visualization */}
+              {serviceToServiceConns.length > 0 && (
+                <ServiceToServiceConnections
+                  services={services}
+                  connections={serviceToServiceConns}
+                  onConnectionClick={(conn) => {
+                    console.log('Service-to-service connection clicked:', conn);
+                    // TODO: Open connection edit modal
+                  }}
+                />
+              )}
+
               <div className="flex flex-wrap gap-1.5 justify-center">
                 {services.map((service) => (
                   <HoverCard key={service.id} openDelay={300} closeDelay={200}>
