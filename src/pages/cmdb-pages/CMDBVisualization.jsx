@@ -1245,10 +1245,11 @@ export default function CMDBVisualization() {
 
     socketRef.current = socket;
 
-    const handleCmdbUpdate = () => {
+    const handleCmdbUpdate = async () => {
       // Skip fetch if currently saving
       if (!isSavingRef.current) {
-        fetchAll();
+        // Fetch both CMDB data and layanan data to ensure all positions are up-to-date
+        await Promise.all([fetchAll(), fetchLayanaAll()]);
       }
     };
 
@@ -1300,7 +1301,7 @@ export default function CMDBVisualization() {
       socket.off('cmdb_update', handleCmdbUpdate);
       socket.off('service_update', handleServiceUpdate);
     };
-  }, [socket, fetchAll, currentWorkspace, setServices]);
+  }, [socket, fetchAll, fetchLayanaAll, currentWorkspace, setServices]);
 
   useEffect(() => {
     localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));
@@ -3133,14 +3134,15 @@ export default function CMDBVisualization() {
             : node.id;
           updatePromises.push(
             api.put(`/layanan/${layananId}/position`, {
-              position: { x: node.position.x, y: node.position.y }
+              position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits for batch update
             })
           );
         }
       });
 
       await Promise.all(updatePromises);
-      
+
       // Single emit after all updates
       await api.post('/cmdb/trigger-update');
       
@@ -3203,14 +3205,15 @@ export default function CMDBVisualization() {
             : node.id;
           updatePromises.push(
             api.put(`/layanan/${layananId}/position`, {
-              position: { x: node.position.x, y: node.position.y }
+              position: { x: node.position.x, y: node.position.y },
+              skipEmit: true // Skip individual emits for batch update
             })
           );
         }
       });
 
       await Promise.all(updatePromises);
-      
+
       // Single emit after all updates
       await api.post('/cmdb/trigger-update');
       
