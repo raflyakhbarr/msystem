@@ -11,10 +11,18 @@ import {
   shouldShowCrossMarker
 } from '../../utils/cmdb-utils/statusPropagation';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, serviceToServiceConnections = []) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
+
+    // Build a map from service_id to cmdb_item_id for quick lookup
+    const serviceToItemMap = {};
+    Object.entries(servicesMap).forEach(([itemId, services]) => {
+      services.forEach(service => {
+        serviceToItemMap[service.id] = parseInt(itemId);
+      });
+    });
 
     // Hitung propagated statuses untuk semua edges
     const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections);
@@ -449,8 +457,94 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       flowEdges.push(edgeConfig);
     });
 
+    // Create edges for service-to-service connections (as parent CMDB item connections)
+    serviceToServiceConnections.forEach((conn) => {
+      // Get parent CMDB items for both services
+      const sourceItemId = serviceToItemMap[conn.source_service_id];
+      const targetItemId = serviceToItemMap[conn.target_service_id];
+
+      // Skip if we can't find parent items or if source == target (same CMDB item)
+      if (!sourceItemId || !targetItemId || sourceItemId === targetItemId) return;
+
+      const sourceNode = flowNodes.find(n => n.id === String(sourceItemId));
+      const targetNode = flowNodes.find(n => n.id === String(targetItemId));
+
+      if (!sourceNode || !targetNode) return;
+
+      // Create unique edge ID for service-to-service connection
+      const edgeId = `service-connection-${conn.id}`;
+      const isEdgeHidden = hiddenNodes.has(String(sourceItemId)) || hiddenNodes.has(String(targetItemId));
+
+      // Get connection type info for styling
+      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+
+      // Use connection type color, with fallback to a distinctive color
+      let strokeColor = connectionTypeInfo?.color || '#ec4899'; // Pink for service-to-service
+
+      // Add dash array to distinguish from direct item connections
+      const strokeDasharray = conn.connection_type === 'connects_to' ? '3,3' : '5,5';
+
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
+      const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
+
+      const edgeConfig = {
+        id: edgeId,
+        source: String(sourceItemId),
+        target: String(targetItemId),
+        sourceHandle,
+        targetHandle,
+        type: 'smoothstep',
+        markerEnd: { type: 'arrowclosed', color: strokeColor },
+        style: {
+          stroke: strokeColor,
+          strokeWidth: 2,
+          strokeDasharray: strokeDasharray,
+          opacity: isEdgeHidden ? 0.2 : 1,
+        },
+        zIndex: 6, // Lower than direct connections but higher than group connections
+        reconnectable: true,
+        hidden: isEdgeHidden,
+        data: {
+          isServiceConnection: true, // Flag to identify service-to-service connections
+          connectionType: conn.connection_type,
+          sourceServiceId: conn.source_service_id,
+          targetServiceId: conn.target_service_id,
+        },
+      };
+
+      // Add label if enabled and connection type exists
+      if (showConnectionLabels && connectionTypeLabel) {
+        edgeConfig.label = connectionTypeLabel;
+        edgeConfig.labelStyle = {
+          fontSize: 11,
+          fontWeight: 500,
+          fill: strokeColor,
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+        };
+        edgeConfig.labelBgStyle = {
+          fill: 'white',
+          fillOpacity: 0.9,
+        };
+        edgeConfig.labelBgPadding = [4, 6];
+        edgeConfig.labelBgBorderRadius = 4;
+      }
+
+      flowEdges.push(edgeConfig);
+    });
+
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, serviceToServiceConnections]);
 
   return { transformToFlowData };
 };

@@ -292,8 +292,8 @@ export default function CMDBVisualization() {
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
   const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
-  const { connections: serviceToServiceConnections, fetchConnectionsByItemId: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels);
+  const { connections: serviceToServiceConnections, fetchConnectionsByWorkspace: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
+  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels, serviceToServiceConnections);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -1272,8 +1272,8 @@ export default function CMDBVisualization() {
     const handleCmdbUpdate = async () => {
       // Skip fetch if currently saving
       if (!isSavingRef.current) {
-        // Fetch both CMDB data and layanan data to ensure all positions are up-to-date
-        await Promise.all([fetchAll(), fetchLayanaAll()]);
+        // Fetch CMDB data, layana data, and service-to-service connections
+        await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
       }
     };
 
@@ -2090,8 +2090,8 @@ export default function CMDBVisualization() {
         }
       }
 
-      // Fetch both cmdb and layana data
-      await Promise.all([fetchAll(), fetchLayanaAll()]);
+      // Fetch cmdb, layana, and service-to-service connections data
+      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
       setShowQuickConnectionModal(false);
       setQuickConnectionSource(null);
       setQuickConnectionTarget(null);
@@ -2099,7 +2099,7 @@ export default function CMDBVisualization() {
       console.error('Save connection error:', err);
       toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, getConnectionDirection, saveEdgeHandle, edgeHandles]);
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections, getConnectionDirection, saveEdgeHandle, edgeHandles]);
 
   // Edge Context Menu handlers
   const handleEdgeContextMenu = useCallback((event, edge) => {
@@ -2134,12 +2134,17 @@ export default function CMDBVisualization() {
       const isGroupToItem = String(edgeContextMenu.edge.source).startsWith('group-');
       const isItemToGroup = String(edgeContextMenu.edge.target).startsWith('group-');
       const isGroupToGroup = isGroupToItem && isItemToGroup;
+      const isServiceConnection = String(edgeContextMenu.edge.id).startsWith('service-connection-');
 
       let deleteUrl;
       if (isLayananEdge) {
         // Layanan edge: DELETE /api/layanan/connections/:id
         const connectionId = String(edgeContextMenu.edge.id).replace('layanan-edge-', '');
         deleteUrl = `/layanan/connections/${connectionId}`;
+      } else if (isServiceConnection) {
+        // Service-to-service connection: DELETE /api/service-to-service-connections/:id
+        const connectionId = String(edgeContextMenu.edge.id).replace('service-connection-', '');
+        deleteUrl = `/service-to-service-connections/${connectionId}`;
       } else if (isGroupToGroup) {
         // Group-to-group: DELETE /api/groups/connections/:sourceId/:targetId
         const sourceGroupId = String(edgeContextMenu.edge.source).replace('group-', '');
@@ -2161,13 +2166,13 @@ export default function CMDBVisualization() {
       await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
 
-      // Fetch both cmdb and layana data
-      await Promise.all([fetchAll(), fetchLayanaAll()]);
+      // Fetch cmdb, layana, and service-to-service connections data
+      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
     } catch (err) {
       console.error('Delete connection error:', err);
       toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll]);
+  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections]);
 
   const handleEditEdge = useCallback(() => {
     if (!edgeContextMenu.edge) return;

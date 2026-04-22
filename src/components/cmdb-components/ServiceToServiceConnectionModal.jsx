@@ -9,8 +9,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Command,
@@ -23,7 +21,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Plus, Trash2, Edit, X, Check, Briefcase, ChevronDown, ChevronRight, Layers,
+  Plus, Check, Briefcase, Layers,
   ArrowUpRight, ArrowDownRight, Link2, Shield, TrendingUp, RefreshCw, ArrowRight,
   Server, Key, Puzzle, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap,
   Database, Workflow, Route, ChevronsUpDown
@@ -326,8 +324,6 @@ export default function ServiceToServiceConnectionModal({
 }) {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [editingConnection, setEditingConnection] = useState(null);
-  const [newConnectionMode, setNewConnectionMode] = useState(false);
   const [selectedSourceService, setSelectedSourceService] = useState(null);
   const [selectedTargetService, setSelectedTargetService] = useState(null);
   const [connectionType, setConnectionType] = useState('connects_to');
@@ -412,7 +408,9 @@ export default function ServiceToServiceConnectionModal({
       const response = await api.post('/service-to-service-connections', connectionData);
 
       await fetchConnections();
-      handleResetForm();
+      // Reset form but keep it open
+      setSelectedSourceService(currentService || null);
+      setSelectedTargetService(null);
       onConnectionUpdate?.();
       toast.success('Koneksi berhasil dibuat');
     } catch (err) {
@@ -421,56 +419,6 @@ export default function ServiceToServiceConnectionModal({
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleUpdateConnection = async () => {
-    if (!editingConnection) return;
-
-    // Get connection type details to determine direction
-    const connectionTypeDetails = connectionTypes.find(ct => ct.type_slug === editingConnection.connection_type);
-    const direction = connectionTypeDetails?.default_direction || 'forward';
-
-    setLoading(true);
-    try {
-      await api.put(`/service-to-service-connections/${editingConnection.id}`, {
-        connection_type: editingConnection.connection_type,
-        direction: direction
-      });
-
-      await fetchConnections();
-      setEditingConnection(null);
-      onConnectionUpdate?.();
-      toast.success('Koneksi berhasil diupdate');
-    } catch (err) {
-      console.error('Failed to update connection:', err);
-      toast.error(err.response?.data?.error || 'Failed to update connection');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteConnection = async (connectionId) => {
-    if (!confirm('Are you sure you want to delete this connection?')) return;
-
-    setLoading(true);
-    try {
-      await api.delete(`/service-to-service-connections/${connectionId}`);
-      await fetchConnections();
-      onConnectionUpdate?.();
-      toast.success('Koneksi berhasil dihapus');
-    } catch (err) {
-      console.error('Failed to delete connection:', err);
-      toast.error(err.response?.data?.error || 'Failed to delete connection');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetForm = () => {
-    setNewConnectionMode(false);
-    setSelectedSourceService(currentService || null);
-    setSelectedTargetService(null);
-    setConnectionType(connectionTypes[0]?.type_slug || 'connects_to');
   };
 
   const getConnectionTypeLabel = (typeSlug) => {
@@ -516,171 +464,84 @@ export default function ServiceToServiceConnectionModal({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-          {/* Existing Connections Section */}
-          {connections.length > 0 && (
-            <div className="p-3 border rounded-lg bg-blue-50 border-blue-500 dark:text-black">
-              <p className="font-semibold text-sm mb-3">Koneksi yang Sudah Ada ({connections.length})</p>
-              <ScrollArea className="h-[200px]">
-                <div className="space-y-2 pr-4">
-                  {connections.map((conn) => {
-                    const sourceService = getServiceById(conn.source_service_id);
-                    const targetService = getServiceById(conn.target_service_id);
-                    const connectionTypeDetails = getConnectionTypeDetails(conn.connection_type);
-                    const isEditing = editingConnection?.id === conn.id;
-
-                    if (!sourceService || !targetService) return null;
-
-                    return (
-                      <div
-                        key={conn.id}
-                        className="p-3 bg-white rounded-lg border border-blue-200 dark:border-blue-800 dark:bg-gray-800"
-                      >
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium">{sourceService.name}</span>
-                              <span>→</span>
-                              <span className="text-xs font-medium">{targetService.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs text-muted-foreground">Tipe:</label>
-                              <ConnectionTypeSelector
-                                value={editingConnection.connection_type}
-                                onChange={(value) => setEditingConnection(prev => ({ ...prev, connection_type: value }))}
-                                connectionTypes={connectionTypes}
-                                placeholder="Pilih tipe"
-                                size="small"
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={handleUpdateConnection} disabled={loading}>
-                                <Check className="h-3 w-3 mr-1" />
-                                Save
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => setEditingConnection(null)}>
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Briefcase className="h-4 w-4 text-purple-600" />
-                                <span className="text-sm font-medium">{sourceService.name}</span>
-                                <span className="text-muted-foreground">→</span>
-                                <span className="text-sm font-medium">{targetService.name}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs"
-                                  style={{
-                                    borderColor: connectionTypeDetails?.color,
-                                    color: connectionTypeDetails?.color
-                                  }}
-                                >
-                                  {connectionTypeDetails?.label || conn.connection_type}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {sourceService.cmdb_item_name} → {targetService.cmdb_item_name}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingConnection(conn)}
-                                className="h-7 w-7 p-0"
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteConnection(conn.id)}
-                                className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
+          {/* Create New Connection Form */}
+          <div className="space-y-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Buat Koneksi Service-to-Service</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {currentService
+                  ? `Membuat koneksi dari ${currentService.name} ke service lain`
+                  : 'Pilih source dan target service untuk membuat koneksi'
+                }
+              </p>
             </div>
-          )}
 
-          {/* Add New Connection Form */}
-          <div className="border-t pt-3">
-            {newConnectionMode ? (
-              <div className="space-y-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
-                <h3 className="text-sm font-semibold">Tambah Koneksi Baru</h3>
+            <div className="space-y-3">
+              {/* Source Service */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Source Service</Label>
+                <ServiceSelector
+                  services={services}
+                  value={selectedSourceService?.id}
+                  onChange={(serviceId) => {
+                    const service = services.find(s => s.id === serviceId);
+                    setSelectedSourceService(service);
+                  }}
+                  placeholder="Select Source Service"
+                  currentServiceId={currentService?.id}
+                />
+              </div>
 
-                <div className="space-y-3">
-                  {/* Source Service */}
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Source Service</Label>
-                    <ServiceSelector
-                      services={services}
-                      value={selectedSourceService?.id}
-                      onChange={(serviceId) => {
-                        const service = services.find(s => s.id === serviceId);
-                        setSelectedSourceService(service);
-                      }}
-                      placeholder="Select Source Service"
-                      currentServiceId={currentService?.id}
-                    />
-                  </div>
+              {/* Direction Arrow */}
+              <div className="flex items-center justify-center py-1">
+                <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 rounded-full border shadow-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Connects To</span>
+                  <ArrowRight className="h-4 w-4 text-blue-600" />
+                </div>
+              </div>
 
-                  {/* Direction Arrow */}
-                  <div className="flex items-center justify-center">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 rounded-full border">
-                      <span className="text-xs text-muted-foreground">Connection</span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              {/* Target Service */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Target Service</Label>
+                <ServiceSelector
+                  services={services}
+                  value={selectedTargetService?.id}
+                  onChange={(serviceId) => {
+                    const service = services.find(s => s.id === serviceId);
+                    setSelectedTargetService(service);
+                  }}
+                  placeholder="Select Target Service"
+                  excludeIds={[selectedSourceService?.id].filter(Boolean)}
+                  currentServiceId={currentService?.id}
+                />
+              </div>
+
+              {/* Connection Type Selector */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Tipe Koneksi</Label>
+                <ConnectionTypeSelector
+                  value={connectionType}
+                  onChange={setConnectionType}
+                  connectionTypes={connectionTypes}
+                  placeholder="Pilih tipe koneksi"
+                />
+              </div>
+
+              {/* Preview */}
+              {selectedSourceService && selectedTargetService && connectionType && (
+                <div className="p-3 bg-white dark:bg-gray-700 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="text-center">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Briefcase className="h-3 w-3 text-purple-600" />
+                        <span className="text-xs font-medium">{selectedSourceService.name}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{selectedSourceService.cmdb_item_name}</span>
                     </div>
-                  </div>
-
-                  {/* Target Service */}
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Target Service</Label>
-                    <ServiceSelector
-                      services={services}
-                      value={selectedTargetService?.id}
-                      onChange={(serviceId) => {
-                        const service = services.find(s => s.id === serviceId);
-                        setSelectedTargetService(service);
-                      }}
-                      placeholder="Select Target Service"
-                      excludeIds={[selectedSourceService?.id].filter(Boolean)}
-                      currentServiceId={currentService?.id}
-                    />
-                  </div>
-                </div>
-
-                {/* Connection Type Selector */}
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Tipe Koneksi</label>
-                  <ConnectionTypeSelector
-                    value={connectionType}
-                    onChange={setConnectionType}
-                    connectionTypes={connectionTypes}
-                    placeholder="Pilih tipe koneksi"
-                  />
-                </div>
-
-                {/* Preview */}
-                {selectedSourceService && selectedTargetService && connectionType && (
-                  <div className="p-3 bg-white dark:bg-gray-700 rounded border">
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-sm font-medium">{selectedSourceService.name}</span>
+                    <div className="flex items-center gap-1 px-2">
                       {(() => {
                         const typeDetails = getConnectionTypeDetails(connectionType);
-                        if (!typeDetails) return <span>→</span>;
+                        if (!typeDetails) return <ArrowRight className="h-4 w-4 text-muted-foreground" />;
 
                         return (
                           <Badge
@@ -691,40 +552,40 @@ export default function ServiceToServiceConnectionModal({
                           </Badge>
                         );
                       })()}
-                      <span className="text-sm font-medium">{selectedTargetService.name}</span>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Briefcase className="h-3 w-3 text-purple-600" />
+                        <span className="text-xs font-medium">{selectedTargetService.name}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{selectedTargetService.cmdb_item_name}</span>
                     </div>
                   </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleCreateConnection}
-                    disabled={loading || !selectedSourceService || !selectedTargetService || !connectionType}
-                    className="flex-1"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Connection
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleResetForm}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </Button>
                 </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  onClick={handleCreateConnection}
+                  disabled={loading || !selectedSourceService || !selectedTargetService || !connectionType}
+                  className="flex-1"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Connection
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedSourceService(currentService || null);
+                    setSelectedTargetService(null);
+                  }}
+                  disabled={loading}
+                >
+                  Reset
+                </Button>
               </div>
-            ) : (
-              <Button
-                onClick={() => setNewConnectionMode(true)}
-                disabled={loading || services.length < 2}
-                className="w-full"
-                variant="outline"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Connection
-              </Button>
-            )}
+            </div>
           </div>
         </div>
 
