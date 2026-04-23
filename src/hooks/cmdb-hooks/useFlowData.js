@@ -66,6 +66,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           opacity: isHidden ? 0.3 : 1,
           pointerEvents: isHidden ? 'none' : 'all',
           borderRadius: '8px',
+          overflow: 'visible', // Allow child service edges to be visible outside boundary
         },
         draggable: !isHidden,
         hidden: isHidden,
@@ -125,6 +126,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             height: itemHeight,
             opacity: isItemHidden ? 0.3 : 1,
             pointerEvents: isItemHidden ? 'none' : 'all',
+            overflow: 'visible', // Allow service child edges to be visible outside boundary
           },
           draggable: !isItemHidden,
           hidden: isItemHidden,
