@@ -20,10 +20,12 @@ import {
   Plus
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
+import ServiceAsNode from './ServiceAsNode';
 
 export default function CustomNode({ data, id }) {
   const storage = data.storage || null;
-  // Services are now independent nodes, no longer rendered inside CMDB items
+  // Services are now rendered inside using ServiceAsNode component
+  const services = data.services || [];
   const { socket } = useSocket();
 
   // Fetch service items when hover opens
@@ -264,8 +266,44 @@ export default function CustomNode({ data, id }) {
               </div>
             </div>
           )}
+
+          {/* Services Section - Using ServiceAsNode components */}
+          {services.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <div className="text-[9px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+                <GitBranch size={10} />
+                Services ({services.length})
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 justify-items-center">
+                {services.map((service) => (
+                  <ServiceAsNode
+                    key={service.id}
+                    data={{
+                      service: service,
+                      onServiceClick: data.onServiceClick,
+                      onServiceItemsClick: data.onServiceItemsClick,
+                      cmdbItemName: data.name,
+                      workspaceId: data.workspaceId,
+                      width: 55,
+                      height: 55,
+                      isInsideItem: true
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No Services Message */}
+          {services.length === 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <div className="text-[9px] text-muted-foreground text-center italic">
+                No services
+              </div>
+            </div>
+          )}
         </div>
-        
+
 
         {/* Top handles */}
         <Handle

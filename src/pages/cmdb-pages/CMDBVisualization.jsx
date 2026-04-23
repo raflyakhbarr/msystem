@@ -333,7 +333,6 @@ export default function CMDBVisualization() {
   const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
   const { connections: serviceToServiceConnections, fetchConnectionsByWorkspace: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -658,6 +657,9 @@ export default function CMDBVisualization() {
       toast.error('Gagal memuat service items');
     }
   }, [currentWorkspace, items]);
+
+  // Initialize useFlowData after handlers are defined
+  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, handleServiceClick, handleServiceItemsClick);
 
   // Save service node position to database
   const saveServiceNodePosition = useCallback(async (serviceId, position, parentNodeId = null) => {
@@ -1030,16 +1032,18 @@ export default function CMDBVisualization() {
       };
     });
 
-    // Transform services to independent nodes FIRST (before layananEdges)
-    // This is critical because layananEdges may reference service nodes
-    const serviceNodes = transformServicesToNodes(
-      services,
-      items,
-      {
-        onServiceClick: handleServiceClick,
-        onServiceItemsClick: handleServiceItemsClick
-      }
-    );
+    // Transform services to independent nodes FIRST (before layanaEdges)
+    // DISABLED: Services are now rendered inside CustomNode using ServiceAsNode with isInsideItem=true
+    // This prevents duplication of service nodes
+    // const serviceNodes = transformServicesToNodes(
+    //   services,
+    //   items,
+    //   {
+    //     onServiceClick: handleServiceClick,
+    //     onServiceItemsClick: handleServiceItemsClick
+    //   }
+    // );
+    const serviceNodes = []; // Empty array since services are inside CustomNode
 
     // Add layanan connections (edges) with status-based styling
     const layananEdges = layananConnections.map((conn) => {
@@ -1362,8 +1366,11 @@ export default function CMDBVisualization() {
 
     const allEdges = [...flowEdges, ...layananEdges, ...layananServiceEdges];
 
-    // Create service-to-service edges (serviceNodes already created above)
-    const serviceToServiceEdges = (serviceToServiceConnections || []).map((conn) => {
+    // Create service-to-service edges (DISABLED - services are now inside CustomNode)
+    // Service-to-service connections are not shown as edges since services are embedded in CMDB item nodes
+    const serviceToServiceEdges = [];
+    /*
+    (serviceToServiceConnections || []).map((conn) => {
       const sourceServiceNodeId = `service-${conn.source_service_id}`;
       const targetServiceNodeId = `service-${conn.target_service_id}`;
 
@@ -1533,6 +1540,7 @@ export default function CMDBVisualization() {
 
       return edgeConfig;
     }).filter(Boolean);
+    */
 
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges]);

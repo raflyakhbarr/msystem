@@ -6,7 +6,7 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   const itemsPerRow = 3;
   const itemWidth = 160;
   const baseItemHeight = 100;     // Tinggi dasar item TANPA service
-  const serviceHeight = 36;       // Tambahan tinggi per baris service (40px + gap)
+  const serviceHeight = 65;       // Tambahan tinggi per baris service (55px ServiceAsNode + gap)
   const servicesPerRow = 3;       // Jumlah service per baris dalam item
   const gapX = 40;                // Gap horizontal antar item (kiri-kanan)
   const gapY = 40;                // Gap vertikal antar baris (atas-bawah)

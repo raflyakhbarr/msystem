@@ -10,8 +10,9 @@ import {
   getStatusColor,
   shouldShowCrossMarker
 } from '../../utils/cmdb-utils/statusPropagation';
+import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -75,7 +76,12 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       // Create item nodes in group
       groupItems.forEach((item, index) => {
         // Ambil services untuk item ini dari servicesMap
-        const itemServices = servicesMap[item.id] || [];
+        const itemServices = (servicesMap[item.id] || []).map(service => ({
+          ...service,
+          icon_preview: service.icon_type === 'upload' && service.icon_path
+            ? `${API_BASE_URL}${service.icon_path}`
+            : null
+        }));
         const serviceCount = itemServices.length;
 
         // Hitung tinggi item berdasarkan jumlah service
@@ -120,6 +126,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
             storage: item.storage || null,
             alias: item.alias || '',
             port: item.port || '',
+            onServiceClick: onServiceClick, // Add service click handler
+            onServiceItemsClick: onServiceItemsClick, // Add service items click handler
+            workspaceId: items.find(i => i.id === item.id)?.workspace_id, // Add workspaceId for service items fetch
           },
           style: {
             width: dimensions.itemWidth,
@@ -144,8 +153,13 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       const itemNodeId = String(item.id);
       const isHidden = hiddenNodes.has(itemNodeId);
 
-      // Ambil services untuk item ini dari servicesMap
-      const itemServices = servicesMap[item.id] || [];
+      // Ambil services untuk item ini dari servicesMap dan tambahkan icon preview
+      const itemServices = (servicesMap[item.id] || []).map(service => ({
+        ...service,
+        icon_preview: service.icon_type === 'upload' && service.icon_path
+          ? `${API_BASE_URL}${service.icon_path}`
+          : null
+      }));
 
       // Calculate item dimensions based on service count
       const serviceCount = itemServices.length;
@@ -183,6 +197,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           storage: item.storage || null,
           alias: item.alias || '',
           port: item.port || '',
+          onServiceClick: onServiceClick, // Add service click handler
+          onServiceItemsClick: onServiceItemsClick, // Add service items click handler
+          workspaceId: item.workspace_id, // Add workspaceId for service items fetch
         },
         style: {
           width: itemWidth,
@@ -483,7 +500,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     });
 
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick]);
 
   return { transformToFlowData };
 };
