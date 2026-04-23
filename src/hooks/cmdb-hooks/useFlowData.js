@@ -215,7 +215,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       // Calculate CMDB item dimensions based on service count
       // More accurate calculation to ensure service nodes fit properly
       const serviceCount = itemServices.length;
-      const baseItemHeight = 300; // Tinggi dasar item (header, divider, info)
+      const baseItemHeight = 100; // Tinggi dasar item (header, divider, info)
       const servicesPerRow = 3;
 
       // Service node dimensions (MUST MATCH with service node positioning below)
