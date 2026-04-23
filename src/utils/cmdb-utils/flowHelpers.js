@@ -4,7 +4,10 @@ import { calculatePropagatedStatuses } from './statusPropagation';
 
 export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) => {
   const itemsPerRow = 3;
-  const itemWidth = 160;
+  const baseItemWidth = 150;     // Base width for items without services
+  const serviceNodeWidth = 47;   // Width of service node
+  const serviceGap = 10;         // Gap between service nodes
+  const horizontalPadding = 24;  // Padding on each side
   const baseItemHeight = 100;     // Tinggi dasar item TANPA service
   const serviceHeight = 65;       // Tambahan tinggi per baris service (55px ServiceAsNode + gap)
   const servicesPerRow = 3;       // Jumlah service per baris dalam item
@@ -14,6 +17,13 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
 
   const itemCount = groupItems.length;
   const rows = Math.ceil(itemCount / itemsPerRow);
+
+  // Calculate dynamic item width based on service presence
+  const getItemWidth = (servicesCount = 0) => {
+    if (servicesCount === 0) return baseItemWidth;
+    const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * serviceGap);
+    return Math.max(baseItemWidth, serviceSectionWidth + horizontalPadding);
+  };
 
   // Hitung tinggi maksimum per item secara dinamis berdasarkan jumlah service
   const getItemHeight = (servicesCount = 0) => {
@@ -27,6 +37,15 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
     const itemServices = servicesMap[item.id] || [];
     return getItemHeight(itemServices.length);
   });
+
+  // Calculate width for each item
+  const itemWidths = groupItems.map(item => {
+    const itemServices = servicesMap[item.id] || [];
+    return getItemWidth(itemServices.length);
+  });
+
+  // Get maximum item width for consistency
+  const maxItemWidth = Math.max(...itemWidths, baseItemWidth);
 
   // Hitung tinggi per baris (ambil maksimum dari item di baris tersebut)
   const rowHeights = [];
@@ -44,7 +63,7 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   // Hitung width dan height dinamis
   // Width: (jumlah kolom × lebar item) + (gap antar kolom) + padding kiri-kanan
   const colCount = Math.min(itemsPerRow, itemCount);
-  const calculatedWidth = (colCount * itemWidth) + ((colCount - 1) * gapX) + padding * 2;
+  const calculatedWidth = (colCount * maxItemWidth) + ((colCount - 1) * gapX) + padding * 2;
   const calculatedHeight = totalRowHeights + totalGapY + padding * 2 + 40;
 
   // Apply minimum size untuk group kosong
@@ -58,7 +77,7 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
     width,
     height,
     itemsPerRow,
-    itemWidth,
+    itemWidth: maxItemWidth,
     itemHeights,       // Array tinggi untuk setiap item
     rowHeights,        // Array tinggi untuk setiap baris
     baseItemHeight,

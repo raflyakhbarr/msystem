@@ -27,6 +27,49 @@ export default function CustomNode({ data, id }) {
   const services = data.services || [];
   const { socket } = useSocket();
 
+  // Calculate dynamic height based on service count
+  const calculateNodeHeight = () => {
+    const baseHeight = 90; // Base height without services
+    const servicesPerRow = 3;
+    const serviceNodeHeight = 47;
+    const gapY = 10;
+    const serviceRowHeight = serviceNodeHeight + gapY; // 57px per row
+
+    if (services.length === 0) {
+      return baseHeight + 10; 
+    }
+
+    const serviceRows = Math.ceil(services.length / servicesPerRow);
+    const serviceSectionHeight = serviceRows * serviceRowHeight;
+
+    return baseHeight + 20 + serviceSectionHeight + 15; // +20 for header, +15 for bottom padding
+  };
+
+  const nodeHeight = calculateNodeHeight();
+
+  // Calculate dynamic width based on service presence
+  const calculateNodeWidth = () => {
+    const baseWidth = 150; // Width without services
+
+    if (services.length === 0) {
+      return baseWidth;
+    }
+
+    // With services: accommodate 3 services per row
+    // Each service is 47px + 10px gap = 57px per service
+    const serviceNodeWidth = 47;
+    const serviceGap = 10;
+    const servicesPerRow = 3;
+    const horizontalPadding = 24; // 12px padding on each side
+
+    const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * serviceGap);
+    const totalWidth = Math.max(baseWidth, serviceSectionWidth + horizontalPadding);
+
+    return totalWidth;
+  };
+
+  const nodeWidth = calculateNodeWidth();
+
   // Fetch service items when hover opens
   const getIconComponent = (type) => {
     const iconProps = { size: 20, className: 'text-foreground' };
@@ -79,7 +122,15 @@ export default function CustomNode({ data, id }) {
   return (
     <>
       {/* Node UI */}
-      <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${getNodeBorderColor(data.status)} pb-2`}>
+      <div
+        className={`relative bg-card border-2 rounded shadow-md ${getNodeBorderColor(data.status)} pb-2`}
+        style={{
+          width: `${nodeWidth}px`,
+          minWidth: `${nodeWidth}px`,
+          height: `${nodeHeight}px`,
+          minHeight: `${nodeHeight}px`,
+        }}
+      >
         <div className="absolute top-1 right-1 flex gap-1 z-10">
           {/* Info/Detail Button */}
           <Popover>
@@ -256,37 +307,9 @@ export default function CustomNode({ data, id }) {
             </div>
           </div>
 
-          {/* Additional info */}
-          {(data.ip || data.location) && (
-            <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
-              <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
-                {data.ip && <span>🌐 {data.ip}</span>}
-                {data.location && <span>📍 {data.location}</span>}
-              </div>
-            </div>
-          )}
-
-          {/* Services Section - Services are now rendered as ReactFlow child nodes */}
+          {/* Services Section - Services are rendered as ReactFlow child nodes */}
           {services.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-              <div className="text-[9px] font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
-                <GitBranch size={10} />
-                Services ({services.length})
-              </div>
-              {/* Service nodes are rendered as ReactFlow child nodes, not inline */}
-              <div className="text-[8px] text-muted-foreground text-center italic py-2">
-                Service nodes rendered as child nodes
-              </div>
-            </div>
-          )}
-
-          {/* No Services Message */}
-          {services.length === 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-              <div className="text-[9px] text-muted-foreground text-center italic">
-                No services
-              </div>
-            </div>
+            <hr className="border-t mt-5 border-gray-200 dark:border-gray-800" />
           )}
         </div>
 

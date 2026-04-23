@@ -140,6 +140,57 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           draggable: !isItemHidden,
           hidden: isItemHidden,
         });
+
+        // Create service nodes as child nodes for grouped items
+        if (itemServices.length > 0) {
+          const servicesPerRow = 3;
+          const serviceNodeWidth = 55; // Slightly larger for better visibility
+          const serviceNodeHeight = 55; // Slightly larger
+          const gapX = 10;
+          const gapY = 10;
+          const paddingX = 10;
+          const paddingY = 10;
+
+          itemServices.forEach((service, index) => {
+            const row = Math.floor(index / servicesPerRow);
+            const col = index % servicesPerRow;
+
+            // Calculate position relative to parent item
+            // Services section starts after base height (100px) + 20px padding
+            const startY = 120 + (row * (serviceNodeHeight + gapY));
+            const startX = paddingX + (col * (serviceNodeWidth + gapX));
+
+            const serviceNodeId = `service-${service.id}`;
+
+            flowNodes.push({
+              id: serviceNodeId,
+              type: 'serviceAsNode',
+              parentNode: itemNodeId, // ← CRITICAL: Make service a child node
+              extent: 'parent', // ← CRITICAL: Constrain to parent boundary
+              position: { x: startX, y: startY }, // ← Position is RELATIVE to parent
+              data: {
+                service: {
+                  ...service,
+                  service_items_count: service.service_items_count || 0
+                },
+                cmdbItemName: item.name,
+                cmdbItemId: item.id,
+                workspaceId: items.find(i => i.id === item.id)?.workspace_id,
+                width: serviceNodeWidth,
+                height: serviceNodeHeight,
+                onServiceClick: onServiceClick,
+                onServiceItemsClick: onServiceItemsClick,
+                isInsideItem: true // Flag to indicate this is inside item
+              },
+              style: {
+                width: serviceNodeWidth,
+                height: serviceNodeHeight,
+                zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
+              },
+              draggable: false // ← CRITICAL: Services cannot be dragged
+            });
+          });
+        }
       });
     });
 
@@ -161,22 +212,46 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           : null
       }));
 
-      // Calculate item dimensions based on service count
+      // Calculate CMDB item dimensions based on service count
+      // More accurate calculation to ensure service nodes fit properly
       const serviceCount = itemServices.length;
-      const baseItemHeight = 80; // Base height without services (header + divider)
+      const baseItemHeight = 300; // Tinggi dasar item (header, divider, info)
       const servicesPerRow = 3;
-      const serviceRowHeight = 65; // Height per row of services (55px service + 10px gap)
 
-      let itemHeight = baseItemHeight;
+      // Service node dimensions (MUST MATCH with service node positioning below)
+      const serviceNodeWidth = 47;   // Lebar service node
+      const serviceNodeHeight = 47;   // Tinggi service node
+      const gapY = 10;                // Gap vertikal antar service nodes
+      const serviceRowHeight = serviceNodeHeight + gapY; // Total tinggi per baris = 57px
+
+      let itemHeight = baseItemHeight + 20; // +20px untuk services header dan padding
       if (serviceCount > 0) {
         const serviceRows = Math.ceil(serviceCount / servicesPerRow);
-        itemHeight = baseItemHeight + (serviceRows * serviceRowHeight);
+
+        // Service nodes start at Y = 120 (see service node positioning below)
+        // Calculate total height needed for service section
+        const serviceSectionStart = 120;
+        const serviceSectionHeight = serviceRows * serviceRowHeight;
+
+        // Add space for service section + extra padding at bottom
+        itemHeight = baseItemHeight + 20 + serviceSectionHeight + 15; // +15px extra padding di bawah
       } else {
-        // Minimum height even without services (for "No services" text)
+        // Minimum height for "No services" text
         itemHeight = baseItemHeight + 25;
       }
 
-      const itemWidth = 180; // Fixed width for CMDB items
+      // Calculate dynamic width based on service presence
+      const baseItemWidth = 150; // Width without services
+      let itemWidth;
+      if (serviceCount === 0) {
+        itemWidth = baseItemWidth;
+      } else {
+        // With services: accommodate 3 services per row
+        // Each service is 47px + 10px gap = 57px per service
+        const horizontalPadding = 24; // 12px padding on each side
+        const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * gapY);
+        itemWidth = Math.max(baseItemWidth, serviceSectionWidth + horizontalPadding);
+      }
 
       flowNodes.push({
         id: itemNodeId,
@@ -212,63 +287,57 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         draggable: !isHidden,
         hidden: isHidden,
       });
-    });
 
-    // Create service nodes as child nodes of CMDB items
-    // This allows service-to-service connections to be rendered as ReactFlow edges
-    Object.entries(servicesMap).forEach(([itemId, itemServices]) => {
-      if (!Array.isArray(itemServices) || itemServices.length === 0) return;
+      // Create service nodes as child nodes for ungrouped items
+      if (itemServices.length > 0) {
+        const servicesPerRow = 3;
+        const serviceNodeWidth = 47; // Slightly larger for better visibility
+        const serviceNodeHeight = 47; // Slightly larger
+        const gapX = 10;
+        const gapY = 10;
+        const paddingX = 10;
+        const paddingY = 10;
 
-      const parentNode = flowNodes.find(n => n.id === String(itemId));
-      if (!parentNode) return;
+        itemServices.forEach((service, index) => {
+          const row = Math.floor(index / servicesPerRow);
+          const col = index % servicesPerRow;
 
-      const servicesPerRow = 3;
-      const serviceNodeWidth = 55;
-      const serviceNodeHeight = 55;
-      const gapX = 8;
-      const gapY = 8;
-      const paddingX = 8;
-      const paddingY = 8;
+          // Calculate position relative to parent item
+          // Services section starts after base height (100px) + 20px padding
+          const startY = 120 + (row * (serviceNodeHeight + gapY));
+          const startX = paddingX + (col * (serviceNodeWidth + gapX));
 
-      itemServices.forEach((service, index) => {
-        const row = Math.floor(index / servicesPerRow);
-        const col = index % servicesPerRow;
+          const serviceNodeId = `service-${service.id}`;
 
-        // Position services INSIDE the CMDB item (relative position)
-        // Services start below the header area
-        const startX = paddingX + (col * (serviceNodeWidth + gapX));
-        const startY = 65 + (row * (serviceNodeHeight + gapY)); // 65px from top (below header)
-
-        const serviceNodeId = `service-${service.id}`;
-
-        flowNodes.push({
-          id: serviceNodeId,
-          type: 'serviceAsNode',
-          parentNode: String(itemId), // ← CRITICAL: Make service a child node
-          extent: 'parent', // ← CRITICAL: Constrain to parent boundary
-          position: { x: startX, y: startY }, // ← Position is RELATIVE to parent
-          data: {
-            service: {
-              ...service,
-              service_items_count: service.service_items_count || 0
+          flowNodes.push({
+            id: serviceNodeId,
+            type: 'serviceAsNode',
+            parentNode: itemNodeId, // ← CRITICAL: Make service a child node
+            extent: 'parent', // ← CRITICAL: Constrain to parent boundary
+            position: { x: startX, y: startY }, // ← Position is RELATIVE to parent
+            data: {
+              service: {
+                ...service,
+                service_items_count: service.service_items_count || 0
+              },
+              cmdbItemName: item.name,
+              cmdbItemId: item.id,
+              workspaceId: item.workspaceId,
+              width: serviceNodeWidth,
+              height: serviceNodeHeight,
+              onServiceClick: onServiceClick,
+              onServiceItemsClick: onServiceItemsClick,
+              isInsideItem: true // Flag to indicate this is inside item
             },
-            cmdbItemName: parentNode.data?.name || null,
-            cmdbItemId: parseInt(itemId),
-            workspaceId: parentNode.data?.workspaceId || service.workspace_id,
-            width: serviceNodeWidth,
-            height: serviceNodeHeight,
-            onServiceClick: onServiceClick,
-            onServiceItemsClick: onServiceItemsClick,
-            isInsideItem: true // Flag to indicate this is inside item
-          },
-          style: {
-            width: serviceNodeWidth,
-            height: serviceNodeHeight,
-            zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
-          },
-          draggable: false // ← CRITICAL: Services cannot be dragged
+            style: {
+              width: serviceNodeWidth,
+              height: serviceNodeHeight,
+              zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
+            },
+            draggable: false // ← CRITICAL: Services cannot be dragged
+          });
         });
-      });
+      }
     });
 
     // Create edges for item-to-item and item-to-group connections
