@@ -1165,7 +1165,7 @@ export const transformServicesToNodes = (services, items, options = {}) => {
       style: {
         width: serviceNodeWidth,
         height: serviceNodeHeight,
-        zIndex: 10 // Above item content but below item border
+        zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
       },
       draggable: false // ← CRITICAL: Services cannot be dragged
     };

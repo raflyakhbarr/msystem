@@ -265,32 +265,8 @@ export default function CustomNode({ data, id }) {
             </div>
           )}
         </div>
+        
 
-        {/* Services Section - Divider for child nodes */}
-        <div className="px-2 pb-2 pt-0">
-          <div className="border-t-2 border-dashed border-gray-300 dark:border-gray-700 pt-1.5 mt-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 text-[9px] font-medium text-gray-600 dark:text-gray-400">
-                <Plus size={10} strokeWidth={2.5} />
-                <span>Services</span>
-              </div>
-              {/* Service count badge */}
-              {data.services && data.services.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-[9px] font-bold">
-                  {data.services.length}
-                </span>
-              )}
-            </div>
-          </div>
-          {/* Service count label when empty */}
-          {(!data.services || data.services.length === 0) && (
-            <div className="text-[8px] text-gray-400 dark:text-gray-600 text-center py-2 italic">
-              No services
-            </div>
-          )}
-        </div>
-
-        {/* Flow Handles - Multiple directions */}
         {/* Top handles */}
         <Handle
           type="target"

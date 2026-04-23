@@ -11,7 +11,7 @@ import {
   shouldShowCrossMarker
 } from '../../utils/cmdb-utils/statusPropagation';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, serviceToServiceConnections = []) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -19,9 +19,12 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     // Build a map from service_id to cmdb_item_id for quick lookup
     const serviceToItemMap = {};
     Object.entries(servicesMap).forEach(([itemId, services]) => {
-      services.forEach(service => {
-        serviceToItemMap[service.id] = parseInt(itemId);
-      });
+      // Ensure services is an array before iterating
+      if (Array.isArray(services)) {
+        services.forEach(service => {
+          serviceToItemMap[service.id] = parseInt(itemId);
+        });
+      }
     });
 
     // Hitung propagated statuses untuk semua edges
@@ -477,132 +480,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       flowEdges.push(edgeConfig);
     });
 
-    // Create edges for service-to-service connections (as parent CMDB item connections)
-    serviceToServiceConnections.forEach((conn) => {
-      // Get parent CMDB items for both services
-      const sourceItemId = serviceToItemMap[conn.source_service_id];
-      const targetItemId = serviceToItemMap[conn.target_service_id];
-
-      // Skip if we can't find parent items or if source == target (same CMDB item)
-      if (!sourceItemId || !targetItemId || sourceItemId === targetItemId) return;
-
-      const sourceNode = flowNodes.find(n => n.id === String(sourceItemId));
-      const targetNode = flowNodes.find(n => n.id === String(targetItemId));
-
-      if (!sourceNode || !targetNode) return;
-
-      // Create unique edge ID for service-to-service connection
-      const edgeId = `service-connection-${conn.id}`;
-      const isEdgeHidden = hiddenNodes.has(String(sourceItemId)) || hiddenNodes.has(String(targetItemId));
-
-      // ==================== STATUS-BASED STYLING (Service Propagation) ====================
-      const sourceStatus = conn.source_service_status || 'active';
-      const targetStatus = conn.target_service_status || 'active';
-
-      let edgeStatus = 'active';
-      let showCrossMarker = false;
-
-      // Priority: inactive > maintenance > active
-      if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
-        edgeStatus = 'inactive';
-        showCrossMarker = true;
-      } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
-        edgeStatus = 'maintenance';
-      }
-
-      // Get stroke color based on STATUS (SAMA seperti CMDB item edges)
-      const strokeColor = getStatusColor(edgeStatus, false); // false = not propagated
-
-      // Add dash array based on direction (ONLY for active status, inactive/maintenance get solid lines)
-      let strokeDasharray;
-      if (edgeStatus === 'inactive') {
-        strokeDasharray = '8 4'; // Dotted for inactive
-      } else if (edgeStatus === 'maintenance') {
-        strokeDasharray = '12 6'; // Dashed for maintenance
-      } else {
-        // Active status - show direction with dash
-        strokeDasharray = conn.connection_type === 'connects_to' ? 'none' : '5,5';
-      }
-
-      let sourceHandle, targetHandle;
-      if (edgeHandles[edgeId]) {
-        sourceHandle = edgeHandles[edgeId].sourceHandle;
-        targetHandle = edgeHandles[edgeId].targetHandle;
-      } else {
-        const handles = getBestHandlePositions(sourceNode, targetNode);
-        sourceHandle = handles.sourceHandle;
-        targetHandle = handles.targetHandle;
-      }
-
-      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
-      const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
-
-      const edgeConfig = {
-        id: edgeId,
-        source: String(sourceItemId),
-        target: String(targetItemId),
-        sourceHandle,
-        targetHandle,
-        type: 'smoothstep',
-        markerEnd: { type: 'arrowclosed', color: strokeColor },
-        style: {
-          stroke: strokeColor,
-          strokeWidth: edgeStatus === 'inactive' ? 2.5 : 2, // Lebih tebal jika inactive
-          strokeDasharray: strokeDasharray,
-          opacity: isEdgeHidden ? 0.2 : (edgeStatus === 'inactive' ? 0.8 : 0.6),
-        },
-        zIndex: 6, // Lower than direct connections but higher than group connections
-        reconnectable: true,
-        hidden: isEdgeHidden,
-        data: {
-          isServiceConnection: true, // Flag to identify service-to-service connections
-          connectionType: conn.connection_type,
-          sourceServiceId: conn.source_service_id,
-          targetServiceId: conn.target_service_id,
-          edgeStatus, // Add edge status for context menu
-        },
-      };
-
-      // Add cross marker for INACTIVE status
-      if (showCrossMarker) {
-        edgeConfig.label = '✕';
-        edgeConfig.labelStyle = {
-          fill: strokeColor,
-          fontWeight: 'bold',
-          fontSize: 20,
-          background: 'white',
-          borderRadius: '50%',
-        };
-        edgeConfig.labelBgStyle = {
-          fill: 'white',
-          fillOpacity: 0.9,
-        };
-        edgeConfig.labelBgPadding = [8, 8];
-        edgeConfig.labelBgBorderRadius = 50;
-      } else if (showConnectionLabels && connectionTypeLabel) {
-        // Only show connection type label if NOT showing cross marker
-        edgeConfig.label = connectionTypeLabel;
-        edgeConfig.labelStyle = {
-          fontSize: 11,
-          fontWeight: 500,
-          fill: strokeColor,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          padding: '2px 6px',
-          borderRadius: '4px',
-        };
-        edgeConfig.labelBgStyle = {
-          fill: 'white',
-          fillOpacity: 0.9,
-        };
-        edgeConfig.labelBgPadding = [4, 6];
-        edgeConfig.labelBgBorderRadius = 4;
-      }
-
-      flowEdges.push(edgeConfig);
-    });
-
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, serviceToServiceConnections]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels]);
 
   return { transformToFlowData };
 };

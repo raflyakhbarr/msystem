@@ -182,6 +182,119 @@ export default function ServiceAsNode({ data, selected }) {
                 {serviceItemsCount > 99 ? '9+' : serviceItemsCount}
               </div>
             )}
+
+            {/* Flow Handles - All 4 directions for small mode */}
+            {/* Top */}
+            <Handle
+              type="target"
+              position={Position.Top}
+              id="target-top"
+              style={{
+                background: handleColor,
+                left: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Top}
+              id="source-top"
+              style={{
+                background: handleColor,
+                left: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+
+            {/* Right */}
+            <Handle
+              type="target"
+              position={Position.Right}
+              id="target-right"
+              style={{
+                background: handleColor,
+                top: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="source-right"
+              style={{
+                background: handleColor,
+                top: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+
+            {/* Bottom */}
+            <Handle
+              type="target"
+              position={Position.Bottom}
+              id="target-bottom"
+              style={{
+                background: handleColor,
+                left: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="source-bottom"
+              style={{
+                background: handleColor,
+                left: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+
+            {/* Left */}
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="target-left"
+              style={{
+                background: handleColor,
+                top: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Left}
+              id="source-left"
+              style={{
+                background: handleColor,
+                top: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0.6
+              }}
+            />
           </div>
         </HoverCardTrigger>
         <HoverCardContent
