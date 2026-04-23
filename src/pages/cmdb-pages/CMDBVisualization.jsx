@@ -1244,16 +1244,6 @@ export default function CMDBVisualization() {
     }).filter(Boolean); // Hapus edges yang null
 
     // Add layanan service connections (edges to service items with status propagation)
-    console.log('[DEBUG] Creating layananServiceEdges...', {
-      layananServiceConnectionsCount: layananServiceConnections.length,
-      layananServiceConnections: layananServiceConnections.map(c => ({
-        id: c.id,
-        layanan_id: c.layanan_id,
-        service_id: c.service_id,
-        service_item_id: c.service_item_id
-      }))
-    });
-
     const layananServiceEdges = layananServiceConnections.map((conn) => {
       const edgeId = `layana-service-edge-${conn.id}`;
 
@@ -1276,7 +1266,6 @@ export default function CMDBVisualization() {
       }
 
       if (!targetCmdbItemId) {
-        console.warn(`[DEBUG] Skipping edge ${edgeId}: parent CMDB item not found for service ${conn.service_id}`);
         return null; // Skip if parent CMDB item not found
       }
 
@@ -1284,20 +1273,8 @@ export default function CMDBVisualization() {
       const targetNode = flowNodes.find(n => n.id === String(targetCmdbItemId));
 
       if (!sourceNode || !targetNode) {
-        console.warn(`[DEBUG] Skipping edge ${edgeId}: sourceNode or targetNode not found`, {
-          sourceNode: !!sourceNode,
-          targetNode: !!targetNode,
-          layananNodeId,
-          targetCmdbItemId
-        });
         return null;
       }
-
-      console.log(`[DEBUG] Creating layana-service edge: ${edgeId}`, {
-        layana: sourceNode.data.name,
-        targetCmdbItem: targetNode.data.name,
-        service: targetService.name
-      });
 
       // Determine edge status based on service item status (fetch from serviceItems map)
       let edgeStatus = 'active';
@@ -1421,90 +1398,113 @@ export default function CMDBVisualization() {
         edgeStatus = 'maintenance';
       }
 
-      const getStatusColor = (status) => {
+      // Get color based on status
+      const getStrokeColor = (status) => {
         switch (status) {
+          case 'active': return '#10b981';
           case 'inactive': return '#ef4444';
           case 'maintenance': return '#f59e0b';
-          case 'decommissioned': return '#ef4444';
           default: return '#10b981';
         }
       };
 
-      const strokeColor = getStatusColor(edgeStatus);
+      const strokeColor = getStrokeColor(edgeStatus);
 
-      // Add dash array based on direction
-      let strokeDasharray;
-      if (edgeStatus === 'inactive') {
-        strokeDasharray = '8 4';
-      } else if (edgeStatus === 'maintenance') {
-        strokeDasharray = '12 6';
-      } else {
-        strokeDasharray = conn.connection_type === 'connects_to' ? 'none' : '5,5';
-      }
-
-      // Get handle positions
+      // Get handle positions - considering child node absolute positions
       const getBestHandlePositions = (source, target) => {
-        const dx = target.position?.x - source.position?.x || 0;
-        const dy = target.position?.y - source.position?.y || 0;
+        const sourceParentId = source.parentNode;
+        const targetParentId = target.parentNode;
+
+        // Calculate absolute positions for child nodes
+        let sourceAbsX = source.position.x;
+        let sourceAbsY = source.position.y;
+        let targetAbsX = target.position.x;
+        let targetAbsY = target.position.y;
+
+        // If source is child node, add parent position
+        if (sourceParentId) {
+          const sourceParent = [...flowNodes, ...layananNodes].find(n => n.id === sourceParentId);
+          if (sourceParent) {
+            sourceAbsX += sourceParent.position.x;
+            sourceAbsY += sourceParent.position.y;
+          }
+        }
+
+        // If target is child node, add parent position
+        if (targetParentId) {
+          const targetParent = [...flowNodes, ...layananNodes].find(n => n.id === targetParentId);
+          if (targetParent) {
+            targetAbsX += targetParent.position.x;
+            targetAbsY += targetParent.position.y;
+          }
+        }
+
+        const dx = targetAbsX - sourceAbsX;
+        const dy = targetAbsY - sourceAbsY;
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
 
         if (absDx > absDy) {
-          if (dx > 0) {
-            return { sourceHandle: 'source-right', targetHandle: 'target-left' };
-          } else {
-            return { sourceHandle: 'source-left', targetHandle: 'target-right' };
-          }
+          return dx > 0
+            ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+            : { sourceHandle: 'source-left', targetHandle: 'target-right' };
         } else {
-          if (dy > 0) {
-            return { sourceHandle: 'source-bottom', targetHandle: 'target-top' };
-          } else {
-            return { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
-          }
+          return dy > 0
+            ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+            : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
         }
       };
 
-      const handles = getBestHandlePositions(sourceNode, targetNode);
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
+      const connectionTypeLabel = conn.connection_type
+        ? getConnectionTypeInfo(conn.connection_type).label
+        : null;
 
       const edgeConfig = {
         id: edgeId,
         source: sourceServiceNodeId,
         target: targetServiceNodeId,
-        sourceHandle: handles.sourceHandle,
-        targetHandle: handles.targetHandle,
+        sourceHandle,
+        targetHandle,
         type: 'smoothstep',
+        zIndex: 1001, // Higher than service nodes (1000)
         markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: {
           stroke: strokeColor,
-          strokeWidth: edgeStatus === 'inactive' ? 2.5 : 2,
-          strokeDasharray: strokeDasharray,
-          opacity: isEdgeHidden ? 0.2 : (edgeStatus === 'inactive' ? 0.8 : 0.6),
+          strokeWidth: 2,
+          opacity: isEdgeHidden ? 0.2 : 1,
         },
-        zIndex: 1001,
         reconnectable: true,
+        updatable: true,
+        selectable: true,
         hidden: isEdgeHidden,
         data: {
-          isServiceConnection: true,
-          connectionType: conn.connection_type,
-          sourceServiceId: conn.source_service_id,
-          targetServiceId: conn.target_service_id,
-          edgeStatus,
-        },
+          connection_type: conn.connection_type,
+          source_service_id: conn.source_service_id,
+          target_service_id: conn.target_service_id
+        }
       };
 
-      // Add cross marker for INACTIVE status
+      // Add cross marker if inactive
       if (showCrossMarker) {
-        edgeConfig.label = '✕';
+        edgeConfig.label = `✕`;
         edgeConfig.labelStyle = {
           fill: strokeColor,
           fontWeight: 'bold',
           fontSize: 20,
-          background: 'white',
-          borderRadius: '50%',
         };
         edgeConfig.labelBgStyle = {
           fill: 'white',
-          fillOpacity: 0.9,
+          fillOpacity: 0.9
         };
         edgeConfig.labelBgPadding = [8, 8];
         edgeConfig.labelBgBorderRadius = 50;
@@ -1533,44 +1533,6 @@ export default function CMDBVisualization() {
 
       return edgeConfig;
     }).filter(Boolean);
-
-    console.log('[DEBUG] Final edge counts:', {
-      layananEdges: layananEdges.length,
-      layananEdgesFiltered: layananEdges.filter(e => e !== null).length,
-      layananServiceEdges: layananServiceEdges.length,
-      serviceToServiceEdges: serviceToServiceEdges.length,
-      allEdges: allEdges.length,
-      totalEdges: allEdges.length + serviceToServiceEdges.length
-    });
-
-    // Log layana↔service edges specifically (both directions)
-    const layanaToServiceEdges = layananEdges.filter(e =>
-      e && (
-        (e.source && e.source.startsWith('service-')) ||
-        (e.target && e.target.startsWith('service-'))
-      )
-    );
-    console.log('[DEBUG] Layana↔Service edges:', {
-      count: layanaToServiceEdges.length,
-      edges: layanaToServiceEdges.map(e => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        zIndex: e.zIndex
-      }))
-    });
-
-    console.log('[DEBUG] Setting nodes and edges:', {
-      flowNodesCount: flowNodes.length,
-      layananNodesCount: layananNodes.length,
-      serviceNodesCount: serviceNodes.length,
-      totalNodes: flowNodes.length + layananNodes.length + serviceNodes.length,
-      allEdgesCount: allEdges.length,
-      serviceToServiceEdgesCount: serviceToServiceEdges.length,
-      totalEdges: allEdges.length + serviceToServiceEdges.length,
-      layananEdgesCount: layananEdges?.length || 0,
-      layananServiceEdgesCount: layananServiceEdges?.length || 0
-    });
 
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges]);
@@ -2308,7 +2270,15 @@ export default function CMDBVisualization() {
     if (!currentWorkspace) return;
 
     try {
+      // Find the parent CMDB item for the source service
+      const sourceService = services.find(s => s.id === sourceServiceId);
+      if (!sourceService) {
+        toast.error('Source service not found!');
+        return;
+      }
+
       const result = await api.post('/service-to-service-connections', {
+        cmdb_item_id: sourceService.cmdb_item_id, // Parent CMDB item ID
         source_service_id: sourceServiceId,
         target_service_id: targetServiceId,
         connection_type: connectionType,
@@ -2326,7 +2296,7 @@ export default function CMDBVisualization() {
       console.error('Failed to create service-to-service connection:', error);
       toast.error(error.response?.data?.error || 'Gagal membuat koneksi service-to-service');
     }
-  }, [currentWorkspace, fetchServiceToServiceConnections]);
+  }, [currentWorkspace, fetchServiceToServiceConnections, services]);
 
   const handleSaveLayananServiceConnection = useCallback(async (connectionType) => {
     if (!currentWorkspace || !layananServiceSource || !layananServiceTarget) return;
@@ -2343,18 +2313,6 @@ export default function CMDBVisualization() {
 
       toast.success('Koneksi layanan-service berhasil dibuat!');
       await fetchLayanaAll();
-
-      console.log('[DEBUG] After fetchLayanaAll, layananConnections:', {
-        count: layananConnections.length,
-        connections: layananConnections.map(c => ({
-          id: c.id,
-          source_type: c.source_type,
-          source_id: c.source_id,
-          target_type: c.target_type,
-          target_id: c.target_id
-        }))
-      });
-
       setShowLayananServiceModal(false);
       setLayananServiceSource(null);
       setLayananServiceTarget(null);
