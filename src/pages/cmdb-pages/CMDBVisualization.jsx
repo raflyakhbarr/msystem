@@ -1366,17 +1366,14 @@ export default function CMDBVisualization() {
 
     const allEdges = [...flowEdges, ...layananEdges, ...layananServiceEdges];
 
-    // Create service-to-service edges (DISABLED - services are now inside CustomNode)
-    // Service-to-service connections are not shown as edges since services are embedded in CMDB item nodes
-    const serviceToServiceEdges = [];
-    /*
-    (serviceToServiceConnections || []).map((conn) => {
+    // Create service-to-service edges with DASHED style
+    const serviceToServiceEdges = (serviceToServiceConnections || []).map((conn) => {
       const sourceServiceNodeId = `service-${conn.source_service_id}`;
       const targetServiceNodeId = `service-${conn.target_service_id}`;
 
-      // Find service nodes
-      const sourceNode = serviceNodes.find(n => n.id === sourceServiceNodeId);
-      const targetNode = serviceNodes.find(n => n.id === targetServiceNodeId);
+      // Find service nodes in flowNodes (services are now child nodes inside CustomNode)
+      const sourceNode = flowNodes.find(n => n.id === sourceServiceNodeId);
+      const targetNode = flowNodes.find(n => n.id === targetServiceNodeId);
 
       if (!sourceNode || !targetNode) {
         console.warn('Service nodes not found for connection:', {
@@ -1488,6 +1485,7 @@ export default function CMDBVisualization() {
         style: {
           stroke: strokeColor,
           strokeWidth: 2,
+          strokeDasharray: '8,4', // DASHED line untuk service-to-service connections
           opacity: isEdgeHidden ? 0.2 : 1,
         },
         reconnectable: true,
@@ -1497,7 +1495,8 @@ export default function CMDBVisualization() {
         data: {
           connection_type: conn.connection_type,
           source_service_id: conn.source_service_id,
-          target_service_id: conn.target_service_id
+          target_service_id: conn.target_service_id,
+          isServiceConnection: true // Flag untuk identifikasi service connection
         }
       };
 
@@ -1540,7 +1539,6 @@ export default function CMDBVisualization() {
 
       return edgeConfig;
     }).filter(Boolean);
-    */
 
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges]);

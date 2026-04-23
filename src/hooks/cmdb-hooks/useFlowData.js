@@ -214,6 +214,63 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       });
     });
 
+    // Create service nodes as child nodes of CMDB items
+    // This allows service-to-service connections to be rendered as ReactFlow edges
+    Object.entries(servicesMap).forEach(([itemId, itemServices]) => {
+      if (!Array.isArray(itemServices) || itemServices.length === 0) return;
+
+      const parentNode = flowNodes.find(n => n.id === String(itemId));
+      if (!parentNode) return;
+
+      const servicesPerRow = 3;
+      const serviceNodeWidth = 55;
+      const serviceNodeHeight = 55;
+      const gapX = 8;
+      const gapY = 8;
+      const paddingX = 8;
+      const paddingY = 8;
+
+      itemServices.forEach((service, index) => {
+        const row = Math.floor(index / servicesPerRow);
+        const col = index % servicesPerRow;
+
+        // Position services INSIDE the CMDB item (relative position)
+        // Services start below the header area
+        const startX = paddingX + (col * (serviceNodeWidth + gapX));
+        const startY = 65 + (row * (serviceNodeHeight + gapY)); // 65px from top (below header)
+
+        const serviceNodeId = `service-${service.id}`;
+
+        flowNodes.push({
+          id: serviceNodeId,
+          type: 'serviceAsNode',
+          parentNode: String(itemId), // ← CRITICAL: Make service a child node
+          extent: 'parent', // ← CRITICAL: Constrain to parent boundary
+          position: { x: startX, y: startY }, // ← Position is RELATIVE to parent
+          data: {
+            service: {
+              ...service,
+              service_items_count: service.service_items_count || 0
+            },
+            cmdbItemName: parentNode.data?.name || null,
+            cmdbItemId: parseInt(itemId),
+            workspaceId: parentNode.data?.workspaceId || service.workspace_id,
+            width: serviceNodeWidth,
+            height: serviceNodeHeight,
+            onServiceClick: onServiceClick,
+            onServiceItemsClick: onServiceItemsClick,
+            isInsideItem: true // Flag to indicate this is inside item
+          },
+          style: {
+            width: serviceNodeWidth,
+            height: serviceNodeHeight,
+            zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
+          },
+          draggable: false // ← CRITICAL: Services cannot be dragged
+        });
+      });
+    });
+
     // Create edges for item-to-item and item-to-group connections
     connections.forEach((conn) => {
       if (conn.source_group_id) return; // Skip, akan diprocess terpisah
