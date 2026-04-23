@@ -33,8 +33,11 @@ export const useAutoSave = (nodes, saveFunction, delay = 2000, enabled = true) =
     }
 
     if (isInitialLoadRef.current) {
-      // Use structuredClone for better performance than JSON.stringify
-      previousNodesRef.current = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
+      // Only clone node positions to avoid DataCloneError with functions in node.data
+      previousNodesRef.current = nodes.map(node => ({
+        id: node.id,
+        position: { ...node.position }
+      }));
       isInitialLoadRef.current = false;
       return;
     }
@@ -59,8 +62,11 @@ export const useAutoSave = (nodes, saveFunction, delay = 2000, enabled = true) =
 
       timeoutRef.current = setTimeout(() => {
         debouncedSave();
-        // Update previous nodes ref
-        previousNodesRef.current = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
+        // Update previous nodes ref - only store positions
+        previousNodesRef.current = nodes.map(node => ({
+          id: node.id,
+          position: { ...node.position }
+        }));
       }, delay);
     }
 

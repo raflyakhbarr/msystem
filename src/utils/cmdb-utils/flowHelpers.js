@@ -1069,3 +1069,184 @@ export const transformConnectionsWithPropagation = (
 
   return flowEdges;
 };
+
+// ==================== SERVICE NODES TRANSFORMATION ====================
+
+/**
+ * Transform services to child nodes of CMDB items
+ * Services are rendered INSIDE their parent CMDB item nodes
+ *
+ * @param {Array} services - Services array from API (with service_items_count)
+ * @param {Array} items - CMDB items array (for parent item names)
+ * @param {Object} options - Options for node generation
+ * @returns {Array} ReactFlow nodes for services (as child nodes)
+ */
+export const transformServicesToNodes = (services, items, options = {}) => {
+  const {
+    onServiceClick = null,
+    onServiceItemsClick = null,
+    defaultWidth = 120,
+    defaultHeight = 80
+  } = options;
+
+  if (!services || services.length === 0) {
+    return [];
+  }
+
+  // Group services by parent item
+  const servicesByItem = {};
+  services.forEach(service => {
+    if (!servicesByItem[service.cmdb_item_id]) {
+      servicesByItem[service.cmdb_item_id] = [];
+    }
+    servicesByItem[service.cmdb_item_id].push(service);
+  });
+
+  // Services per row for auto-layout inside item
+  const servicesPerRow = 3;
+  const serviceNodeWidth = 55;  // Size for inside item (slightly larger)
+  const serviceNodeHeight = 55;
+  const gapX = 10;
+  const gapY = 10;
+  const paddingX = 10;
+  const paddingY = 8;
+
+  return services.map(service => {
+    // Find parent CMDB item
+    const parentItem = items?.find(i => i.id === service.cmdb_item_id);
+
+    if (!parentItem) {
+      console.warn(`Parent item not found for service ${service.id}`);
+      return null;
+    }
+
+    // Get sibling services to calculate position
+    const siblingServices = servicesByItem[service.cmdb_item_id] || [];
+    const serviceIndex = siblingServices.findIndex(s => s.id === service.id);
+
+    // Calculate position relative to parent item
+    let position = service.position;
+
+    if (!position || (position.x === 0 && position.y === 0)) {
+      // Auto-layout position: services are placed below the main content area
+      // CMDB items have header (approx 70px) + content area
+      // Services start at y: 80 (below header/content area)
+
+      const row = Math.floor(serviceIndex / servicesPerRow);
+      const col = serviceIndex % servicesPerRow;
+
+      // Position services inside the item
+      const startX = paddingX + (col * (serviceNodeWidth + gapX));
+      const startY = 80 + (row * (serviceNodeHeight + gapY)); // 80px below top (after divider)
+
+      position = { x: startX, y: startY };
+    }
+
+    return {
+      id: `service-${service.id}`,
+      type: 'serviceAsNode',
+      parentNode: String(parentItem.id), // ← CRITICAL: Make service a child node
+      extent: 'parent', // ← CRITICAL: Constrain to parent boundary
+      position: position, // ← Position is RELATIVE to parent
+      data: {
+        service: {
+          ...service,
+          service_items_count: service.service_items_count || 0
+        },
+        cmdbItemName: parentItem?.name || null,
+        cmdbItemId: service.cmdb_item_id,
+        workspaceId: parentItem?.workspace_id || service.workspace_id,
+        width: serviceNodeWidth, // Smaller for inside item
+        height: serviceNodeHeight,
+        onServiceClick: onServiceClick,
+        onServiceItemsClick: onServiceItemsClick,
+        isInsideItem: true // Flag to indicate this is inside item
+      },
+      style: {
+        width: serviceNodeWidth,
+        height: serviceNodeHeight,
+        zIndex: 10 // Above item content but below item border
+      },
+      draggable: false // ← CRITICAL: Services cannot be dragged
+    };
+  }).filter(Boolean); // Remove nulls
+};
+
+/**
+ * Calculate default position for new service nodes
+ * Places services inside their parent CMDB item (RELATIVE position)
+ *
+ * @param {Object} cmdbItem - Parent CMDB item
+ * @param {number} serviceIndex - Index of this service (0-based)
+ * @param {number} servicesPerRow - Number of services per row (default: 3)
+ * @returns {Object} Position {x, y} relative to parent
+ */
+export const calculateServiceNodePosition = (cmdbItem, serviceIndex, servicesPerRow = 3) => {
+  const serviceNodeWidth = 50;  // Small size for inside item
+  const serviceNodeHeight = 50;
+  const gapX = 8;
+  const gapY = 8;
+  const paddingX = 8;
+  const paddingY = 8;
+
+  // Calculate row and column for this service
+  const row = Math.floor(serviceIndex / servicesPerRow);
+  const col = serviceIndex % servicesPerRow;
+
+  // Position services INSIDE the CMDB item (relative position)
+  // Services start below the header area
+  const startX = paddingX + (col * (serviceNodeWidth + gapX));
+  const startY = 65 + (row * (serviceNodeHeight + gapY)); // 65px from top (below header)
+
+  return { x: startX, y: startY };
+};
+
+/**
+ * Auto-layout services for a CMDB item
+ * Useful when services don't have positions yet
+ *
+ * @param {Array} services - Services array (without positions)
+ * @param {Object} cmdbItem - Parent CMDB item
+ * @returns {Array} Services with calculated positions
+ */
+export const autoLayoutServices = (services, cmdbItem) => {
+  if (!services || services.length === 0) {
+    return [];
+  }
+
+  const servicesPerRow = 4;
+
+  return services.map((service, index) => {
+    const position = calculateServiceNodePosition(cmdbItem, index, servicesPerRow);
+
+    return {
+      ...service,
+      position
+    };
+  });
+};
+
+/**
+ * Get service node ID from service ID
+ *
+ * @param {number} serviceId - Service ID
+ * @returns {string} Node ID for ReactFlow
+ */
+export const getServiceNodeId = (serviceId) => {
+  return `service-${serviceId}`;
+};
+
+/**
+ * Extract service ID from node ID
+ *
+ * @param {string} nodeId - ReactFlow node ID
+ * @returns {number} Service ID or null
+ */
+export const extractServiceIdFromNodeId = (nodeId) => {
+  if (!nodeId || !nodeId.startsWith('service-')) {
+    return null;
+  }
+
+  const serviceId = parseInt(nodeId.replace('service-', ''), 10);
+  return isNaN(serviceId) ? null : serviceId;
+};

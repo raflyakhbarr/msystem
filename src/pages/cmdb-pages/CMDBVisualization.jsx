@@ -53,11 +53,12 @@ import { useServiceToServiceConnections } from '../../hooks/cmdb-hooks/useServic
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
-import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle } from '../../utils/cmdb-utils/flowHelpers';
+import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle, transformServicesToNodes } from '../../utils/cmdb-utils/flowHelpers';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import CustomLayananNode from '../../components/cmdb-components/CustomLayananNode';
+import ServiceAsNode from '../../components/cmdb-components/ServiceAsNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
 import NodeContextMenu from '../../components/cmdb-components/NodeContextMenu';
 import EdgeContextMenu from '../../components/cmdb-components/EdgeContextMenu';
@@ -90,6 +91,7 @@ const nodeTypes = {
   custom: CustomNode,
   group: CustomGroupNode,
   layanan: CustomLayananNode,
+  serviceAsNode: ServiceAsNode,
 };
 
 const DIMENSIONS = {
@@ -160,6 +162,10 @@ export default function CMDBVisualization() {
   const [isReorderingInGroup, setIsReorderingInGroup] = useState(false); // Hanya true saat reorder dalam group
 
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
+
+  // Services state (now as independent nodes)
+  // const [services, setServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(false);
 
   // Cache for service items to avoid repeated API calls
   const serviceItemsCacheRef = useRef({});
@@ -277,10 +283,23 @@ export default function CMDBVisualization() {
   } = useWorkspace();
 
   // Services state - PINDAHKAN KE ATAS sebelum useFlowData
-  const [services, setServices] = useState({});
+  const [services, setServices] = useState([]); // Changed to array for independent service nodes
   const [serviceItems, setServiceItems] = useState({});
-  const [serviceDialog, setServiceDialog] = useState({ show: false, service: null, parentItem: null });
+  const [serviceDialog, setServiceDialog] = useState({ show: false, service: null, parentItem: null, workspaceId: null });
   const [serviceIconUploads, setServiceIconUploads] = useState({});
+
+  // Convert services array to object map for backward compatibility
+  // Format: { itemId: [services] }
+  const servicesMap = useMemo(() => {
+    const map = {};
+    services.forEach(service => {
+      if (!map[service.cmdb_item_id]) {
+        map[service.cmdb_item_id] = [];
+      }
+      map[service.cmdb_item_id].push(service);
+    });
+    return map;
+  }, [services]);
 
   // Modal states
   const [showExportModal, setShowExportModal] = useState(false);
@@ -293,7 +312,7 @@ export default function CMDBVisualization() {
   const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
   const { connections: serviceToServiceConnections, fetchConnectionsByWorkspace: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, services, showConnectionLabels, serviceToServiceConnections);
+  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, serviceToServiceConnections);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -531,34 +550,27 @@ export default function CMDBVisualization() {
   };
 
   const handleServiceClick = useCallback((service, nodeData) => {
-    const parentItem = items.find(i => i.id === parseInt(nodeData.id));
+    // Find parent item - service now has cmdbItemId directly
+    const parentItem = items.find(i => i.id === service.cmdb_item_id);
 
     console.log('🔍 handleServiceClick:', {
       serviceId: service.id,
       serviceName: service.name,
-      nodeName: nodeData.name,
-      nodeId: nodeData.id,
-      parsedId: parseInt(nodeData.id),
+      parentItemId: service.cmdb_item_id,
       parentItemFound: !!parentItem,
       parentItem: parentItem ? {
         id: parentItem.id,
         name: parentItem.name
-      } : null,
-      totalItems: items.length
+      } : null
     });
-
-    if (!parentItem) {
-      console.error('❌ handleServiceClick: Parent item not found!');
-      console.error('❌ nodeData.id:', nodeData.id, 'parsed:', parseInt(nodeData.id));
-      console.error('❌ Available items:', items.map(i => ({ id: i.id, name: i.name })));
-    }
 
     setServiceDialog({
       show: true,
       service,
-      parentItem
+      parentItem,
+      workspaceId: currentWorkspace?.id
     });
-  }, [items]);
+  }, [items, currentWorkspace]);
 
   const handleFetchServiceItems = useCallback(async (serviceId) => {
     // Check if already cached
@@ -606,11 +618,56 @@ export default function CMDBVisualization() {
     }
   }, [currentWorkspace, setNodes]);
 
+  // Handler for clicking service items badge on service node
+  const handleServiceItemsClick = useCallback(async (service) => {
+    try {
+      // Fetch service items for this service
+      const res = await api.get(`/service-items/${service.id}/items?workspace_id=${currentWorkspace?.id}`);
+      const serviceItems = res.data;
+
+      // Open service detail dialog with service items
+      setServiceDialog({
+        show: true,
+        service: service,
+        parentItem: items.find(i => i.id === service.cmdb_item_id),
+        serviceItems: serviceItems
+      });
+    } catch (err) {
+      console.error('Failed to fetch service items:', err);
+      toast.error('Gagal memuat service items');
+    }
+  }, [currentWorkspace, items]);
+
+  // Save service node position to database
+  const saveServiceNodePosition = useCallback(async (serviceId, position, parentNodeId = null) => {
+    try {
+      // If service is a child node (inside CMDB item), position is relative
+      // We need to save the absolute position for database
+      let finalPosition = position;
+
+      if (parentNodeId) {
+        const parentNode = nodes.find(n => n.id === parentNodeId);
+        if (parentNode) {
+          // Calculate absolute position: parent absolute + child relative
+          finalPosition = {
+            x: parentNode.position.x + position.x,
+            y: parentNode.position.y + position.y
+          };
+        }
+      }
+
+      await api.put(`/services/${serviceId}/position`, { position: finalPosition, skipEmit: true });
+      console.log('✅ Service node position saved:', serviceId, finalPosition);
+    } catch (err) {
+      console.error('❌ Failed to save service node position:', err);
+    }
+  }, [nodes]);
+
   const handleAddService = useCallback((nodeData) => {
     const item = items.find(i => i.id === parseInt(nodeData.id));
     if (!item) return;
 
-    const itemServices = services[item.id] || [];
+    const itemServices = servicesMap[item.id] || [];
 
     // Add icon_preview for uploaded icons
     const servicesWithPreview = itemServices.map(service => ({
@@ -668,7 +725,7 @@ export default function CMDBVisualization() {
       // Get services for this node (only for custom nodes, not group nodes)
       let nodeServices = [];
       if (node.type === 'custom' && !node.id.startsWith('group-')) {
-        nodeServices = services[node.id] || [];
+        nodeServices = servicesMap[node.id] || [];
       }
 
       return {
@@ -780,7 +837,7 @@ export default function CMDBVisualization() {
       let parentCmdbItem = null;
 
       for (const item of items) {
-        const itemServices = services[item.id] || [];
+        const itemServices = servicesMap[item.id] || [];
         targetService = itemServices.find(s => s.id === serviceId);
         if (targetService) {
           parentCmdbItem = item;
@@ -818,7 +875,7 @@ export default function CMDBVisualization() {
       let parentCmdbItem = null;
 
       for (const item of items) {
-        const itemServices = services[item.id] || [];
+        const itemServices = servicesMap[item.id] || [];
         targetService = itemServices.find(s => s.id === serviceId);
         if (targetService) {
           parentCmdbItem = item;
@@ -846,33 +903,39 @@ export default function CMDBVisualization() {
     return { propagatedStatus, connections };
   }, [layananServiceConnections, layananConnections, services, serviceItems, items]);
 
-  // Fetch services for all items
-  useEffect(() => {
-    const fetchServices = async () => {
-      const servicesMap = {};
-      for (const item of items) {
-        try {
-          const res = await api.get(`/services/${item.id}`);
-          // Tambahkan icon_preview untuk services yang di-upload
-          const servicesWithPreview = res.data.map(service => ({
-            ...service,
-            icon_preview: service.icon_type === 'upload' && service.icon_path
-              ? `${API_BASE_URL}${service.icon_path}`
-              : null
-          }));
-          servicesMap[item.id] = servicesWithPreview;
-        } catch (err) {
-          console.error(`Failed to fetch services for item ${item.id}:`, err);
-          servicesMap[item.id] = [];
-        }
-      }
-      setServices(servicesMap);
-    };
-
-    if (items.length > 0) {
-      fetchServices();
+  // Fetch services for all items (as callback so it can be called manually)
+  const fetchServices = useCallback(async () => {
+    if (!currentWorkspace?.id) {
+      setServices([]);
+      return;
     }
-  }, [items]);
+
+    setLoadingServices(true);
+    try {
+      // Fetch all services for workspace (as independent nodes)
+      const res = await api.get(`/services/workspace/${currentWorkspace.id}`);
+
+      // Add icon_preview for uploaded icons
+      const servicesWithPreview = res.data.map(service => ({
+        ...service,
+        icon_preview: service.icon_type === 'upload' && service.icon_path
+          ? `${API_BASE_URL}${service.icon_path}`
+          : null
+      }));
+
+      setServices(servicesWithPreview);
+    } catch (err) {
+      console.error('Failed to fetch services:', err);
+      setServices([]);
+    } finally {
+      setLoadingServices(false);
+    }
+  }, [currentWorkspace?.id]);
+
+  // Fetch services on mount and workspace change
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   // Fetch service items for services that have layana connections
   useEffect(() => {
@@ -951,7 +1014,7 @@ export default function CMDBVisualization() {
         // Find the parent CMDB item that contains this service
         let parentItemId = null;
         for (const item of items) {
-          const itemServices = services[item.id] || [];
+          const itemServices = servicesMap[item.id] || [];
           if (itemServices.some(s => s.id === conn.target_id)) {
             parentItemId = item.id;
             break;
@@ -984,7 +1047,7 @@ export default function CMDBVisualization() {
         // Find the service and check its status
         let targetService = null;
         for (const item of items) {
-          const itemServices = services[item.id] || [];
+          const itemServices = servicesMap[item.id] || [];
           targetService = itemServices.find(s => s.id === conn.target_id);
           if (targetService) break;
         }
@@ -1108,7 +1171,7 @@ export default function CMDBVisualization() {
 
       // Search through all items to find the one containing the service
       for (const item of items) {
-        const itemServices = services[item.id] || [];
+        const itemServices = servicesMap[item.id] || [];
         targetService = itemServices.find(s => s.id === conn.service_id);
         if (targetService) {
           targetCmdbItemId = item.id;
@@ -1213,7 +1276,17 @@ export default function CMDBVisualization() {
 
     const allEdges = [...flowEdges, ...layananEdges, ...layananServiceEdges];
 
-    setNodes([...flowNodes, ...layananNodes]);
+    // Transform services to independent nodes
+    const serviceNodes = transformServicesToNodes(
+      services,
+      items,
+      {
+        onServiceClick: handleServiceClick,
+        onServiceItemsClick: handleServiceItemsClick
+      }
+    );
+
+    setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges(allEdges);
   }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, services, serviceItems, items, calculateLayananStatusAndConnections]);
 
@@ -1377,7 +1450,7 @@ export default function CMDBVisualization() {
   }, [fetchAll, socket]);
 
   const handleEditItem = useCallback((item) => {
-    const itemServices = services[item.id] || [];
+    const itemServices = servicesMap[item.id] || [];
 
     // Add icon_preview for uploaded icons
     const servicesWithPreview = itemServices.map(service => ({
@@ -1573,12 +1646,13 @@ export default function CMDBVisualization() {
         setServiceIconUploads({});
       }, 100);
 
-      await fetchAll();
+      // Fetch all data including services
+      await Promise.all([fetchAll(), fetchServices()]);
     } catch (err) {
       console.error(err);
       toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
     }
-  }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, currentItemId, serviceIconUploads, fetchAll]);
+  }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, currentItemId, serviceIconUploads, fetchAll, fetchServices]);
 
   const handleLayananSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -2515,7 +2589,7 @@ export default function CMDBVisualization() {
         searchable: false,
         sortable: true,
         render: (item) => {
-          const itemServices = services[item.id] || [];
+          const itemServices = servicesMap[item.id] || [];
           const count = itemServices.length;
           return (
             <div className="flex items-center gap-2">
@@ -3049,14 +3123,14 @@ export default function CMDBVisualization() {
   }, [isSelecting, selectionStart, selectionEnd, nodes]);
 
   const handleNodesChange = useCallback((changes) => {
-    const hasPositionChange = changes.some(change => 
+    const hasPositionChange = changes.some(change =>
       change.type === 'position' && change.dragging === false
     );
-    
+
     if (hasPositionChange) {
       isManualActionRef.current = true;
       pushState([...nodes]);
-      
+
       // Track which nodes changed
       changes.forEach(change => {
         if (change.type === 'position' && change.dragging === false) {
@@ -3065,18 +3139,24 @@ export default function CMDBVisualization() {
             const lastPos = lastNodePositionsRef.current[change.id];
             const newPos = change.position || node.position;
 
-            if (!lastPos || 
-                Math.abs(lastPos.x - newPos.x) > 1 || 
+            if (!lastPos ||
+                Math.abs(lastPos.x - newPos.x) > 1 ||
                 Math.abs(lastPos.y - newPos.y) > 1) {
               changedNodesRef.current.add(change.id);
+
+              // Save service node position to database
+              if (node.type === 'serviceAsNode') {
+                const serviceId = change.id.replace('service-', '');
+                saveServiceNodePosition(serviceId, newPos, node.parentNode);
+              }
             }
           }
         }
       });
     }
-    
+
     onNodesChange(changes);
-  }, [onNodesChange, pushState, nodes]);
+  }, [onNodesChange, pushState, nodes, saveServiceNodePosition]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -3883,7 +3963,7 @@ export default function CMDBVisualization() {
               onExport={(data) => {
                 return data.map(item => {
                   const group = groups.find(g => g.id === item.group_id);
-                  const itemServices = services[item.id] || [];
+                  const itemServices = servicesMap[item.id] || [];
                   const workspace = workspaces.find(w => w.id === item.workspace_id);
 
                   return {
@@ -4072,9 +4152,9 @@ export default function CMDBVisualization() {
       <ServiceDetailDialog
         show={serviceDialog.show}
         service={serviceDialog.service}
-        workspaceId={currentWorkspace?.id}
+        workspaceId={serviceDialog.workspaceId || currentWorkspace?.id}
         cmdbItem={serviceDialog.parentItem}
-        onClose={() => setServiceDialog({ show: false, service: null, parentItem: null })}
+        onClose={() => setServiceDialog({ show: false, service: null, parentItem: null, workspaceId: null })}
       />
 
       <AlertDialog open={alertDialog.show} onOpenChange={closeAlert}>

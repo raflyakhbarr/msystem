@@ -207,4 +207,111 @@ export const getSharedCmdb = async (token) => {
   return response.json();
 };
 
+// ==================== SERVICE API CALLS ====================
+
+/**
+ * Get all services for a workspace (as independent nodes)
+ */
+export const getWorkspaceServices = async (workspaceId) => {
+  const response = await api.get(`/services/workspace/${workspaceId}`);
+  return response.data;
+};
+
+/**
+ * Update service position
+ */
+export const updateServicePosition = async (serviceId, position, options = {}) => {
+  const { skipEmit = false } = options;
+  const response = await api.put(`/services/${serviceId}/position`, {
+    position,
+    skipEmit
+  });
+  return response.data;
+};
+
+/**
+ * Update service dimensions
+ */
+export const updateServiceDimensions = async (serviceId, width, height) => {
+  const response = await api.put(`/services/${serviceId}/dimensions`, {
+    width,
+    height
+  });
+  return response.data;
+};
+
+/**
+ * Toggle service expanded state
+ */
+export const toggleServiceExpanded = async (serviceId) => {
+  const response = await api.patch(`/services/${serviceId}/toggle-expanded`);
+  return response.data;
+};
+
+/**
+ * Get services by CMDB item ID
+ */
+export const getServicesByItemId = async (itemId) => {
+  const response = await api.get(`/services/${itemId}`);
+  return response.data;
+};
+
+/**
+ * Get service by ID
+ */
+export const getServiceById = async (serviceId) => {
+  const response = await api.get(`/services/single/${serviceId}`);
+  return response.data;
+};
+
+/**
+ * Create new service
+ */
+export const createService = async (cmdbItemId, serviceData) => {
+  const response = await api.post('/services', {
+    cmdb_item_id: cmdbItemId,
+    ...serviceData
+  });
+  return response.data;
+};
+
+/**
+ * Update service
+ */
+export const updateService = async (serviceId, serviceData) => {
+  const response = await api.put(`/services/${serviceId}`, serviceData);
+  return response.data;
+};
+
+/**
+ * Update service status
+ */
+export const updateServiceStatus = async (serviceId, status) => {
+  const response = await api.patch(`/services/${serviceId}/status`, { status });
+  return response.data;
+};
+
+/**
+ * Delete service
+ */
+export const deleteService = async (serviceId) => {
+  const response = await api.delete(`/services/${serviceId}`);
+  return response.data;
+};
+
+/**
+ * Upload service icon
+ */
+export const uploadServiceIcon = async (serviceId, iconFile) => {
+  const formData = new FormData();
+  formData.append('icon', iconFile);
+
+  const response = await api.post(`/services/${serviceId}/upload-icon`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};
+
 export default api;

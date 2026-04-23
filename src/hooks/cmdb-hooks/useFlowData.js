@@ -142,6 +142,23 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       // Ambil services untuk item ini dari servicesMap
       const itemServices = servicesMap[item.id] || [];
 
+      // Calculate item dimensions based on service count
+      const serviceCount = itemServices.length;
+      const baseItemHeight = 80; // Base height without services (header + divider)
+      const servicesPerRow = 3;
+      const serviceRowHeight = 65; // Height per row of services (55px service + 10px gap)
+
+      let itemHeight = baseItemHeight;
+      if (serviceCount > 0) {
+        const serviceRows = Math.ceil(serviceCount / servicesPerRow);
+        itemHeight = baseItemHeight + (serviceRows * serviceRowHeight);
+      } else {
+        // Minimum height even without services (for "No services" text)
+        itemHeight = baseItemHeight + 25;
+      }
+
+      const itemWidth = 180; // Fixed width for CMDB items
+
       flowNodes.push({
         id: itemNodeId,
         type: 'custom',
@@ -163,9 +180,12 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           port: item.port || '',
         },
         style: {
+          width: itemWidth,
+          height: itemHeight,
           zIndex: 1,
           opacity: isHidden ? 0.3 : 1,
           pointerEvents: isHidden ? 'none' : 'all',
+          overflow: 'visible', // Allow child nodes to be visible outside boundary
         },
         draggable: !isHidden,
         hidden: isHidden,
