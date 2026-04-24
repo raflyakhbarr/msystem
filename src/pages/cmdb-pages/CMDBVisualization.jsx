@@ -68,6 +68,7 @@ import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import QuickConnectionModal from '../../components/cmdb-components/QuickConnectionModal';
 import QuickServiceToServiceConnection from '../../components/cmdb-components/QuickServiceToServiceConnection';
 import QuickLayananServiceConnection from '../../components/cmdb-components/QuickLayananServiceConnection';
+import LayananServiceConnectionModal from '../../components/cmdb-components/LayananServiceConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
@@ -242,6 +243,12 @@ export default function CMDBVisualization() {
   const [layananServiceSource, setLayananServiceSource] = useState(null);
   const [layananServiceTarget, setLayananServiceTarget] = useState(null);
   const [isLayananSource, setIsLayananSource] = useState(true);
+
+  // New LayananServiceConnectionModal state
+  const [layananServiceConnectionModal, setLayananServiceConnectionModal] = useState({
+    show: false,
+    sourceNode: null
+  });
 
   // Connection labels visibility
   const [showConnectionLabels, setShowConnectionLabels] = useState(false);
@@ -3868,6 +3875,37 @@ export default function CMDBVisualization() {
     }
   }, [contextMenu.node, fetchAll]);
 
+  // Handlers for LayananServiceConnectionModal
+  const handleOpenLayananServiceConnection = useCallback(() => {
+    if (!contextMenu.node || contextMenu.node.type !== 'layanan') return;
+
+    setLayananServiceConnectionModal({
+      show: true,
+      sourceNode: contextMenu.node
+    });
+    closeContextMenu();
+  }, [contextMenu.node, closeContextMenu]);
+
+  const handleCloseLayananServiceConnection = useCallback(() => {
+    setLayananServiceConnectionModal({
+      show: false,
+      sourceNode: null
+    });
+  }, []);
+
+  const handleSaveLayananServiceConnectionModal = useCallback(async (connectionData) => {
+    try {
+      await api.post('/layanan/connections', connectionData);
+      toast.success('Koneksi layanan berhasil dibuat!');
+      await fetchLayanaAll();
+      handleCloseLayananServiceConnection();
+    } catch (error) {
+      console.error('Failed to create layana-service connection:', error);
+      toast.error('Gagal membuat koneksi: ' + (error.response?.data?.error || error.message));
+      throw error;
+    }
+  }, [fetchLayanaAll, handleCloseLayananServiceConnection]);
+
     const toggleTableDrawer = useCallback(() => {
     setShowTableDrawer(prev => !prev);
   }, []);
@@ -4309,6 +4347,7 @@ export default function CMDBVisualization() {
             onDelete={handleContextDelete}
             onManageConnections={handleContextManageConnections}
             onManageGroupConnections={handleContextManageGroupConnections}
+            onManageLayananServiceConnections={handleOpenLayananServiceConnection}
             onRemoveFromGroup={handleContextRemoveFromGroup}
             onToggleVisibility={handleContextToggleVisibility}
             onClose={closeContextMenu}
@@ -4624,6 +4663,14 @@ export default function CMDBVisualization() {
         sourceName={layananServiceSource?.name || ''}
         targetName={layananServiceTarget?.name || ''}
         isSourceLayanan={isLayananSource}
+      />
+
+      <LayananServiceConnectionModal
+        open={layananServiceConnectionModal.show}
+        onClose={handleCloseLayananServiceConnection}
+        onConnect={handleSaveLayananServiceConnectionModal}
+        sourceNode={layananServiceConnectionModal.sourceNode}
+        workspaceId={currentWorkspace?.id}
       />
 
       <ServiceDetailDialog

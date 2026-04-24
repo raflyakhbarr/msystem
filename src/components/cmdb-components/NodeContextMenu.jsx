@@ -10,6 +10,7 @@ export default function NodeContextMenu({
   onDelete,
   onManageConnections,
   onManageGroupConnections,
+  onManageLayananServiceConnections,
   onRemoveFromGroup,
   onToggleVisibility,
   onClose,
@@ -35,13 +36,21 @@ export default function NodeContextMenu({
           color: 'hover:bg-purple-500 hover:text-white',
           iconColor: 'text-purple-600',
         }
-      : {
-          label: 'Kelola Koneksi',
-          icon: <Link className="h-4 w-4" />,
-          onClick: onManageConnections,
-          color: 'hover:bg-blue-500 hover:text-white',
-          iconColor: 'text-blue-600',
-        },
+      : isLayananNode
+        ? {
+            label: 'Hubungkan ke Service',
+            icon: <Link className="h-4 w-4" />,
+            onClick: onManageLayananServiceConnections,
+            color: 'hover:bg-indigo-500 hover:text-white',
+            iconColor: 'text-indigo-600',
+          }
+        : {
+            label: 'Kelola Koneksi',
+            icon: <Link className="h-4 w-4" />,
+            onClick: onManageConnections,
+            color: 'hover:bg-blue-500 hover:text-white',
+            iconColor: 'text-blue-600',
+          },
     ...(isInGroup ? [{
       label: 'Keluarkan dari Group',
       icon: <LogOut className="h-4 w-4" />,

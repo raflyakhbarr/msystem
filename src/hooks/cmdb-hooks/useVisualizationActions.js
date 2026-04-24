@@ -132,6 +132,22 @@ export const useVisualizationActions = (items, groups, layananItems, fetchAll, f
     return item;
   }, [items, layananItems]);
 
+  const handleManageGroupConnectionsFromVisualization = useCallback((node) => {
+    if (node.type !== 'group') return null;
+
+    const groupId = parseInt(node.id.replace('group-', ''));
+    const group = groups.find(g => g.id === groupId);
+    return group;
+  }, [groups]);
+
+  const handleRemoveFromGroupFromVisualization = useCallback((node) => {
+    if (!node.parentNode) return null;
+
+    const itemId = parseInt(node.id);
+    const item = items.find(i => i.id === itemId);
+    return item;
+  }, [items]);
+
   return {
     contextMenu,
     handleNodeContextMenu,
@@ -139,6 +155,8 @@ export const useVisualizationActions = (items, groups, layananItems, fetchAll, f
     handleEditFromVisualization,
     handleDeleteFromVisualization,
     handleManageConnectionsFromVisualization,
+    handleManageGroupConnectionsFromVisualization,
+    handleRemoveFromGroupFromVisualization,
     alertDialog,
     closeAlert,
   };
