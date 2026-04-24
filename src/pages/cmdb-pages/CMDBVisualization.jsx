@@ -1305,6 +1305,15 @@ export default function CMDBVisualization() {
         },
         zIndex: conn.target_type === 'service' || conn.source_type === 'service' ? 1001 : 10,  // Higher for service edges
         reconnectable: true,
+        // FIX: Add data for EdgeContextMenu
+        data: {
+          connectionType: conn.connection_type || 'connects_to',
+          source_type: conn.source_type,
+          target_type: conn.target_type,
+          source_id: conn.source_id,
+          target_id: conn.target_id,
+          propagation_enabled: conn.propagation_enabled
+        },
         // Add connection type label if enabled
         ...(showConnectionLabels && {
           label: conn.connection_type || 'connects_to',
@@ -2634,8 +2643,9 @@ export default function CMDBVisualization() {
       edge,
       sourceNode,
       targetNode,
+      servicesMap, // Pass servicesMap for service name lookup
     });
-  }, [nodes]);
+  }, [nodes, servicesMap]);
 
   const closeEdgeContextMenu = useCallback(() => {
     setEdgeContextMenu(prev => ({ ...prev, show: false }));

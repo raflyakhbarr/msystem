@@ -8,13 +8,30 @@ export default function EdgeContextMenu({
   edge,
   sourceNode,
   targetNode,
+  servicesMap = {}, // Add servicesMap prop
   onEdit,
   onDelete,
   onClose,
 }) {
   if (!show || !edge) return null;
-
   const connectionType = CONNECTION_TYPES[edge.data?.connectionType] || CONNECTION_TYPES.depends_on;
+
+  // FIX: Get service name from servicesMap if node is not available
+  const getServiceName = (nodeType, nodeId) => {
+    if (nodeType === 'service' || String(nodeId).startsWith('service-')) {
+      // Extract service ID from node ID
+      const serviceId = String(nodeId).replace('service-', '');
+      // Search in servicesMap for the service
+      for (const itemServices of Object.values(servicesMap)) {
+        const service = itemServices.find(s => String(s.id) === serviceId);
+        if (service) {
+          return service.name || 'Service';
+        }
+      }
+      return 'Service';
+    }
+    return null;
+  };
 
   const items = [
     {
@@ -53,6 +70,36 @@ export default function EdgeContextMenu({
   const handleAction = (action) => {
     action();
     onClose();
+  };
+
+  const getConnectionName = (node, nodeType, nodeId) => {
+    // First try to get name from node itself
+    if (node) {
+      // Check if it's a serviceAsNode (service rendered inside CustomNode)
+      if (node.type === 'serviceAsNode' || node.id.startsWith('service-')) {
+        return node.data?.service?.name || node.data?.name || 'Service';
+      }
+
+      // Check if it's a layanan node
+      if (node.type === 'layanan' || String(node.id).startsWith('layanan-')) {
+        return node.data?.name || 'Layanan';
+      }
+
+      // Default CMDB item
+      return node.data?.name || 'Node';
+    }
+
+    // If node is not available, get from edge data
+    if (edge.data) {
+      if (edge.data.source_type === 'service' && edge.source === nodeId) {
+        return getServiceName(edge.data.source_type, edge.data.source_id);
+      }
+      if (edge.data.target_type === 'service' && edge.target === nodeId) {
+        return getServiceName(edge.data.target_type, edge.data.target_id);
+      }
+    }
+
+    return 'Unknown';
   };
 
   return (
@@ -105,11 +152,11 @@ export default function EdgeContextMenu({
           }}
         >
           <div className="flex items-center gap-2">
-            {sourceNode?.data?.name || 'Source'}
+            {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
             <span className="flex items-center" style={{ color: connectionType.color }}>
               {getDirectionIcon()}
             </span>
-            {targetNode?.data?.name || 'Target'}
+            {getConnectionName(targetNode, edge.data?.target_type, edge.target)}
           </div>
         </motion.div>
 

@@ -32,17 +32,30 @@ export default function QuickLayananServiceConnection({
 }) {
   const [connectionType, setConnectionType] = useState('connects_to');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [propagationEnabled, setPropagationEnabled] = useState(true); // FIX: Add propagation toggle state
+  const [propagationEnabled, setPropagationEnabled] = useState(true);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await onConnect(connectionType, propagationEnabled); // FIX: Pass propagationEnabled
+      await onConnect(connectionType, propagationEnabled);
+      // Reset submitting state after successful connection
+      setIsSubmitting(false);
       onClose();
     } catch (error) {
       console.error('Failed to create layana-service connection:', error);
       setIsSubmitting(false);
     }
+  };
+
+  // Reset state when modal closes
+  const handleOpenChange = (open) => {
+    if (!open) {
+      // Reset states when closing
+      setIsSubmitting(false);
+      setConnectionType('connects_to');
+      setPropagationEnabled(true);
+    }
+    onClose(open);
   };
 
   const getConnectionTypeLabel = (typeSlug) => {
@@ -54,7 +67,7 @@ export default function QuickLayananServiceConnection({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
