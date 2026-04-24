@@ -54,6 +54,7 @@ import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
 import { loadEdgeHandles, saveEdgeHandles, saveEdgeHandle, transformServicesToNodes, getConnectionTypeInfo } from '../../utils/cmdb-utils/flowHelpers';
+import { calculatePropagatedStatuses } from '../../utils/cmdb-utils/statusPropagation';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
@@ -659,7 +660,21 @@ export default function CMDBVisualization() {
   }, [currentWorkspace, items]);
 
   // Initialize useFlowData after handlers are defined
-  const { transformToFlowData } = useFlowData(items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, handleServiceClick, handleServiceItemsClick);
+  const { transformToFlowData } = useFlowData(
+    items,
+    connections,
+    groups,
+    groupConnections,
+    edgeHandles,
+    hiddenNodes,
+    servicesMap,
+    showConnectionLabels,
+    handleServiceClick,
+    handleServiceItemsClick,
+    layananItems,           // FIX: Pass layana nodes for propagation
+    layananConnections,     // FIX: Pass layana connections for propagation
+    services                // FIX: Pass services array for service status lookup
+  );
 
   // Save service node position to database
   const saveServiceNodePosition = useCallback(async (serviceId, position, parentNodeId = null) => {
@@ -902,11 +917,11 @@ export default function CMDBVisualization() {
       }
     });
 
-    // Process direct service connections - WITHOUT status propagation
+    // Process direct service connections - WITH status propagation
     directConnections.forEach(conn => {
       const serviceId = conn.target_id;
 
-      // Find service (only for name/display)
+      // Find service (for name/display AND status propagation)
       let targetService = null;
       let parentCmdbItem = null;
 
@@ -920,17 +935,56 @@ export default function CMDBVisualization() {
       }
 
       if (targetService && parentCmdbItem) {
+        const serviceStatus = targetService.status || 'active';
+        const serviceName = targetService.name;
+
+        // Add connection info for display
         connections.push({
           type: 'Service',
-          name: targetService.name,
-          status: targetService.status || 'active',
-          cmdbItem: parentCmdbItem.name
+          name: serviceName,
+          status: serviceStatus,
+          cmdbItem: parentCmdbItem.name,
+          connectionType: conn.connection_type || 'depends_on'
         });
 
-        console.log(`[Layana ${layanaId}] Direct service connection (no propagation):`, {
-          service: targetService.name,
-          status: targetService.status
-        });
+        // FIX: Determine propagation direction based on connection type
+        const connectionTypeInfo = CONNECTION_TYPES[conn.connection_type] || CONNECTION_TYPES.depends_on;
+        const propagation = connectionTypeInfo.propagation || 'target_to_source';
+
+        // Determine if service status should affect layana status
+        let shouldPropagate = false;
+
+        if (propagation === 'target_to_source') {
+          // Target (service) affects Source (layana)
+          // Example: depends_on (layana depends on service)
+          shouldPropagate = true;
+        } else if (propagation === 'source_to_target') {
+          // Source (layana) affects Target (service)
+          // Example: consumed_by (service is provider, layana is consumer)
+          // Service (provider) status affects layana (consumer)
+          shouldPropagate = true;
+        } else if (propagation === 'both') {
+          // Bidirectional - both affect each other
+          shouldPropagate = true;
+        }
+
+        // Apply propagation if service is not active
+        if (shouldPropagate && serviceStatus !== 'active') {
+          console.log(`[Layana ${layanaId}] Propagating status from service:`, {
+            service: serviceName,
+            serviceStatus: serviceStatus,
+            connectionType: conn.connection_type,
+            propagation: propagation,
+            currentLayananStatus: propagatedStatus
+          });
+
+          // Priority: inactive > maintenance > active
+          if (serviceStatus === 'inactive' || serviceStatus === 'decommissioned') {
+            propagatedStatus = 'inactive';
+          } else if (serviceStatus === 'maintenance' && propagatedStatus !== 'inactive') {
+            propagatedStatus = 'maintenance';
+          }
+        }
       }
     });
 
@@ -1003,6 +1057,9 @@ export default function CMDBVisualization() {
 
   useEffect(() => {
     const { flowNodes, flowEdges } = transformToFlowData();
+
+    // FIX: Calculate edge statuses for ALL edges (including layana connections)
+    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layananItems, layananConnections, services);
 
     // Add layanan nodes
     const layananNodes = layananItems.map((layanan, index) => {
@@ -1128,43 +1185,80 @@ export default function CMDBVisualization() {
         return null; // Skip edge jika node tidak ditemukan
       }
 
-      // Determine edge status based on source and target
+      // FIX: Use edgeStatuses from calculatePropagatedStatuses instead of manual calculation
+      const edgeStatusInfo = edgeStatuses[edgeId];
+
       let edgeStatus = 'active';
       let showCrossMarker = false;
+      let strokeColor = '#10b981'; // default green
 
-      // Helper to get status from node or service
-      const getSourceStatus = () => {
-        if (sourceService) return sourceService.status;
-        return sourceNode?.data?.status || 'active';
-      };
+      if (edgeStatusInfo) {
+        // Use propagated status from statusPropagation.js
+        edgeStatus = edgeStatusInfo.effectiveEdgeStatus || edgeStatus;
+        showCrossMarker = edgeStatus === 'inactive' || edgeStatus === 'maintenance' || edgeStatus === 'decommissioned';
 
-      const getTargetStatus = () => {
-        if (targetService) return targetService.status;
-        return targetNode?.data?.status || 'active';
-      };
+        // Get color based on status
+        const getStrokeColor = (status) => {
+          switch (status) {
+            case 'active': return '#10b981'; // green
+            case 'inactive': return '#ef4444'; // red
+            case 'maintenance': return '#f59e0b'; // yellow
+            case 'decommissioned': return '#ef4444'; // red
+            default: return '#10b981'; // green
+          }
+        };
 
-      const sourceStatus = getSourceStatus();
-      const targetStatus = getTargetStatus();
+        strokeColor = getStrokeColor(edgeStatus);
 
-      // Determine edge status based on source and target statuses
-      if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
-        edgeStatus = 'inactive';
-        showCrossMarker = true;
-      } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
-        edgeStatus = 'maintenance';
-      }
+        // Debug log untuk memastikan edgeStatus digunakan
+        console.log(`[Layana Edge ${edgeId}] Using propagated status:`, {
+          edgeStatus,
+          showCrossMarker,
+          strokeColor,
+          connectionType: conn.connection_type,
+          propagation: edgeStatusInfo.propagation
+        });
+      } else {
+        // Fallback: Calculate manually if edgeStatusInfo not found
+        const getSourceStatus = () => {
+          if (sourceService) return sourceService.status;
+          return sourceNode?.data?.status || 'active';
+        };
 
-      // Get color based on status (SAMA SEPERTI CMDB)
-      const getStrokeColor = (status) => {
-        switch (status) {
-          case 'active': return '#10b981'; // green (SAMA DENGAN CMDB)
-          case 'inactive': return '#ef4444'; // red
-          case 'maintenance': return '#f59e0b'; // yellow
-          default: return '#10b981'; // green (SAMA DENGAN CMDB)
+        const getTargetStatus = () => {
+          if (targetService) return targetService.status;
+          return targetNode?.data?.status || 'active';
+        };
+
+        const sourceStatus = getSourceStatus();
+        const targetStatus = getTargetStatus();
+
+        // Determine edge status based on source and target statuses
+        if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
+          edgeStatus = 'inactive';
+          showCrossMarker = true;
+        } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
+          edgeStatus = 'maintenance';
         }
-      };
 
-      const strokeColor = getStrokeColor(edgeStatus);
+        // Get color based on status
+        const getStrokeColor = (status) => {
+          switch (status) {
+            case 'active': return '#10b981'; // green
+            case 'inactive': return '#ef4444'; // red
+            case 'maintenance': return '#f59e0b'; // yellow
+            default: return '#10b981'; // green
+          }
+        };
+
+        strokeColor = getStrokeColor(edgeStatus);
+
+        console.warn(`[Layana Edge ${edgeId}] edgeStatusInfo not found, using fallback:`, {
+          edgeStatus,
+          sourceStatus,
+          targetStatus
+        });
+      }
 
       // Get handles from edgeHandles state, or use defaults
       let sourceHandle, targetHandle;

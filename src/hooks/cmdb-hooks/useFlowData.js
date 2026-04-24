@@ -12,7 +12,7 @@ import {
 } from '../../utils/cmdb-utils/statusPropagation';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, layanaItems = [], layananConnections = [], services = []) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -28,8 +28,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       }
     });
 
-    // Hitung propagated statuses untuk semua edges
-    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections);
+    // FIX: Hitung propagated statuses dengan layana connections dan services
+    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layanaItems, layananConnections, services);
 
     // Create group nodes
     groups.forEach((group) => {
@@ -626,7 +626,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     });
 
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick, layanaItems, layananConnections, services]);
 
   return { transformToFlowData };
 };
