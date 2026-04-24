@@ -14,7 +14,11 @@ export default function EdgeContextMenu({
   onClose,
 }) {
   if (!show || !edge) return null;
-  const connectionType = CONNECTION_TYPES[edge.data?.connectionType] || CONNECTION_TYPES.depends_on;
+  // Fix: Support both field names used by different edge types
+  // - Service-to-service edges use: connection_type (snake_case)
+  // - Layanan-service edges use: connectionType (camelCase)
+  const connectionTypeKey = edge.data?.connection_type || edge.data?.connectionType || 'depends_on';
+  const connectionType = CONNECTION_TYPES[connectionTypeKey] || CONNECTION_TYPES.depends_on;
 
   // FIX: Get service name from servicesMap if node is not available
   const getServiceName = (nodeType, nodeId) => {

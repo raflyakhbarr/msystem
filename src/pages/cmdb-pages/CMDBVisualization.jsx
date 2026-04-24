@@ -1498,9 +1498,11 @@ export default function CMDBVisualization() {
       const edgeId = `service-connection-${conn.id}`;
       const isEdgeHidden = hiddenNodes.has(sourceServiceNodeId) || hiddenNodes.has(targetServiceNodeId);
 
-      // Get status from connection
-      const sourceStatus = conn.source_service_status || 'active';
-      const targetStatus = conn.target_service_status || 'active';
+      // Get status from real-time services state (not static connection data)
+      const sourceService = services.find(s => s.id === conn.source_service_id);
+      const targetService = services.find(s => s.id === conn.target_service_id);
+      const sourceStatus = sourceService?.status || 'active';
+      const targetStatus = targetService?.status || 'active';
 
       let edgeStatus = 'active';
       let showCrossMarker = false;
@@ -1653,7 +1655,7 @@ export default function CMDBVisualization() {
 
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges]);
-  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections]);
+  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, services]); // Added services dependency for real-time edge status updates
 
   useEffect(() => {
     nodesRef.current = nodes;

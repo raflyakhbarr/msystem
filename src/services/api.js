@@ -314,4 +314,23 @@ export const uploadServiceIcon = async (serviceId, iconFile) => {
   return response.data;
 };
 
+/**
+ * Manually trigger recursive propagation from a service
+ */
+export const propagateServiceStatus = async (serviceId, status, maxDepth = 10) => {
+  const response = await api.post(`/services/${serviceId}/propagate-status`, {
+    status,
+    max_depth: maxDepth
+  });
+  return response.data;
+};
+
+/**
+ * Get propagation preview (show what would be affected without actually propagating)
+ */
+export const getPropagationPreview = async (serviceId, status) => {
+  const response = await api.get(`/services/${serviceId}/propagation-preview?status=${status}`);
+  return response.data;
+};
+
 export default api;
