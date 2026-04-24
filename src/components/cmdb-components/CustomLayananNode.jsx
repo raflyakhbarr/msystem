@@ -1,5 +1,5 @@
 import { Handle, Position } from 'reactflow';
-import { MoreHorizontal, Briefcase, Info } from 'lucide-react';
+import { Briefcase, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -124,32 +124,34 @@ export default function CustomLayananNode({ data, id }) {
 
         {/* Status Badge */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Info Icon with Tooltip */}
-          {data.connections && data.connections.length > 0 && (
+          {/* Info Icon - Shows problematic services */}
+          {data.problematicServices && data.problematicServices.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="cursor-help">
-                    <Info className="w-3.5 h-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+                  <div className="cursor-help animate-pulse">
+                    <AlertCircle className="w-4 h-4 text-red-500 hover:text-red-700 transition-colors" />
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-sm">Koneksi Terhubung:</p>
-                    {data.connections.map((conn, idx) => (
-                      <div key={idx} className="text-xs">
-                        <p className="font-medium">• {conn.type}</p>
-                        <p className="text-gray-600 ml-2">{conn.name}</p>
-                        {conn.status && (
-                          <p className={`ml-2 ${
-                            conn.status === 'active' ? 'text-green-600' :
-                            conn.status === 'inactive' ? 'text-red-600' :
-                            conn.status === 'maintenance' ? 'text-yellow-600' :
-                            'text-gray-600'
-                          }`}>
-                            Status: {conn.status}
-                          </p>
+                <TooltipContent side="right" className="max-w-sm max-h-[400px] overflow-y-auto bg-red-50 border-red-200">
+                  <div className="space-y-2">
+                    <p className="font-semibold text-sm text-red-800">⚠️ Service Bermasalah:</p>
+                    {data.problematicServices.map((svc, idx) => (
+                      <div key={idx} className="text-xs bg-white p-2 rounded border border-red-200">
+                        <p className="font-medium text-gray-800">• {svc.name}</p>
+                        {svc.itemName && (
+                          <p className="text-gray-600 ml-2">Item: {svc.itemName}</p>
                         )}
+                        <p className="text-gray-600 ml-2">CMDB: {svc.cmdbItem}</p>
+                        <p className={`ml-2 font-semibold ${
+                          svc.status === 'active' ? 'text-green-600' :
+                          svc.status === 'inactive' ? 'text-red-600' :
+                          svc.status === 'maintenance' ? 'text-yellow-600' :
+                          svc.status === 'decommissioned' ? 'text-gray-600' :
+                          'text-gray-600'
+                        }`}>
+                          Status: {svc.status}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -163,9 +165,11 @@ export default function CustomLayananNode({ data, id }) {
       {/* Status Badge in Middle */}
       {data.status && (
         <div className="text-xs text-center my-2">
-          <span className={`px-1.5 py-0.5 rounded ${getStatusColor(data.status)}`}>
-            {data.status}
-          </span>
+          <div className="flex items-center justify-center gap-1">
+            <span className={`px-1.5 py-0.5 rounded ${getStatusColor(data.status)}`}>
+              {data.status}
+            </span>
+          </div>
         </div>
       )}
 

@@ -16,6 +16,12 @@ export default function NodeContextMenu({
 }) {
   if (!show || !node) return null;
 
+  // Disable context menu for service nodes
+  const isServiceNode = node.type === 'service' || String(node.id).startsWith('service-');
+  if (isServiceNode) {
+    return null; // Don't show context menu for service nodes
+  }
+
   const isGroupNode = node.type === 'group';
   const isLayananNode = node.type === 'layanan';
   const isInGroup = node.parentNode && !isGroupNode && !isLayananNode; // Item dalam group (layanan tidak bisa dalam group)

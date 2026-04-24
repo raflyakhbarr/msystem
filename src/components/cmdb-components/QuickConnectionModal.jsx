@@ -526,28 +526,6 @@ export default function QuickConnectionModal({
                 <span className="text-red-500 ml-1">*</span>
               </Label>
 
-              {/* Info message showing which CMDB item is being filtered */}
-              {/* {!loadingServices && cmdbItemsWithServices.length > 0 && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="text-sm">
-                    <span className="font-semibold text-blue-800 dark:text-blue-200">ℹ️ Info:</span>{' '}
-                    {isLayananNode(sourceItem) && !isLayananNode(targetItem) ? (
-                      <span>
-                        Menampilkan services dari <strong>{getItemData(targetItem).name}</strong> (target CMDB item)
-                      </span>
-                    ) : !isLayananNode(sourceItem) && isLayananNode(targetItem) ? (
-                      <span>
-                        Menampilkan services dari <strong>{getItemData(sourceItem).name}</strong> (source CMDB item)
-                      </span>
-                    ) : (
-                      <span>
-                        Menampilkan services dari semua CMDB items (layanan ke layanan)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )} */}
-
               {/* Connection Target Type Selector */}
               <div className="flex items-center gap-4 p-3 bg-gray-50 border rounded">
                 <div className="flex items-center gap-2">

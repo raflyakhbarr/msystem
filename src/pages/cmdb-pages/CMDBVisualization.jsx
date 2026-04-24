@@ -574,17 +574,6 @@ export default function CMDBVisualization() {
     // Find parent item - service now has cmdbItemId directly
     const parentItem = items.find(i => i.id === service.cmdb_item_id);
 
-    console.log('🔍 handleServiceClick:', {
-      serviceId: service.id,
-      serviceName: service.name,
-      parentItemId: service.cmdb_item_id,
-      parentItemFound: !!parentItem,
-      parentItem: parentItem ? {
-        id: parentItem.id,
-        name: parentItem.name
-      } : null
-    });
-
     setServiceDialog({
       show: true,
       service,
@@ -846,9 +835,9 @@ export default function CMDBVisualization() {
     loadHandles();
   }, []);
 
-  // Calculate propagated status and connection details for layanan nodes
+  // Calculate propagated status for layanan nodes
   const calculateLayananStatusAndConnections = useCallback((layanaId) => {
-    const connections = [];
+    const problematicServices = []; // Track services with issues for info icon
     let propagatedStatus = 'active';
 
     // Get layana service connections (to service items with propagation)
@@ -857,20 +846,34 @@ export default function CMDBVisualization() {
     );
 
     // Get layana connections (to services directly)
+    // FIX: Handle both directions: layana → service AND service → layana
     const directConnections = layananConnections.filter(conn => {
       const sourceId = typeof conn.source_id === 'string'
         ? parseInt(conn.source_id.replace('layanan-', ''))
         : conn.source_id;
-      return sourceId === layanaId && conn.target_type === 'service';
+      const targetId = typeof conn.target_id === 'string'
+        ? parseInt(conn.target_id.replace('layanan-', ''))
+        : conn.target_id;
+
+      // Case 1: Layana → Service (layana is source)
+      const isLayanaToService = sourceId === layanaId && conn.target_type === 'service';
+
+      // Case 2: Service → Layana (layana is target)
+      const isServiceToLayana = targetId === layanaId && conn.source_type === 'service';
+
+      return isLayanaToService || isServiceToLayana;
     });
 
-    // Debug logging
-    if (serviceConnections.length > 0 || directConnections.length > 0) {
-      console.log(`[Layana ${layanaId}] Found connections:`, {
-        serviceConnections: serviceConnections.length,
-        directConnections: directConnections.length
-      });
-    }
+    // Debug logging - Show ALL layanan connections for this layana
+    const allLayanaConns = layananConnections.filter(conn => {
+      const sourceId = typeof conn.source_id === 'string'
+        ? parseInt(conn.source_id.replace('layanan-', ''))
+        : conn.source_id;
+      const targetId = typeof conn.target_id === 'string'
+        ? parseInt(conn.target_id.replace('layanan-', ''))
+        : conn.target_id;
+      return sourceId === layanaId || targetId === layanaId;
+    });
 
     // Process service item connections
     serviceConnections.forEach(conn => {
@@ -894,23 +897,24 @@ export default function CMDBVisualization() {
       }
 
       if (targetService && parentCmdbItem) {
-        connections.push({
-          type: 'Service Item',
-          name: `${targetService.name} → ${targetServiceItem?.name || 'Unknown'}`,
-          status: targetServiceItem?.status || 'unknown',
-          cmdbItem: parentCmdbItem.name
-        });
+        const serviceItemStatus = targetServiceItem?.status || 'unknown';
+
+        // Track problematic services for info icon
+        if (['inactive', 'maintenance', 'decommissioned'].includes(serviceItemStatus)) {
+          problematicServices.push({
+            type: 'service_item',
+            name: targetService.name,
+            itemName: targetServiceItem?.name || 'Unknown',
+            status: serviceItemStatus,
+            cmdbItem: parentCmdbItem.name
+          });
+        }
 
         // Propagate status from service item
         if (conn.propagation_enabled && targetServiceItem) {
-          console.log(`[Layana ${layanaId}] Propagating status from service item:`, {
-            serviceItem: targetServiceItem.name,
-            status: targetServiceItem.status,
-            propagationEnabled: conn.propagation_enabled
-          });
-          if (targetServiceItem.status === 'inactive') {
+          if (serviceItemStatus === 'inactive') {
             propagatedStatus = 'inactive';
-          } else if (targetServiceItem.status === 'maintenance' && propagatedStatus !== 'inactive') {
+          } else if (serviceItemStatus === 'maintenance' && propagatedStatus !== 'inactive') {
             propagatedStatus = 'maintenance';
           }
         }
@@ -919,7 +923,22 @@ export default function CMDBVisualization() {
 
     // Process direct service connections - WITH status propagation
     directConnections.forEach(conn => {
-      const serviceId = conn.target_id;
+      // Determine service ID and connection direction
+      let serviceId;
+      let isLayanaSource;
+
+      if (conn.source_type === 'service' && conn.target_type === 'layanan') {
+        // Service → Layana (e.g., consumed_by)
+        serviceId = conn.source_id;
+        isLayanaSource = false;
+      } else if (conn.source_type === 'layanan' && conn.target_type === 'service') {
+        // Layana → Service (e.g., depends_on)
+        serviceId = conn.target_id;
+        isLayanaSource = true;
+      } else {
+        console.warn(`[Layana ${layanaId}] Unknown connection type:`, conn);
+        return;
+      }
 
       // Find service (for name/display AND status propagation)
       let targetService = null;
@@ -938,14 +957,15 @@ export default function CMDBVisualization() {
         const serviceStatus = targetService.status || 'active';
         const serviceName = targetService.name;
 
-        // Add connection info for display
-        connections.push({
-          type: 'Service',
-          name: serviceName,
-          status: serviceStatus,
-          cmdbItem: parentCmdbItem.name,
-          connectionType: conn.connection_type || 'depends_on'
-        });
+        // Track problematic services for info icon (only if propagation is enabled)
+        if (conn.propagation_enabled && ['inactive', 'maintenance', 'decommissioned'].includes(serviceStatus)) {
+          problematicServices.push({
+            type: 'service',
+            name: serviceName,
+            status: serviceStatus,
+            cmdbItem: parentCmdbItem.name
+          });
+        }
 
         // FIX: Determine propagation direction based on connection type
         const connectionTypeInfo = CONNECTION_TYPES[conn.connection_type] || CONNECTION_TYPES.depends_on;
@@ -954,30 +974,31 @@ export default function CMDBVisualization() {
         // Determine if service status should affect layana status
         let shouldPropagate = false;
 
-        if (propagation === 'target_to_source') {
-          // Target (service) affects Source (layana)
-          // Example: depends_on (layana depends on service)
-          shouldPropagate = true;
+        // CRITICAL FIX: Only propagate if propagation_enabled is true
+        if (!conn.propagation_enabled) {
+          // Don't add to problematicServices if propagation is disabled
+          // Still add to connections for display, but don't propagate status
+        } else if (propagation === 'target_to_source') {
+          // Target affects Source
+          // If Layana → Service: Service (target) affects Layana (source)
+          // If Service → Layana: Layana (target) affects Service (source) - NOT layana!
+          if (isLayanaSource) {
+            shouldPropagate = true; // Layana is source, service is target
+          }
         } else if (propagation === 'source_to_target') {
-          // Source (layana) affects Target (service)
-          // Example: consumed_by (service is provider, layana is consumer)
-          // Service (provider) status affects layana (consumer)
-          shouldPropagate = true;
+          // Source affects Target
+          // If Layana → Service: Layana (source) affects Service (target) - NOT layana!
+          // If Service → Layana: Service (source) affects Layana (target)
+          if (!isLayanaSource) {
+            shouldPropagate = true; // Service is source, layana is target
+          }
         } else if (propagation === 'both') {
           // Bidirectional - both affect each other
           shouldPropagate = true;
         }
 
-        // Apply propagation if service is not active
+        // Apply propagation if enabled and service is not active
         if (shouldPropagate && serviceStatus !== 'active') {
-          console.log(`[Layana ${layanaId}] Propagating status from service:`, {
-            service: serviceName,
-            serviceStatus: serviceStatus,
-            connectionType: conn.connection_type,
-            propagation: propagation,
-            currentLayananStatus: propagatedStatus
-          });
-
           // Priority: inactive > maintenance > active
           if (serviceStatus === 'inactive' || serviceStatus === 'decommissioned') {
             propagatedStatus = 'inactive';
@@ -988,9 +1009,7 @@ export default function CMDBVisualization() {
       }
     });
 
-    console.log(`[Layana ${layanaId}] Final propagated status:`, propagatedStatus);
-
-    return { propagatedStatus, connections };
+    return { propagatedStatus, problematicServices };
   }, [layananServiceConnections, layananConnections, serviceItems, items, servicesMap]);
 
   // Fetch services for all items (as callback so it can be called manually)
@@ -1068,8 +1087,8 @@ export default function CMDBVisualization() {
         ? layanan.position
         : { x: 100 + (index * 250), y: 100 + (index * 150) }; // Spread out nodes
 
-      // Calculate propagated status and connection details
-      const { propagatedStatus, connections } = calculateLayananStatusAndConnections(layanan.id);
+      // Calculate propagated status and problematic services
+      const { propagatedStatus, problematicServices } = calculateLayananStatusAndConnections(layanan.id);
 
       return {
         id: `layanan-${layanan.id}`,
@@ -1084,7 +1103,7 @@ export default function CMDBVisualization() {
           workspaceId: layanan.workspace_id,
           createdAt: layanan.created_at,
           updatedAt: layanan.updated_at,
-          connections: connections // Add connection details for info icon
+          problematicServices: problematicServices // Add problematic services for info icon
         }
       };
     });
@@ -1103,44 +1122,29 @@ export default function CMDBVisualization() {
     const serviceNodes = []; // Empty array since services are inside CustomNode
 
     // Add layanan connections (edges) with status-based styling
-    const layananEdges = layananConnections.map((conn) => {
+    const layananEdges = layananConnections.map((conn, index) => {
       const edgeId = `layanan-edge-${conn.id}`;
-
       // PENTING: Semua node IDs harus STRING untuk ReactFlow
       // Layanan nodes: 'layanan-{id}' (string dengan prefix)
       // Service nodes: 'service-{id}' (string dengan prefix)
-      // CMDB nodes: String(id) (angka sebagai string, TANPA prefix)
       let sourceId;
       if (conn.source_type === 'layanan') {
         sourceId = `layanan-${conn.source_id}`;
       } else if (conn.source_type === 'service') {
         sourceId = `service-${conn.source_id}`;
       } else {
-        sourceId = String(conn.source_id);
+        console.warn(`[Layana Edge ${edgeId}] Unknown source_type: ${conn.source_type}`);
+        return null;
       }
 
       let targetId;
       if (conn.target_type === 'layanan') {
         targetId = `layanan-${conn.target_id}`;
       } else if (conn.target_type === 'service') {
-        // Connect to the SERVICE NODE itself, not the parent CMDB item
         targetId = `service-${conn.target_id}`;
-
-        // Verify the service exists in servicesMap
-        let serviceExists = false;
-        for (const item of items) {
-          const itemServices = servicesMap[item.id] || [];
-          if (itemServices.some(s => s.id === conn.target_id)) {
-            serviceExists = true;
-            break;
-          }
-        }
-        if (!serviceExists) {
-          return null; // Skip if service not found
-        }
       } else {
-        // CMDB item or other
-        targetId = String(conn.target_id);
+        console.warn(`[Layana Edge ${edgeId}] Unknown target_type: ${conn.target_type}`);
+        return null;
       }
 
       // Find source and target nodes to get their status
@@ -1161,6 +1165,7 @@ export default function CMDBVisualization() {
           if (sourceService) break;
         }
         if (!sourceService) {
+          console.warn(`[Layana Edge ${edgeId}] Source service ${conn.source_id} not found in servicesMap`);
           return null; // Service not found
         }
       }
@@ -1173,6 +1178,7 @@ export default function CMDBVisualization() {
           if (targetService) break;
         }
         if (!targetService) {
+          console.warn(`[Layana Edge ${edgeId}] Target service ${conn.target_id} not found in servicesMap`);
           return null; // Service not found
         }
       }
@@ -1182,6 +1188,7 @@ export default function CMDBVisualization() {
       const hasValidTarget = targetNode || targetService;
 
       if (!hasValidSource || !hasValidTarget) {
+        console.warn(`[Layana Edge ${edgeId}] Skipping edge - missing source or target`);
         return null; // Skip edge jika node tidak ditemukan
       }
 
@@ -1209,15 +1216,6 @@ export default function CMDBVisualization() {
         };
 
         strokeColor = getStrokeColor(edgeStatus);
-
-        // Debug log untuk memastikan edgeStatus digunakan
-        console.log(`[Layana Edge ${edgeId}] Using propagated status:`, {
-          edgeStatus,
-          showCrossMarker,
-          strokeColor,
-          connectionType: conn.connection_type,
-          propagation: edgeStatusInfo.propagation
-        });
       } else {
         // Fallback: Calculate manually if edgeStatusInfo not found
         const getSourceStatus = () => {
@@ -1339,7 +1337,10 @@ export default function CMDBVisualization() {
       };
 
       return edgeConfig;
-    }).filter(Boolean); // Hapus edges yang null
+    });
+
+    // Filter out null edges and log the result
+    const validLayananEdges = layananEdges.filter(Boolean);
 
     // Add layanan service connections (edges to service items with status propagation)
     const layananServiceEdges = layananServiceConnections.map((conn) => {
@@ -1458,7 +1459,7 @@ export default function CMDBVisualization() {
       return edgeConfig;
     }).filter(Boolean);
 
-    const allEdges = [...flowEdges, ...layananEdges, ...layananServiceEdges];
+    const allEdges = [...flowEdges, ...validLayananEdges, ...layananServiceEdges];
 
     // Create service-to-service edges with DASHED style
     const serviceToServiceEdges = (serviceToServiceConnections || []).map((conn) => {
@@ -2301,31 +2302,30 @@ export default function CMDBVisualization() {
       return;
     }
 
-    // Check if we have valid source and target
-    if ((!sourceItem && !sourceGroup && !sourceLayanan) || (!targetItem && !targetGroup && !targetLayanan)) {
+    // BLOCK: CMDB item → layanan connections (NOT ALLOWED)
+    // Only service → layana connections are allowed
+    if ((sourceItem && targetLayanan) || (sourceLayanan && targetItem)) {
+      // Silent abort - don't show any error or modal
+      console.log('[handleConnect] Blocked CMDB item ↔ layana connection. Only service ↔ layana allowed.');
       return;
     }
 
-    // Check for unsupported group-to-layanan connections
-    if ((sourceGroup && targetLayanan) || (sourceLayanan && targetGroup)) {
-      toast.error('Koneksi group-to-layanan tidak didukung. Gunakan item sebagai perantara.');
+    // Check if we have valid source and target (excluding layana - handled above)
+    if ((!sourceItem && !sourceGroup) || (!targetItem && !targetGroup)) {
+      return;
+    }
+
+    // Check for unsupported connections involving layana (should be blocked above)
+    if (sourceLayanan || targetLayanan) {
+      console.log('[handleConnect] Layana connection should not reach this point');
       return;
     }
 
     // Check if connection already exists
     let existingConn = null;
-    if (sourceLayanan || targetLayanan) {
-      // Layanan connections - check in layananConnections
-      const sourceId = sourceLayanan ? sourceLayanan.id : null;
-      const targetId = targetLayanan ? targetLayanan.id : null;
-      const sourceType = sourceLayanan ? 'layanan' : 'cmdb';
-      const targetType = targetLayanan ? 'layanan' : 'cmdb';
-
-      existingConn = layananConnections.find(
-        conn => conn.source_id === sourceId && conn.source_type === sourceType &&
-                conn.target_id === targetId && conn.target_type === targetType
-      );
-    } else if (sourceItem && targetItem) {
+    // Note: CMDB item ↔ layana connections are blocked above
+    // This only handles CMDB item ↔ CMDB item, group connections, etc.
+    if (sourceItem && targetItem) {
       // Item-to-item
       existingConn = connections.find(
         conn => conn.source_id === sourceItem.id && conn.target_id === targetItem.id
@@ -2351,13 +2351,20 @@ export default function CMDBVisualization() {
       return;
     }
 
-    // Set source and target (can be item, group, or layanan)
-    // Wrap in object with explicit type property for reliable detection
-    const sourceData = sourceLayanan || sourceGroup || sourceItem;
-    const targetData = targetLayanan || targetGroup || targetItem;
+    // Block layana from reaching the quick connection modal
+    // Layana connections should be handled by layana-service modal above
+    if (sourceLayanan || targetLayanan) {
+      console.log('[handleConnect] Layana connection should not reach quick connection modal');
+      return;
+    }
 
-    const sourceType = sourceLayanan ? 'layanan' : (sourceGroup ? 'group' : 'item');
-    const targetType = targetLayanan ? 'layanan' : (targetGroup ? 'group' : 'item');
+    // Set source and target (can be item, group)
+    // Note: Layana is explicitly excluded above
+    const sourceData = sourceGroup || sourceItem;
+    const targetData = targetGroup || targetItem;
+
+    const sourceType = sourceGroup ? 'group' : 'item';
+    const targetType = targetGroup ? 'group' : 'item';
 
     setQuickConnectionSource({ ...sourceData, _entityType: sourceType });
     setQuickConnectionTarget({ ...targetData, _entityType: targetType });
@@ -2398,17 +2405,19 @@ export default function CMDBVisualization() {
     }
   }, [currentWorkspace, fetchServiceToServiceConnections, services]);
 
-  const handleSaveLayananServiceConnection = useCallback(async (connectionType) => {
+  const handleSaveLayananServiceConnection = useCallback(async (connectionType, propagationEnabled = true) => {
     if (!currentWorkspace || !layananServiceSource || !layananServiceTarget) return;
 
     try {
+      // FIX: Send propagation_enabled parameter to API
       const response = await api.post('/layanan/connections', {
         source_type: isLayananSource ? 'layanan' : 'service',
         source_id: layananServiceSource.id,
         target_type: isLayananSource ? 'service' : 'layanan',
         target_id: layananServiceTarget.id,
         workspace_id: currentWorkspace.id,
-        connection_type: connectionType
+        connection_type: connectionType,
+        propagation_enabled: propagationEnabled  // FIX: Add this field
       });
 
       toast.success('Koneksi layanan-service berhasil dibuat!');
@@ -2455,12 +2464,13 @@ export default function CMDBVisualization() {
         if (serviceItemData.connectionTargetType === 'service') {
           // Direct layana → service connection using layana_connections table
           const response = await api.post('/layanan/connections', {
-            source_type: isSourceLayanan ? 'layanan' : 'cmdb',
-            source_id: layananNode.id,
+            source_type: 'layanan',  // Always layana since involvesLayanan is true
+            source_id: layananId,
             target_type: 'service',
             target_id: serviceItemData.serviceId,
             workspace_id: currentWorkspace.id,
-            connection_type: connectionType
+            connection_type: connectionType,
+            propagation_enabled: serviceItemData.propagationEnabled !== undefined ? serviceItemData.propagationEnabled : true
           });
 
           toast.success('Koneksi layanan ke service berhasil dibuat!');
@@ -2532,7 +2542,7 @@ export default function CMDBVisualization() {
           const isTargetService = quickConnectionTarget._entityType === 'service';
 
           if ((isSourceLayanan && isTargetService) || (isSourceService && isTargetLayanan)) {
-            // Layana → Service direct connection
+            // Layana ↔ Service direct connection (ALLOWED)
             const layananId = isSourceLayanan ? quickConnectionSource.id : quickConnectionTarget.id;
             const serviceId = isSourceService ? quickConnectionSource.id : quickConnectionTarget.id;
 
@@ -2542,66 +2552,16 @@ export default function CMDBVisualization() {
               target_type: isSourceService ? 'layanan' : 'service',
               target_id: serviceId,
               workspace_id: currentWorkspace.id,
-              connection_type: connectionType
+              connection_type: connectionType,
+              propagation_enabled: true
             });
 
             toast.success('Koneksi layanan-service berhasil dibuat!');
             await fetchLayanaAll();
           } else {
-            // Layanan → CMDB or Layanan → Layanan connections
-            const response = await api.post('/layanan/connections', {
-              source_type: isSourceLayanan ? 'layanan' : 'cmdb',
-              source_id: quickConnectionSource.id,
-              target_type: isTargetLayanan ? 'layanan' : 'cmdb',
-              target_id: quickConnectionTarget.id,
-              workspace_id: currentWorkspace.id,
-              connection_type: connectionType
-            });
-
-            // Simpan edge handle untuk koneksi layanan yang baru dibuat
-            const newConnection = response.data;
-            if (newConnection && newConnection.id) {
-              const edgeId = `layanan-edge-${newConnection.id}`;
-
-              // Tentukan handle berdasarkan tipe node (layanan vs CMDB)
-              let sourceHandle, targetHandle;
-
-              if (isSourceLayanan) {
-                // Source is Layanan node - use 'bottom' for output
-                sourceHandle = 'bottom';
-              } else {
-                // Source is CMDB node - use 'source-bottom' for output
-                sourceHandle = 'source-bottom';
-              }
-
-              if (isTargetLayanan) {
-                // Target is Layanan node - use 'top' for input
-                targetHandle = 'top';
-              } else {
-                // Target is CMDB node - use 'target-top' for input
-                targetHandle = 'target-top';
-              }
-
-              // Simpan edge handle
-              const newEdgeHandles = {
-                ...edgeHandles,
-                [edgeId]: {
-                  sourceHandle,
-                  targetHandle,
-                }
-              };
-
-              await saveEdgeHandle(
-                edgeId,
-                sourceHandle,
-                targetHandle,
-                currentWorkspace?.id
-              );
-
-              setEdgeHandles(newEdgeHandles);
-            }
-
-            toast.success('Koneksi layanan berhasil dibuat!');
+            // REMOVED: Layana ↔ CMDB connections are no longer supported
+            toast.error('Koneksi layanan hanya boleh ke service. Silakan drag dari service node.');
+            return;
           }
         } else if (isSourceGroup && isTargetGroup) {
           // Group-to-group - use group connection endpoint

@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
+import { CONNECTION_TYPES, getConnectionTypeInfo } from '../../utils/cmdb-utils/flowHelpers';
 
 /**
  * QuickLayananServiceConnection - Simple modal for creating layana-to-service connections
@@ -32,11 +32,12 @@ export default function QuickLayananServiceConnection({
 }) {
   const [connectionType, setConnectionType] = useState('connects_to');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [propagationEnabled, setPropagationEnabled] = useState(true); // FIX: Add propagation toggle state
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await onConnect(connectionType);
+      await onConnect(connectionType, propagationEnabled); // FIX: Pass propagationEnabled
       onClose();
     } catch (error) {
       console.error('Failed to create layana-service connection:', error);
@@ -116,6 +117,46 @@ export default function QuickLayananServiceConnection({
               </p>
             )}
           </div>
+
+          {/* FIX: Add Status Propagation Toggle (Consistent with QuickConnectionModal) */}
+          <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <input
+              type="checkbox"
+              id="layanan-propagation"
+              checked={propagationEnabled}
+              onChange={(e) => setPropagationEnabled(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <label htmlFor="layanan-propagation" className="text-sm font-medium cursor-pointer">
+              Enable Status Propagation
+            </label>
+          </div>
+
+          {/* Connection Type Info Box */}
+          {connectionType && (
+            <div className="p-3 bg-gray-50 dark:bg-gray-900 border rounded-lg">
+              <p className="text-xs text-muted-foreground mb-1">
+                <span className="font-semibold">Arah Propagasi:</span>
+              </p>
+              <p className="text-xs">
+                {propagationEnabled ? (
+                  <>
+                    {getConnectionTypeInfo(connectionType).propagation === 'target_to_source' && (
+                      <span>Target → Source: Jika target bermasalah, source terpengaruh</span>
+                    )}
+                    {getConnectionTypeInfo(connectionType).propagation === 'source_to_target' && (
+                      <span>Source → Target: Jika source bermasalah, target terpengaruh</span>
+                    )}
+                    {getConnectionTypeInfo(connectionType).propagation === 'both' && (
+                      <span>Bidirectional: Keduanya saling mempengaruhi</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-red-600">Propagasi dinonaktifkan</span>
+                )}
+              </p>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-4 border-t">
