@@ -669,7 +669,9 @@ export default function CMDBVisualization() {
     handleServiceItemsClick,
     layananItems,           // FIX: Pass layana nodes for propagation
     layananConnections,     // FIX: Pass layana connections for propagation
-    services                // FIX: Pass services array for service status lookup
+    services,               // FIX: Pass services array for service status lookup
+    serviceItems,           // FIX: Pass service items for realtime edge updates
+    layananServiceConnections // FIX: Pass layana-service connections for edge rendering
   );
 
   // Save service node position to database
@@ -1075,7 +1077,21 @@ export default function CMDBVisualization() {
         }
       }
 
-      setServiceItems(serviceItemsMap);
+      // FIX: Merge with existing serviceItems WITHOUT overwriting realtime updates
+      // Only add new service IDs that don't exist yet in prevServiceItems
+      setServiceItems(prevServiceItems => {
+        const merged = { ...prevServiceItems };
+
+        // Only add service IDs that don't exist yet
+        Object.keys(serviceItemsMap).forEach(serviceId => {
+          // Only add if not already present (preserve realtime updates)
+          if (!merged[serviceId]) {
+            merged[serviceId] = serviceItemsMap[serviceId];
+          }
+        });
+
+        return merged;
+      });
     };
 
     fetchServiceItems();
@@ -1085,7 +1101,9 @@ export default function CMDBVisualization() {
     const { flowNodes, flowEdges } = transformToFlowData();
 
     // FIX: Calculate edge statuses for ALL edges (including layana connections)
-    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layananItems, layananConnections, services);
+    // Convert serviceItems object to flat array and include layanaServiceConnections
+    const allServiceItems = Object.values(serviceItems).flat();
+    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layananItems, layananConnections, services, allServiceItems, layananServiceConnections);
 
     // Add layanan nodes
     const layananNodes = layananItems.map((layanan, index) => {
@@ -1365,27 +1383,27 @@ export default function CMDBVisualization() {
       // Layanan node ID
       const layananNodeId = `layanan-${conn.layanan_id}`;
 
-      // Find the CMDB item that contains this service
-      // We need to find which item has the service, then use that item's ID as the target
-      let targetCmdbItemId = null;
+      // Service node ID (Level 2: Service)
+      const serviceNodeId = `service-${conn.service_id}`;
+
+      // Find the service that contains this service item
       let targetService = null;
 
-      // Search through all items to find the one containing the service
+      // Search through all items to find the service
       for (const item of items) {
         const itemServices = servicesMap[item.id] || [];
         targetService = itemServices.find(s => s.id === conn.service_id);
         if (targetService) {
-          targetCmdbItemId = item.id;
           break;
         }
       }
 
-      if (!targetCmdbItemId) {
-        return null; // Skip if parent CMDB item not found
+      if (!targetService) {
+        return null; // Skip if service not found
       }
 
       const sourceNode = layananNodes.find(n => n.id === layananNodeId);
-      const targetNode = flowNodes.find(n => n.id === String(targetCmdbItemId));
+      const targetNode = flowNodes.find(n => n.id === serviceNodeId);
 
       if (!sourceNode || !targetNode) {
         return null;
@@ -1426,9 +1444,9 @@ export default function CMDBVisualization() {
       const edgeConfig = {
         id: edgeId,
         source: layananNodeId,
-        target: String(targetCmdbItemId),
+        target: serviceNodeId, // Connect to Service Node (Level 2), not CMDB Item
         sourceHandle: 'bottom',
-        targetHandle: 'target-top',
+        targetHandle: 'target-top', // Service nodes use 'target-top' handle
         type: 'smoothstep',
         animated: false,
         markerEnd: { type: 'arrowclosed', color: strokeColor },
@@ -1440,21 +1458,43 @@ export default function CMDBVisualization() {
         data: {
           connectionType: conn.connection_type || 'depends_on',
           showCrossMarker,
+          // Store service item name directly as simple string (ReactFlow might strip complex objects)
+          service_item_name: conn.service_item_name,
+          service_item_id: conn.service_item_id,
+          service_id: conn.service_id,
         },
-        // Add cross marker if inactive
-        ...(showCrossMarker && {
-          label: '✕',
-          labelStyle: {
-            fill: strokeColor,
-            fontWeight: 'bold',
-            fontSize: 20,
-          },
-          labelBgStyle: {
-            fill: 'transparent',
-            fillOpacity: 0
-          }
-        }),
       };
+
+      // Debug log
+      console.log('✅ Created layana-service edge:', {
+        edgeId,
+        service_item_name: edgeConfig.data.service_item_name,
+        service_item_id: edgeConfig.data.service_item_id,
+        service_id: edgeConfig.data.service_id
+      });
+
+      // DEBUG: Verify layanaServiceConnection data is added
+      console.log('✅ Creating layana-service edge with data:', {
+        edgeId,
+        hasLayanaServiceConnection: !!edgeConfig.data.layanaServiceConnection,
+        connectionData: edgeConfig.data.layanaServiceConnection,
+        originalConn: conn,
+        connKeys: Object.keys(conn)
+      });
+
+      // Add cross marker if inactive - don't use spread to avoid overwriting data
+      if (showCrossMarker) {
+        edgeConfig.label = '✕';
+        edgeConfig.labelStyle = {
+          fill: strokeColor,
+          fontWeight: 'bold',
+          fontSize: 20,
+        };
+        edgeConfig.labelBgStyle = {
+          fill: 'transparent',
+          fillOpacity: 0
+        };
+      }
 
       // Add label for service connection
       if (showConnectionLabels && conn.connection_type) {
@@ -1471,6 +1511,14 @@ export default function CMDBVisualization() {
         };
         edgeConfig.labelBgPadding = [6, 6];
       }
+
+      // FINAL CHECK: Verify data is still there before returning
+      console.log('🔍 Final edgeConfig before return:', {
+        edgeId,
+        hasData: !!edgeConfig.data,
+        hasLayanaServiceConnection: !!edgeConfig.data?.layananServiceConnection,
+        layanaServiceConnection: edgeConfig.data?.layanaServiceConnection
+      });
 
       return edgeConfig;
     }).filter(Boolean);
@@ -1655,7 +1703,7 @@ export default function CMDBVisualization() {
 
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges]);
-  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, services]); // Added services dependency for real-time edge status updates
+  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, services, serviceItems]); // Added serviceItems dependency for real-time edge status updates
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -1712,8 +1760,13 @@ export default function CMDBVisualization() {
     const handleCmdbUpdate = async () => {
       // Skip fetch if currently saving
       if (!isSavingRef.current) {
-        // Fetch CMDB data, layana data, and service-to-service connections
-        await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
+        // Fetch CMDB data, layana data, layana-service connections, and service-to-service connections
+        await Promise.all([
+          fetchAll(),
+          fetchLayanaAll(),
+          fetchLayananServiceConnections(), // ✅ Tambah ini untuk layana-service edge realtime updates
+          fetchServiceToServiceConnections()
+        ]);
       }
     };
 
@@ -1754,14 +1807,70 @@ export default function CMDBVisualization() {
       }
     };
 
+    const handleServiceItemStatusUpdate = async (data) => {
+      // Parse service item data
+      const eventServiceItemId = parseInt(data.serviceItemId);
+      const eventWorkspaceId = parseInt(data.workspaceId);
+      const eventServiceId = parseInt(data.serviceId);
+      const newStatus = data.newStatus;
+      const currentWorkspaceId = currentWorkspace?.id;
+
+      // Only update if this is for our workspace
+      if (eventWorkspaceId === currentWorkspaceId) {
+        try {
+          // FIX: Fetch all service items for the service, not just one item
+          // Use eventServiceId (service ID), not eventServiceItemId (service item ID)
+          const response = await api.get(`/service-items/${eventServiceId}/items?workspace_id=${eventWorkspaceId}`);
+          const updatedServiceItems = response.data || [];
+
+          // Update serviceItems state with the new data
+          setServiceItems(prevServiceItems => ({
+            ...prevServiceItems,
+            [eventServiceId]: updatedServiceItems
+          }));
+
+          console.log('✅ Service item status updated:', {
+            serviceItemId: eventServiceItemId,
+            newStatus,
+            serviceId: eventServiceId
+          });
+
+          // Force trigger edge re-calculation by updating services with a timestamp
+          // This ensures layana-service edges re-render with new service item status
+          setServices(prevServices => {
+            // Create a new array reference with updated timestamp for the affected service
+            const updatedServices = prevServices.map(service => {
+              if (service.id === eventServiceId) {
+                console.log(`🔄 Forcing edge update for service: ${service.name} (${eventServiceId})`);
+                return {
+                  ...service,
+                  _lastUpdated: Date.now(), // Force re-render trigger
+                  _forceEdgeUpdate: true // Explicit flag for edge update
+                };
+              }
+              return service;
+            });
+
+            console.log('🔄 Services state updated, triggering edge re-calculation');
+
+            return updatedServices;
+          });
+        } catch (err) {
+          console.warn(`Failed to fetch service items for service ${eventServiceId}:`, err);
+        }
+      }
+    };
+
     socket.on('cmdb_update', handleCmdbUpdate);
     socket.on('service_update', handleServiceUpdate);
+    socket.on('service_item_status_update', handleServiceItemStatusUpdate);
 
     return () => {
       socket.off('cmdb_update', handleCmdbUpdate);
       socket.off('service_update', handleServiceUpdate);
+      socket.off('service_item_status_update', handleServiceItemStatusUpdate);
     };
-  }, [socket, fetchAll, fetchLayanaAll, currentWorkspace, setServices, fetchServices]);
+  }, [socket, fetchAll, fetchLayanaAll, currentWorkspace, setServices, fetchServices, setServiceItems]);
 
   useEffect(() => {
     localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));
@@ -2666,13 +2775,18 @@ export default function CMDBVisualization() {
     try {
       // Deteksi apakah koneksi layanan, group-to-item, item-to-group, atau group-to-group
       const isLayananEdge = String(edgeContextMenu.edge.id).startsWith('layanan-edge-');
+      const isLayananServiceEdge = String(edgeContextMenu.edge.id).startsWith('layana-service-edge-');
       const isGroupToItem = String(edgeContextMenu.edge.source).startsWith('group-');
       const isItemToGroup = String(edgeContextMenu.edge.target).startsWith('group-');
       const isGroupToGroup = isGroupToItem && isItemToGroup;
       const isServiceConnection = String(edgeContextMenu.edge.id).startsWith('service-connection-');
 
       let deleteUrl;
-      if (isLayananEdge) {
+      if (isLayananServiceEdge) {
+        // Layanan-service edge: DELETE /api/layanan-service-connections/:id
+        const connectionId = String(edgeContextMenu.edge.id).replace('layana-service-edge-', '');
+        deleteUrl = `/layanan-service-connections/${connectionId}`;
+      } else if (isLayananEdge) {
         // Layanan edge: DELETE /api/layanan/connections/:id
         const connectionId = String(edgeContextMenu.edge.id).replace('layanan-edge-', '');
         deleteUrl = `/layanan/connections/${connectionId}`;
@@ -2701,13 +2815,18 @@ export default function CMDBVisualization() {
       await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
 
-      // Fetch cmdb, layana, and service-to-service connections data
-      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
+      // Fetch cmdb, layana, layanan-service, and service-to-service connections data
+      await Promise.all([
+        fetchAll(),
+        fetchLayanaAll(),
+        fetchLayananServiceConnections(),
+        fetchServiceToServiceConnections()
+      ]);
     } catch (err) {
       console.error('Delete connection error:', err);
       toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections]);
+  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchLayananServiceConnections, fetchServiceToServiceConnections]);
 
   const handleEditEdge = useCallback(() => {
     if (!edgeContextMenu.edge) return;
@@ -3899,14 +4018,17 @@ export default function CMDBVisualization() {
     try {
       await api.post('/layanan/connections', connectionData);
       toast.success('Koneksi layanan berhasil dibuat!');
-      await fetchLayanaAll();
+      await Promise.all([
+        fetchLayanaAll(),
+        fetchLayananServiceConnections() // Also fetch layana-service connections for edge rendering
+      ]);
       handleCloseLayananServiceConnection();
     } catch (error) {
       console.error('Failed to create layana-service connection:', error);
       toast.error('Gagal membuat koneksi: ' + (error.response?.data?.error || error.message));
       throw error;
     }
-  }, [fetchLayanaAll, handleCloseLayananServiceConnection]);
+  }, [fetchLayanaAll, fetchLayananServiceConnections, handleCloseLayananServiceConnection]);
 
     const toggleTableDrawer = useCallback(() => {
     setShowTableDrawer(prev => !prev);
@@ -4362,6 +4484,8 @@ export default function CMDBVisualization() {
             edge={edgeContextMenu.edge}
             sourceNode={edgeContextMenu.sourceNode}
             targetNode={edgeContextMenu.targetNode}
+            servicesMap={servicesMap}
+            serviceItems={serviceItems}
             onEdit={handleEditEdge}
             onDelete={handleDeleteEdge}
             onClose={closeEdgeContextMenu}

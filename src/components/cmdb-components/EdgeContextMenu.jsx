@@ -9,6 +9,7 @@ export default function EdgeContextMenu({
   sourceNode,
   targetNode,
   servicesMap = {}, // Add servicesMap prop
+  serviceItems = {}, // Add serviceItems map for layana-service edges
   onEdit,
   onDelete,
   onClose,
@@ -19,6 +20,9 @@ export default function EdgeContextMenu({
   // - Layanan-service edges use: connectionType (camelCase)
   const connectionTypeKey = edge.data?.connection_type || edge.data?.connectionType || 'depends_on';
   const connectionType = CONNECTION_TYPES[connectionTypeKey] || CONNECTION_TYPES.depends_on;
+
+  // Check if this is a layana-service edge
+  const isLayanaServiceEdge = edge.id?.startsWith('layana-service-edge-');
 
   // FIX: Get service name from servicesMap if node is not available
   const getServiceName = (nodeType, nodeId) => {
@@ -106,6 +110,58 @@ export default function EdgeContextMenu({
     return 'Unknown';
   };
 
+  // Get service item name for layana-service edges
+  const getServiceItemName = () => {
+    if (!isLayanaServiceEdge) {
+      return null;
+    }
+
+    // Get service item name directly from edge data (stored as simple string)
+    const serviceItemName = edge.data?.service_item_name;
+
+    if (!serviceItemName) {
+      console.log('❌ Service item name not found in edge data:', {
+        edgeId: edge.id,
+        edgeDataKeys: edge.data ? Object.keys(edge.data) : 'no data',
+        edgeData: edge.data
+      });
+      return 'Service Item';
+    }
+
+    console.log('✅ Found service item name:', serviceItemName);
+    return serviceItemName;
+  };
+
+  // Get detailed connection label for layana-service edges
+  const getConnectionLabel = () => {
+    if (!isLayanaServiceEdge) {
+      // Default label for non-layana-service edges
+      return (
+        <div className="flex items-center gap-2">
+          {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
+          <span className="flex items-center" style={{ color: connectionType.color }}>
+            {getDirectionIcon()}
+          </span>
+          {getConnectionName(targetNode, edge.data?.target_type, edge.target)}
+        </div>
+      );
+    }
+
+    // Detailed label for layana-service edges
+    // Show: Layanan -> Service Item (not Service)
+    const serviceItemName = getServiceItemName();
+
+    return (
+      <div className="flex items-center gap-2">
+        {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
+        <span className="flex items-center" style={{ color: connectionType.color }}>
+          {getDirectionIcon()}
+        </span>
+        <span className="font-semibold">{serviceItemName || 'Service Item'}</span>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -146,7 +202,7 @@ export default function EdgeContextMenu({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: -70 }}
           exit={{ opacity: 0 }}
-          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-10 max-w-xs overflow-hidden"
+          className={`absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-10 max-w-xs overflow-hidden ${isLayanaServiceEdge ? 'py-2' : ''}`}
           style={{
             background: 'rgba(255,255,255,0.6)',
             border: '1px solid rgba(255,255,255,0.8)',
@@ -155,13 +211,7 @@ export default function EdgeContextMenu({
             boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
           }}
         >
-          <div className="flex items-center gap-2">
-            {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
-            <span className="flex items-center" style={{ color: connectionType.color }}>
-              {getDirectionIcon()}
-            </span>
-            {getConnectionName(targetNode, edge.data?.target_type, edge.target)}
-          </div>
+          {getConnectionLabel()}
         </motion.div>
 
         {/* Connection type label */}

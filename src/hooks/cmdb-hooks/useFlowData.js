@@ -12,7 +12,7 @@ import {
 } from '../../utils/cmdb-utils/statusPropagation';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, layanaItems = [], layananConnections = [], services = []) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, layanaItems = [], layananConnections = [], services = [], serviceItems = {}, layananServiceConnections = []) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -626,7 +626,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     });
 
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick, layanaItems, layananConnections, services]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick, layanaItems, layananConnections, services, serviceItems, layananServiceConnections]);
 
   return { transformToFlowData };
 };
