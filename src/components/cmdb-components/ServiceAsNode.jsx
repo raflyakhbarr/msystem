@@ -238,7 +238,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
             <Handle
@@ -251,7 +251,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
 
@@ -266,7 +266,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
             <Handle
@@ -279,7 +279,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
 
@@ -294,7 +294,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
             <Handle
@@ -307,7 +307,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
 
@@ -322,7 +322,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
             <Handle
@@ -335,7 +335,7 @@ export default function ServiceAsNode({ data, selected }) {
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
-                opacity: 0.6
+                opacity: 0
               }}
             />
           </div>
