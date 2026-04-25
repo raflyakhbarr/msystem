@@ -1333,8 +1333,8 @@ export default function CMDBVisualization() {
             padding: '2px 4px'
           },
           labelBgStyle: {
-            fill: 'white',
-            fillOpacity: 0.9
+            fill: 'transparent',
+            fillOpacity: 0
           }
         }),
         // Add cross marker if inactive
@@ -1346,8 +1346,8 @@ export default function CMDBVisualization() {
             fontSize: 20,
           },
           labelBgStyle: {
-            fill: 'white',
-            fillOpacity: 0.9
+            fill: 'transparent',
+            fillOpacity: 0
           }
         }),
       };
@@ -1450,8 +1450,8 @@ export default function CMDBVisualization() {
             fontSize: 20,
           },
           labelBgStyle: {
-            fill: 'white',
-            fillOpacity: 0.9
+            fill: 'transparent',
+            fillOpacity: 0
           }
         }),
       };
@@ -1622,8 +1622,8 @@ export default function CMDBVisualization() {
           fontSize: 20,
         };
         edgeConfig.labelBgStyle = {
-          fill: 'white',
-          fillOpacity: 0.9
+          fill: 'transparent',
+          fillOpacity: 0
         };
         edgeConfig.labelBgPadding = [8, 8];
         edgeConfig.labelBgBorderRadius = 50;

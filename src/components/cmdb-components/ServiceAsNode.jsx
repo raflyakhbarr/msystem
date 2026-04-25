@@ -203,13 +203,18 @@ export default function ServiceAsNode({ data, selected }) {
 
             {/* Status Indicator Dot */}
             <div
-              className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
+              className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
                 service.status === 'active' ? 'bg-green-500' :
                 service.status === 'inactive' ? 'bg-red-500' :
                 service.status === 'maintenance' ? 'bg-yellow-500' :
                 service.status === 'disabled' ? 'bg-gray-500' :
                 'bg-gray-500'
               }`}
+              style={
+                service.status === 'inactive' || service.status === 'maintenance'
+                  ? { animation: 'breathing 0.8s ease-out infinite' }
+                  : undefined
+              }
             />
 
             {/* Service Items Badge - Mini */}
@@ -226,8 +231,34 @@ export default function ServiceAsNode({ data, selected }) {
               </div>
             )}
 
-            {/* Flow Handles - All 4 directions for small mode */}
-            {/* Top */}
+            {/* Flow Handles - Multiple positions per side for flexible connections */}
+            {/* TOP SIDE: Top-left, Top-center, Top-right */}
+            <Handle
+              type="target"
+              position={Position.Top}
+              id="target-top-left"
+              style={{
+                background: handleColor,
+                left: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Top}
+              id="source-top-left"
+              style={{
+                background: handleColor,
+                left: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
             <Handle
               type="target"
               position={Position.Top}
@@ -254,8 +285,60 @@ export default function ServiceAsNode({ data, selected }) {
                 opacity: 0
               }}
             />
+            <Handle
+              type="target"
+              position={Position.Top}
+              id="target-top-right"
+              style={{
+                background: handleColor,
+                left: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Top}
+              id="source-top-right"
+              style={{
+                background: handleColor,
+                left: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
 
-            {/* Right */}
+            {/* RIGHT SIDE: Right-top, Right-center, Right-bottom */}
+            <Handle
+              type="target"
+              position={Position.Right}
+              id="target-right-top"
+              style={{
+                background: handleColor,
+                top: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="source-right-top"
+              style={{
+                background: handleColor,
+                top: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
             <Handle
               type="target"
               position={Position.Right}
@@ -282,8 +365,60 @@ export default function ServiceAsNode({ data, selected }) {
                 opacity: 0
               }}
             />
+            <Handle
+              type="target"
+              position={Position.Right}
+              id="target-right-bottom"
+              style={{
+                background: handleColor,
+                top: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="source-right-bottom"
+              style={{
+                background: handleColor,
+                top: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
 
-            {/* Bottom */}
+            {/* BOTTOM SIDE: Bottom-left, Bottom-center, Bottom-right */}
+            <Handle
+              type="target"
+              position={Position.Bottom}
+              id="target-bottom-left"
+              style={{
+                background: handleColor,
+                left: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="source-bottom-left"
+              style={{
+                background: handleColor,
+                left: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
             <Handle
               type="target"
               position={Position.Bottom}
@@ -310,8 +445,60 @@ export default function ServiceAsNode({ data, selected }) {
                 opacity: 0
               }}
             />
+            <Handle
+              type="target"
+              position={Position.Bottom}
+              id="target-bottom-right"
+              style={{
+                background: handleColor,
+                left: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="source-bottom-right"
+              style={{
+                background: handleColor,
+                left: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
 
-            {/* Left */}
+            {/* LEFT SIDE: Left-top, Left-center, Left-bottom */}
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="target-left-top"
+              style={{
+                background: handleColor,
+                top: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Left}
+              id="source-left-top"
+              style={{
+                background: handleColor,
+                top: '20%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
             <Handle
               type="target"
               position={Position.Left}
@@ -332,6 +519,32 @@ export default function ServiceAsNode({ data, selected }) {
               style={{
                 background: handleColor,
                 top: '50%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="target-left-bottom"
+              style={{
+                background: handleColor,
+                top: '80%',
+                width: 6,
+                height: 6,
+                border: '1px solid hsl(var(--background))',
+                opacity: 0
+              }}
+            />
+            <Handle
+              type="source"
+              position={Position.Left}
+              id="source-left-bottom"
+              style={{
+                background: handleColor,
+                top: '80%',
                 width: 6,
                 height: 6,
                 border: '1px solid hsl(var(--background))',
