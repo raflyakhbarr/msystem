@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -68,10 +68,53 @@ export default function ServiceAsNode({ data, selected }) {
   const width = data.width || 120;
   const height = data.height || 80;
 
-  // State for service items (for hover card)
+  // State for service items (for hover card and badge)
   const [serviceItems, setServiceItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [fetchedServiceId, setFetchedServiceId] = useState(null);
+
+  // Fetch service items data on mount (for badge display)
+  useEffect(() => {
+    const fetchServiceItemsOnMount = async () => {
+      if (serviceItemsCount === 0) return;
+
+      const workspaceId = data.workspaceId || data.service?.workspace_id;
+      if (!workspaceId) {
+        console.warn('No workspaceId found for service');
+        return;
+      }
+
+      setLoadingItems(true);
+      setFetchedServiceId(service.id);
+
+      try {
+        const res = await api.get(`/service-items/${service.id}/items?workspace_id=${workspaceId}`);
+        const items = res.data || [];
+        setServiceItems(items);
+      } catch (err) {
+        console.error('Failed to fetch service items:', err);
+        setServiceItems([]);
+      } finally {
+        setLoadingItems(false);
+      }
+    };
+
+    fetchServiceItemsOnMount();
+  }, [service.id, serviceItemsCount, data.workspaceId, data.service?.workspace_id]);
+
+  // Calculate problematic items (inactive + maintenance) for badge
+  const problematicItemsCount = useMemo(() => {
+    if (serviceItems.length === 0) return 0;
+    return serviceItems.filter(item =>
+      item.status === 'inactive' || item.status === 'maintenance'
+    ).length;
+  }, [serviceItems]);
+
+  // Check if all items are active (no badge needed)
+  const allItemsActive = useMemo(() => {
+    if (serviceItems.length === 0) return true; // No items = no badge
+    return serviceItems.every(item => item.status === 'active');
+  }, [serviceItems]);
 
   // Handle color based on status
   const handleColor = useMemo(() => {
@@ -170,16 +213,16 @@ export default function ServiceAsNode({ data, selected }) {
             />
 
             {/* Service Items Badge - Mini */}
-            {serviceItemsCount > 0 && (
+            {/* Only show badge if there are problematic items (inactive/maintenance) */}
+            {!allItemsActive && problematicItemsCount > 0 && (
               <div
-                className="absolute -top-1 -right-1 min-w-[12px] h-4 px-0.5
-                          bg-blue-500 text-white font-bold text-[8px]
+                className="absolute -top-1 -right-1 min-w-[12px] h-3 px-0.5
+                          bg-yellow-500 text-white font-bold text-[8px]
                           rounded-full dark:border-gray-800
                           flex items-center justify-center z-20
                           shadow-sm"
-                title={`${serviceItemsCount} items`}
               >
-                {serviceItemsCount > 99 ? '9+' : serviceItemsCount}
+                {problematicItemsCount > 99 ? '9+' : problematicItemsCount}
               </div>
             )}
 
@@ -438,197 +481,4 @@ export default function ServiceAsNode({ data, selected }) {
       </HoverCard>
     );
   }
-
-  // NORMAL MODE - Outside CMDB item (large)
-  return (
-    <div
-      className={`
-        relative bg-white border-2 rounded-lg shadow-sm
-        transition-all duration-200 cursor-pointer
-        hover:shadow-md hover:scale-105
-        ${statusConfig.bg} ${statusConfig.border}
-        ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
-      `}
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        minWidth: `${width}px`,
-        minHeight: `${height}px`
-      }}
-      onClick={handleClick}
-    >
-      {/* Service Icon */}
-      <div className="absolute top-2 left-1/2 transform -translate-x-1/2">
-        {service.icon_type === 'preset' ? (
-          <div className="w-10 h-10 flex items-center justify-center">
-            <ServiceIcon name={service.icon_name} size={32} />
-          </div>
-        ) : (
-          <img
-            src={`${API_BASE_URL}${service.icon_path}`}
-            alt={service.name}
-            className="w-10 h-10 object-contain"
-            crossOrigin="anonymous"
-          />
-        )}
-      </div>
-
-      {/* Service Name */}
-      <div className="absolute top-12 left-0 right-0 px-1 text-center">
-        <div className={`text-[10px] font-medium truncate px-1 ${statusConfig.text}`}>
-          {service.name}
-        </div>
-      </div>
-
-      {/* Status Badge */}
-      <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
-        <Badge
-          variant="outline"
-          className={`text-[9px] px-1 py-0 ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text}`}
-        >
-          {service.status}
-        </Badge>
-      </div>
-
-      {/* Service Items Count Badge */}
-      {serviceItemsCount > 0 && (
-        <div
-          className="absolute -top-1 -right-1 min-w-[14px] h-4 px-1
-                    bg-blue-500 text-white font-bold text-[9px]
-                    rounded-full dark:border-gray-800
-                    flex items-center justify-center z-20
-                    shadow-sm cursor-pointer hover:bg-blue-600"
-          onClick={handleItemsClick}
-          title={`${serviceItemsCount} service items - Click to view`}
-        >
-          {serviceItemsCount > 99 ? '99+' : serviceItemsCount}
-        </div>
-      )}
-
-      {/* Status Indicator Dot */}
-      <div
-        className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
-          statusConfig.dot
-        }`}
-      />
-
-      {/* Parent CMDB Item Name (tooltip) */}
-      {cmdbItemName && (
-        <div
-          className="absolute -bottom-4 left-1/2 transform -translate-x-1/2
-                     whitespace-nowrap text-[8px] text-gray-500
-                     opacity-0 hover:opacity-100 transition-opacity
-                     pointer-events-none"
-          title={`Part of: ${cmdbItemName}`}
-        >
-          {cmdbItemName}
-        </div>
-      )}
-
-      {/* Flow Handles - All 4 directions */}
-      {/* Top */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="target-top"
-        style={{
-          background: handleColor,
-          left: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Top}
-        id="source-top"
-        style={{
-          background: handleColor,
-          left: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-
-      {/* Right */}
-      <Handle
-        type="target"
-        position={Position.Right}
-        id="target-right"
-        style={{
-          background: handleColor,
-          top: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="source-right"
-        style={{
-          background: handleColor,
-          top: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-
-      {/* Bottom */}
-      <Handle
-        type="target"
-        position={Position.Bottom}
-        id="target-bottom"
-        style={{
-          background: handleColor,
-          left: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="source-bottom"
-        style={{
-          background: handleColor,
-          left: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-
-      {/* Left */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="target-left"
-        style={{
-          background: handleColor,
-          top: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Left}
-        id="source-left"
-        style={{
-          background: handleColor,
-          top: '50%',
-          width: 8,
-          height: 8,
-          border: '2px solid hsl(var(--background))'
-        }}
-      />
-    </div>
-  );
 }

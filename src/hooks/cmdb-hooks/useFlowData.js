@@ -144,8 +144,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         // Create service nodes as child nodes for grouped items
         if (itemServices.length > 0) {
           const servicesPerRow = 3;
-          const serviceNodeWidth = 55; // Slightly larger for better visibility
-          const serviceNodeHeight = 55; // Slightly larger
+          const serviceNodeWidth = 47; // Slightly larger for better visibility
+          const serviceNodeHeight = 47; // Slightly larger
           const gapX = 10;
           const gapY = 10;
           const paddingX = 10;
