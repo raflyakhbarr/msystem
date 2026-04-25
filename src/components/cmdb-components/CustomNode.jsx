@@ -281,6 +281,48 @@ export default function CustomNode({ data, id }) {
                       )}
                     </div>
                   )}
+
+                  {/* Services Section in Popover Footer */}
+                  {services.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold text-muted-foreground flex items-center gap-1">
+                          <Server size={14} />
+                          Services ({services.length}):
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {services.map((service) => {
+                          const serviceStatusColor = service.status === 'active'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : service.status === 'inactive'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : service.status === 'maintenance'
+                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                            : 'bg-gray-50 text-gray-700 border-gray-200';
+
+                          return (
+                            <div
+                              key={service.id}
+                              className={`px-2 py-1 rounded border ${serviceStatusColor} text-[10px] font-medium truncate flex items-center gap-1`}
+                              title={`${service.name} (${service.status})`}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                service.status === 'active'
+                                  ? 'bg-green-500'
+                                  : service.status === 'inactive'
+                                  ? 'bg-red-500'
+                                  : service.status === 'maintenance'
+                                  ? 'bg-yellow-500'
+                                  : 'bg-gray-500'
+                              }`} />
+                              <span className="truncate">{service.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </PopoverContent>
