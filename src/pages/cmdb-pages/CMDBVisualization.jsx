@@ -50,6 +50,7 @@ import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useLayanan } from '../../hooks/cmdb-hooks/useLayanan';
 import { useLayananServiceConnections } from '../../hooks/cmdb-hooks/useLayananServiceConnections';
 import { useServiceToServiceConnections } from '../../hooks/cmdb-hooks/useServiceToServiceConnections';
+import { useCrossServiceConnections } from '../../hooks/cmdb-hooks/useCrossServiceConnections';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
 import { useSocket } from '../../context/SocketContext';
 import { useVisualizationActions } from '../../hooks/cmdb-hooks/useVisualizationActions';
@@ -338,9 +339,10 @@ export default function CMDBVisualization() {
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
-  const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayanan, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
+  const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayana, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
   const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
   const { connections: serviceToServiceConnections, fetchConnectionsByWorkspace: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
+  const { connections: crossServiceConnections, fetchConnectionsByWorkspace: fetchCrossServiceConnections } = useCrossServiceConnections(currentWorkspace?.id);
 
   // Service handlers
   const handleServiceAdd = useCallback(() => {
@@ -1701,9 +1703,184 @@ export default function CMDBVisualization() {
       return edgeConfig;
     }).filter(Boolean);
 
+    // Create cross-service edges (service item to service item) with DOTTED style
+    const crossServiceEdges = (crossServiceConnections || []).map((conn) => {
+      const sourceServiceNodeId = `service-${conn.source_service_id}`;
+      const targetServiceNodeId = `service-${conn.target_service_id}`;
+
+      // Find service nodes in flowNodes
+      const sourceNode = flowNodes.find(n => n.id === sourceServiceNodeId);
+      const targetNode = flowNodes.find(n => n.id === targetServiceNodeId);
+
+      if (!sourceNode || !targetNode) {
+        console.warn('Service nodes not found for cross-service connection:', {
+          sourceServiceNodeId,
+          targetServiceNodeId,
+          conn
+        });
+        return null;
+      }
+
+      const edgeId = `cross-service-connection-${conn.id}`;
+      const isEdgeHidden = hiddenNodes.has(sourceServiceNodeId) || hiddenNodes.has(targetServiceNodeId);
+
+      // Get status from real-time services state
+      const sourceService = services.find(s => s.id === conn.source_service_id);
+      const targetService = services.find(s => s.id === conn.target_service_id);
+      const sourceStatus = sourceService?.status || 'active';
+      const targetStatus = targetService?.status || 'active';
+
+      let edgeStatus = 'active';
+      let showCrossMarker = false;
+
+      // Priority: inactive > maintenance > active
+      if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
+        edgeStatus = 'inactive';
+        showCrossMarker = true;
+      } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
+        edgeStatus = 'maintenance';
+      }
+
+      // Get color based on status
+      const getStrokeColor = (status) => {
+        switch (status) {
+          case 'active': return '#10b981';
+          case 'inactive': return '#ef4444';
+          case 'maintenance': return '#f59e0b';
+          default: return '#10b981';
+        }
+      };
+
+      const strokeColor = getStrokeColor(edgeStatus);
+
+      // Get handle positions - considering child node absolute positions
+      const getBestHandlePositions = (source, target) => {
+        const sourceParentId = source.parentNode;
+        const targetParentId = target.parentNode;
+
+        // Calculate absolute positions for child nodes
+        let sourceAbsX = source.position.x;
+        let sourceAbsY = source.position.y;
+        let targetAbsX = target.position.x;
+        let targetAbsY = target.position.y;
+
+        // If source is child node, add parent position
+        if (sourceParentId) {
+          const sourceParent = [...flowNodes, ...layananNodes].find(n => n.id === sourceParentId);
+          if (sourceParent) {
+            sourceAbsX += sourceParent.position.x;
+            sourceAbsY += sourceParent.position.y;
+          }
+        }
+
+        // If target is child node, add parent position
+        if (targetParentId) {
+          const targetParent = [...flowNodes, ...layananNodes].find(n => n.id === targetParentId);
+          if (targetParent) {
+            targetAbsX += targetParent.position.x;
+            targetAbsY += targetParent.position.y;
+          }
+        }
+
+        const dx = targetAbsX - sourceAbsX;
+        const dy = targetAbsY - sourceAbsY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        if (absDx > absDy) {
+          return dx > 0
+            ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+            : { sourceHandle: 'source-left', targetHandle: 'target-right' };
+        } else {
+          return dy > 0
+            ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+            : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+        }
+      };
+
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
+      const edgeConfig = {
+        id: edgeId,
+        source: sourceServiceNodeId,
+        target: targetServiceNodeId,
+        sourceHandle,
+        targetHandle,
+        type: 'smoothstep',
+        zIndex: 1002, // Higher than service-to-service edges (1001)
+        markerEnd: { type: 'arrowclosed', color: strokeColor },
+        style: {
+          stroke: strokeColor,
+          strokeWidth: 2,
+          strokeDasharray: '3,3', // DOTTED line untuk cross-service connections (service item level)
+          opacity: isEdgeHidden ? 0.2 : 1,
+        },
+        reconnectable: true,
+        updatable: true,
+        selectable: true,
+        hidden: isEdgeHidden,
+        data: {
+          connection_type: conn.connection_type,
+          source_service_id: conn.source_service_id,
+          target_service_id: conn.target_service_id,
+          source_service_item_id: conn.source_service_item_id,
+          target_service_item_id: conn.target_service_item_id,
+          isCrossServiceConnection: true, // Flag untuk identifikasi cross-service connection
+          propagation_enabled: conn.propagation_enabled
+        }
+      };
+
+      // Add cross marker if inactive
+      if (showCrossMarker) {
+        edgeConfig.label = `✕`;
+        edgeConfig.labelStyle = {
+          fill: strokeColor,
+          fontWeight: 'bold',
+          fontSize: 20,
+        };
+        edgeConfig.labelBgStyle = {
+          fill: 'transparent',
+          fillOpacity: 0
+        };
+        edgeConfig.labelBgPadding = [8, 8];
+        edgeConfig.labelBgBorderRadius = 50;
+      } else if (showConnectionLabels && conn.connection_type) {
+        const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+        const connectionTypeLabel = connectionTypeInfo ? connectionTypeInfo.label : null;
+
+        if (connectionTypeLabel) {
+          edgeConfig.label = connectionTypeLabel;
+          edgeConfig.labelStyle = {
+            fontSize: 11,
+            fontWeight: 500,
+            fill: strokeColor,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+          };
+          edgeConfig.labelBgStyle = {
+            fill: 'white',
+            fillOpacity: 0.9,
+          };
+          edgeConfig.labelBgPadding = [4, 6];
+          edgeConfig.labelBgBorderRadius = 4;
+        }
+      }
+
+      return edgeConfig;
+    }).filter(Boolean);
+
     setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
-    setEdges([...allEdges, ...serviceToServiceEdges]);
-  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, services, serviceItems]); // Added serviceItems dependency for real-time edge status updates
+    setEdges([...allEdges, ...serviceToServiceEdges, ...crossServiceEdges]);
+  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, crossServiceConnections, services, serviceItems]); // Added crossServiceConnections dependency for real-time edge status updates
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -1760,12 +1937,13 @@ export default function CMDBVisualization() {
     const handleCmdbUpdate = async () => {
       // Skip fetch if currently saving
       if (!isSavingRef.current) {
-        // Fetch CMDB data, layana data, layana-service connections, and service-to-service connections
+        // Fetch CMDB data, layana data, layana-service connections, service-to-service connections, and cross-service connections
         await Promise.all([
           fetchAll(),
           fetchLayanaAll(),
           fetchLayananServiceConnections(), // ✅ Tambah ini untuk layana-service edge realtime updates
-          fetchServiceToServiceConnections()
+          fetchServiceToServiceConnections(),
+          fetchCrossServiceConnections()
         ]);
       }
     };
@@ -2500,10 +2678,17 @@ export default function CMDBVisualization() {
     setShowQuickConnectionModal(true);
   }, [items, connections, groups, layananItems, layananConnections, services, serviceToServiceConnections]);
 
-  const handleSaveServiceConnection = useCallback(async (sourceServiceId, targetServiceId, connectionType) => {
+  const handleSaveServiceConnection = useCallback(async (sourceServiceId, targetServiceId, connectionType, options = {}) => {
     if (!currentWorkspace) return;
 
     try {
+      const {
+        connectionTargetType = 'service',
+        propagationEnabled = true,
+        sourceServiceItemId,
+        targetServiceItemId
+      } = options;
+
       // Find the parent CMDB item for the source service
       const sourceService = services.find(s => s.id === sourceServiceId);
       if (!sourceService) {
@@ -2511,26 +2696,56 @@ export default function CMDBVisualization() {
         return;
       }
 
-      const result = await api.post('/service-to-service-connections', {
-        cmdb_item_id: sourceService.cmdb_item_id, // Parent CMDB item ID
-        source_service_id: sourceServiceId,
-        target_service_id: targetServiceId,
-        connection_type: connectionType,
-        workspace_id: currentWorkspace.id
-      });
+      let result;
+
+      if (connectionTargetType === 'service_item') {
+        // Create service item to service item connection (cross-service connection)
+        if (!sourceServiceItemId || !targetServiceItemId) {
+          toast.error('Service item IDs are required for service item connections!');
+          return;
+        }
+
+        result = await api.post('/cross-service-connections', {
+          source_service_item_id: sourceServiceItemId,
+          target_service_item_id: targetServiceItemId,
+          source_service_id: sourceServiceId,
+          target_service_id: targetServiceId,
+          connection_type: connectionType,
+          propagation_enabled: propagationEnabled,
+          workspace_id: currentWorkspace.id
+        });
+
+        if (result.data) {
+          toast.success('Koneksi service item berhasil dibuat!');
+          await fetchCrossServiceConnections();
+        }
+      } else {
+        // Create service-to-service connection
+        result = await api.post('/service-to-service-connections', {
+          cmdb_item_id: sourceService.cmdb_item_id, // Parent CMDB item ID
+          source_service_id: sourceServiceId,
+          target_service_id: targetServiceId,
+          connection_type: connectionType,
+          propagation: propagationEnabled ? getConnectionTypeInfo(connectionType).propagation : 'none',
+          workspace_id: currentWorkspace.id
+        });
+
+        if (result.data) {
+          toast.success('Koneksi service-to-service berhasil dibuat!');
+          await fetchServiceToServiceConnections();
+        }
+      }
 
       if (result.data) {
-        toast.success('Koneksi service-to-service berhasil dibuat!');
-        await fetchServiceToServiceConnections();
         setShowServiceConnectionModal(false);
         setServiceConnectionSource(null);
         setServiceConnectionTarget(null);
       }
     } catch (error) {
-      console.error('Failed to create service-to-service connection:', error);
-      toast.error(error.response?.data?.error || 'Gagal membuat koneksi service-to-service');
+      console.error('Failed to create service connection:', error);
+      toast.error(error.response?.data?.error || 'Gagal membuat koneksi service');
     }
-  }, [currentWorkspace, fetchServiceToServiceConnections, services]);
+  }, [currentWorkspace, fetchServiceToServiceConnections, fetchCrossServiceConnections, services]);
 
   const handleSaveLayananServiceConnection = useCallback(async (connectionType, propagationEnabled = true) => {
     if (!currentWorkspace || !layananServiceSource || !layananServiceTarget) return;
@@ -2733,8 +2948,8 @@ export default function CMDBVisualization() {
         }
       }
 
-      // Fetch cmdb, layana, and service-to-service connections data
-      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections()]);
+      // Fetch cmdb, layana, service-to-service connections, and cross-service connections data
+      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections(), fetchCrossServiceConnections()]);
       setShowQuickConnectionModal(false);
       setQuickConnectionSource(null);
       setQuickConnectionTarget(null);
@@ -2742,7 +2957,7 @@ export default function CMDBVisualization() {
       console.error('Save connection error:', err);
       toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections, getConnectionDirection, saveEdgeHandle, edgeHandles]);
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections, fetchCrossServiceConnections, getConnectionDirection, saveEdgeHandle, edgeHandles]);
 
   // Edge Context Menu handlers
   const handleEdgeContextMenu = useCallback((event, edge) => {
@@ -2815,18 +3030,19 @@ export default function CMDBVisualization() {
       await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
 
-      // Fetch cmdb, layana, layanan-service, and service-to-service connections data
+      // Fetch cmdb, layana, layanan-service, service-to-service connections, and cross-service connections data
       await Promise.all([
         fetchAll(),
         fetchLayanaAll(),
         fetchLayananServiceConnections(),
-        fetchServiceToServiceConnections()
+        fetchServiceToServiceConnections(),
+        fetchCrossServiceConnections()
       ]);
     } catch (err) {
       console.error('Delete connection error:', err);
       toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchLayananServiceConnections, fetchServiceToServiceConnections]);
+  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchLayananServiceConnections, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
 
   const handleEditEdge = useCallback(() => {
     if (!edgeContextMenu.edge) return;
@@ -4776,6 +4992,7 @@ export default function CMDBVisualization() {
         onConnect={handleSaveServiceConnection}
         sourceService={serviceConnectionSource}
         targetService={serviceConnectionTarget}
+        workspaceId={currentWorkspace?.id}
       />
 
       <QuickLayananServiceConnection

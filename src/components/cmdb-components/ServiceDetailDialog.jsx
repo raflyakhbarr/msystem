@@ -42,6 +42,11 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
   const [serviceConnections, setServiceConnections] = useState([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
 
+  // Service item connections (cross-service) state
+  const [serviceItemConnections, setServiceItemConnections] = useState([]);
+  const [loadingServiceItemConnections, setLoadingServiceItemConnections] = useState(false);
+  const [allServiceItems, setAllServiceItems] = useState([]);
+
   // Connection type options
   const connectionTypes = [
     { value: 'depends_on', label: 'Depends On', color: 'bg-red-500' },
@@ -199,15 +204,95 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     fetchServiceConnections();
   }, [show, cmdbItem]);
 
+  // Fetch cross-service connections (service item to service item)
+  useEffect(() => {
+    if (!show || !service?.id) {
+      setServiceItemConnections([]);
+      return;
+    }
+
+    const fetchCrossServiceConnections = async () => {
+      setLoadingServiceItemConnections(true);
+      try {
+        const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+        const allConnections = response.data || [];
+
+        // Filter connections that involve this service
+        const relatedConnections = allConnections.filter(conn =>
+          conn.source_service_id === service.id || conn.target_service_id === service.id
+        );
+
+        setServiceItemConnections(relatedConnections);
+      } catch (err) {
+        console.error('Failed to fetch cross-service connections:', err);
+        setServiceItemConnections([]);
+      } finally {
+        setLoadingServiceItemConnections(false);
+      }
+    };
+
+    fetchCrossServiceConnections();
+  }, [show, service?.id, workspaceId]);
+
+  // Fetch all service items for display
+  useEffect(() => {
+    if (!show || !allServices.length) {
+      setAllServiceItems([]);
+      return;
+    }
+
+    const fetchAllServiceItems = async () => {
+      try {
+        const serviceItemsPromises = allServices.map(async (svc) => {
+          try {
+            const response = await api.get(`/service-items/${svc.id}/items`, {
+              params: { workspace_id: workspaceId }
+            });
+            return (response.data || []).map(item => ({
+              ...item,
+              service_id: svc.id,
+              service_name: svc.name,
+              cmdb_item_name: svc.cmdb_item_name
+            }));
+          } catch (err) {
+            console.error(`Failed to fetch service items for service ${svc.id}:`, err);
+            return [];
+          }
+        });
+
+        const allItemsArrays = await Promise.all(serviceItemsPromises);
+        const flatItems = allItemsArrays.flat();
+        setAllServiceItems(flatItems);
+      } catch (err) {
+        console.error('Failed to fetch service items:', err);
+        setAllServiceItems([]);
+      }
+    };
+
+    fetchAllServiceItems();
+  }, [show, allServices, workspaceId]);
+
   const handleConnectionUpdate = async () => {
     if (!cmdbItem) return;
 
-    // Refresh connections after modal closes
+    // Refresh service-to-service connections after modal closes
     try {
       const response = await api.get(`/service-to-service-connections/item/${cmdbItem.id}`);
       setServiceConnections(response.data || []);
     } catch (err) {
       console.error('Failed to refresh connections:', err);
+    }
+
+    // Also refresh cross-service connections
+    try {
+      const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+      const allConnections = response.data || [];
+      const relatedConnections = allConnections.filter(conn =>
+        conn.source_service_id === service.id || conn.target_service_id === service.id
+      );
+      setServiceItemConnections(relatedConnections);
+    } catch (err) {
+      console.error('Failed to refresh cross-service connections:', err);
     }
   };
 
@@ -224,6 +309,27 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
       toast.success('Connection deleted successfully!');
     } catch (err) {
       console.error('Failed to delete connection:', err);
+      toast.error(err.response?.data?.error || 'Failed to delete connection');
+    }
+  };
+
+  const handleDeleteServiceItemConnection = async (connectionId) => {
+    if (!confirm('Are you sure you want to delete this service item connection?')) return;
+
+    try {
+      await api.delete(`/cross-service-connections/${connectionId}`);
+
+      // Refresh cross-service connections
+      const response = await api.get(`/cross-service-connections/workspace/${workspaceId}`);
+      const allConnections = response.data || [];
+      const relatedConnections = allConnections.filter(conn =>
+        conn.source_service_id === service.id || conn.target_service_id === service.id
+      );
+      setServiceItemConnections(relatedConnections);
+
+      toast.success('Service item connection deleted successfully!');
+    } catch (err) {
+      console.error('Failed to delete service item connection:', err);
       toast.error(err.response?.data?.error || 'Failed to delete connection');
     }
   };
@@ -295,15 +401,36 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
           max-width: 1600px !important;
           width: 95vw !important;
         }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+        .scroll-smooth {
+          scroll-behavior: smooth;
+        }
+        .custom-scrollbar:hover {
+          scrollbar-width: thin;
+          scrollbar-color: #94a3b8 #f1f5f9;
+        }
       `}</style>
       <Dialog open={show} onOpenChange={onClose}>
         <DialogContent className="dialog-horizontal h-[85vh] p-0 gap-0 overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50">
           <DialogHeader className="sr-only">
             <DialogTitle>{service.name} - Service Details</DialogTitle>
           </DialogHeader>
-          <div className="flex h-full">
+          <div className="flex h-full min-h-0">
           {/* Left Panel - Service Information */}
-          <div className="w-[380px] bg-white border-r border-slate-200/60 flex flex-col">
+          <div className="w-[380px] bg-white border-r border-slate-200/60 flex flex-col min-h-0">
             {/* Header */}
             <div className="p-8 pb-6 space-y-6">
               {/* Icon and Title */}
@@ -348,7 +475,7 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
             <Separator className="bg-slate-200/60" />
 
             {/* Service Details */}
-            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 custom-scrollbar scroll-smooth">
               <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
                   Service Details
@@ -495,8 +622,8 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                         )}
                       </div>
                     ) : (
-                      <ScrollArea className="h-[200px] pr-4">
-                        <div className="space-y-2">
+                      <ScrollArea className="h-[240px] w-full pr-4 custom-scrollbar">
+                        <div className="space-y-2 pr-2">
                           {serviceConnections.map((conn) => {
                             const sourceService = allServices.find(s => s.id === conn.source_service_id);
                             const targetService = allServices.find(s => s.id === conn.target_service_id);
@@ -584,6 +711,94 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                         </div>
                       </div>
                     </div>
+                  )}
+                </div>
+              </>
+
+              {/* Service Item Connections (Cross-Service) */}
+              <>
+                <Separator className="bg-slate-200/60" />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Service Item Connections
+                    </h3>
+                    <Badge variant="secondary" className="text-xs">
+                      {serviceItemConnections.length} {serviceItemConnections.length !== 1 ? 'Connections' : 'Connection'}
+                    </Badge>
+                  </div>
+
+                  {loadingServiceItemConnections ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                    </div>
+                  ) : serviceItemConnections.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Network size={32} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-sm text-slate-500">No service item connections yet.</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Service item connections are created by dragging edges between service items.
+                      </p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[240px] w-full pr-4 custom-scrollbar">
+                      <div className="space-y-2 pr-2">
+                        {serviceItemConnections.map((conn) => {
+                          const sourceService = allServices.find(s => s.id === conn.source_service_id);
+                          const targetService = allServices.find(s => s.id === conn.target_service_id);
+                          const sourceServiceItem = allServiceItems.find(item => item.id === conn.source_service_item_id);
+                          const targetServiceItem = allServiceItems.find(item => item.id === conn.target_service_item_id);
+                          const connectionTypeConfig = connectionTypes.find(ct => ct.value === conn.connection_type);
+
+                          return (
+                            <div
+                              key={conn.id}
+                              className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-accent/5 transition-colors text-xs"
+                            >
+                              {/* Source Service Item */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-1 h-1 rounded-full bg-blue-500" />
+                                  <span className="font-medium truncate">{sourceServiceItem?.name || 'Unknown'}</span>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground truncate">
+                                  {sourceService?.name || 'Unknown Service'}
+                                </div>
+                              </div>
+
+                              {/* Connection Type */}
+                              <div className="flex flex-col items-center gap-0.5 px-2">
+                                <Badge className="text-[10px] px-1.5 py-0" variant="secondary">
+                                  {connectionTypeConfig?.label || conn.connection_type}
+                                </Badge>
+                                <span className="text-[10px] text-muted-foreground">→</span>
+                              </div>
+
+                              {/* Target Service Item */}
+                              <div className="flex-1 min-w-0 text-right">
+                                <div className="flex items-center gap-1.5 justify-end">
+                                  <span className="font-medium truncate">{targetServiceItem?.name || 'Unknown'}</span>
+                                  <div className="w-1 h-1 rounded-full bg-blue-500" />
+                                </div>
+                                <div className="text-[10px] text-muted-foreground truncate">
+                                  {targetService?.name || 'Unknown Service'}
+                                </div>
+                              </div>
+
+                              {/* Delete Button */}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteServiceItemConnection(conn.id)}
+                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
                   )}
                 </div>
               </>
