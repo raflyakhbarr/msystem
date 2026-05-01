@@ -1447,8 +1447,8 @@ export default function CMDBVisualization() {
         id: edgeId,
         source: layananNodeId,
         target: serviceNodeId, // Connect to Service Node (Level 2), not CMDB Item
-        sourceHandle: 'bottom',
-        targetHandle: 'target-top', // Service nodes use 'target-top' handle
+        sourceHandle: edgeHandles[edgeId]?.sourceHandle || 'bottom',
+        targetHandle: edgeHandles[edgeId]?.targetHandle || 'target-top', // Service nodes use 'target-top' handle
         type: 'smoothstep',
         animated: false,
         markerEnd: { type: 'arrowclosed', color: strokeColor },
@@ -1457,6 +1457,8 @@ export default function CMDBVisualization() {
           strokeWidth: 2,
           opacity: 1,
         },
+        reconnectable: true,
+        updatable: true, // Enable edge handle repositioning
         data: {
           connectionType: conn.connection_type || 'depends_on',
           showCrossMarker,
@@ -3000,6 +3002,12 @@ export default function CMDBVisualization() {
       if (isLayananServiceEdge) {
         // Layanan-service edge: DELETE /api/layanan-service-connections/:id
         const connectionId = String(edgeContextMenu.edge.id).replace('layana-service-edge-', '');
+        // Validate connectionId is a valid number before deleting
+        if (!connectionId || isNaN(Number(connectionId))) {
+          console.error('Invalid connection ID for layanan-service connection:', connectionId);
+          toast.error('Invalid connection ID');
+          return;
+        }
         deleteUrl = `/layanan-service-connections/${connectionId}`;
       } else if (isLayananEdge) {
         // Layanan edge: DELETE /api/layanan/connections/:id
@@ -4616,6 +4624,32 @@ export default function CMDBVisualization() {
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
             onReconnect={useCallback(async (oldEdge, newConnection) => {
+              // Validate that we have the required data before saving
+              if (!newConnection.sourceHandle || !newConnection.targetHandle) {
+                console.warn('onReconnect: Missing handle information, skipping save', { sourceHandle: newConnection.sourceHandle, targetHandle: newConnection.targetHandle });
+                // Still allow the visual reconnect
+                const newEdgeHandles = {
+                  ...edgeHandles,
+                  [oldEdge.id]: {
+                    sourceHandle: newConnection.source || 'right',
+                    targetHandle: newConnection.target || 'left',
+                  }
+                };
+                setEdgeHandles(newEdgeHandles);
+                setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+                return;
+              }
+
+              console.log('[onReconnect] Attempting to reconnect edge:', {
+                oldEdgeId: oldEdge.id,
+                oldSourceHandle: oldEdge.sourceHandle,
+                oldTargetHandle: oldEdge.targetHandle,
+                newSource: newConnection.source,
+                newSourceHandle: newConnection.sourceHandle,
+                newTarget: newConnection.target,
+                newTargetHandle: newConnection.targetHandle
+              });
+
               const newEdgeHandles = {
                 ...edgeHandles,
                 [oldEdge.id]: {
@@ -4623,6 +4657,8 @@ export default function CMDBVisualization() {
                   targetHandle: newConnection.targetHandle,
                 }
               };
+
+              console.log('[onReconnect] Saving new handle positions:', newEdgeHandles[oldEdge.id]);
 
               await saveEdgeHandle(
                 oldEdge.id,
@@ -4633,6 +4669,8 @@ export default function CMDBVisualization() {
 
               setEdgeHandles(newEdgeHandles);
               setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+
+              console.log('[onReconnect] Completed. Edge handles now:', newEdgeHandles);
             }, [edgeHandles, setEdges, currentWorkspace?.id])}
             onConnect={handleConnect}
             nodeTypes={nodeTypes}

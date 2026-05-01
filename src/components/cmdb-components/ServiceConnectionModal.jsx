@@ -27,6 +27,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
+import { toast } from 'sonner';
 
 // Connection Type Selector Component (Internal - for items/groups)
 function ConnectionTypeSelector({ value, onChange, size = "default" }) {
@@ -457,6 +458,16 @@ export default function ServiceConnectionModal({
   };
 
   const handleSaveCrossServiceConnections = async () => {
+    // Validate required data
+    if (!selectedItem?.id) {
+      console.error('❌ selectedItem.id is missing');
+      return { success: false, error: 'Service item not selected' };
+    }
+    if (!workspaceId) {
+      console.error('❌ workspaceId is missing');
+      return { success: false, error: 'Workspace ID is missing' };
+    }
+
     try {
       setIsLoadingCrossService(true);
 
@@ -501,9 +512,12 @@ export default function ServiceConnectionModal({
         }
       }
 
+      console.log('✅ Cross-service connections saved successfully');
       onCrossServiceSave && onCrossServiceSave();
+      return { success: true };
     } catch (error) {
-      console.error('Failed to save cross-service connections:', error);
+      console.error('❌ Failed to save cross-service connections:', error);
+      return { success: false, error: error.response?.data?.error || error.message };
     } finally {
       setIsLoadingCrossService(false);
     }
@@ -544,6 +558,20 @@ export default function ServiceConnectionModal({
   };
 
   const handleSaveLayananConnections = async () => {
+    // Validate required data
+    if (!selectedItem?.id) {
+      console.error('❌ selectedItem.id is missing');
+      return { success: false, error: 'Service item not selected' };
+    }
+    if (!workspaceId) {
+      console.error('❌ workspaceId is missing');
+      return { success: false, error: 'Workspace ID is missing' };
+    }
+    if (!selectedItem?.service_id) {
+      console.error('❌ selectedItem.service_id is missing:', selectedItem);
+      return { success: false, error: 'Service ID is missing from selected item' };
+    }
+
     try {
       setIsLoadingLayanan(true);
 
@@ -582,10 +610,13 @@ export default function ServiceConnectionModal({
         }
       }
 
+      console.log('✅ Layanan connections saved successfully');
       onLayananSave && onLayananSave(); // Call layana-specific callback
       onCrossServiceSave && onCrossServiceSave(); // Also call general callback for compatibility
+      return { success: true };
     } catch (error) {
-      console.error('Failed to save layanan connections:', error);
+      console.error('❌ Failed to save layanan connections:', error);
+      return { success: false, error: error.response?.data?.error || error.message };
     } finally {
       setIsLoadingLayanan(false);
     }
@@ -639,7 +670,7 @@ export default function ServiceConnectionModal({
                 Ke Groups ({selectedGroupConnections.length})
               </TabsTrigger>
               <TabsTrigger value="layana">
-                Ke Layana ({selectedLayananIds.length})
+                Ke Layanan ({selectedLayananIds.length})
               </TabsTrigger>
               <TabsTrigger value="external">
                 Ke Eksternal ({crossServiceSelectedIds.length})
@@ -1106,11 +1137,21 @@ export default function ServiceConnectionModal({
           <Button
             onClick={async () => {
               if (activeTab === 'layana') {
-                await handleSaveLayananConnections();
-                onClose(); // ✅ Tutup modal setelah save layana connections
+                const result = await handleSaveLayananConnections();
+                if (result?.success) {
+                  toast.success('Koneksi layanan berhasil disimpan!');
+                  onClose();
+                } else if (result?.error) {
+                  toast.error('Gagal menyimpan: ' + result.error);
+                }
               } else if (activeTab === 'external') {
-                await handleSaveCrossServiceConnections();
-                onClose(); // ✅ Tutup modal setelah save cross-service connections
+                const result = await handleSaveCrossServiceConnections();
+                if (result?.success) {
+                  toast.success('Koneksi eksternal berhasil disimpan!');
+                  onClose();
+                } else if (result?.error) {
+                  toast.error('Gagal menyimpan: ' + result.error);
+                }
               } else {
                 onSave(localItemTypes, localItemToGroupTypes);
               }
