@@ -395,8 +395,15 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           sourceNode = flowNodes.find(n => n.id === `service-${parentServiceId}`);
           sourceIdForEdge = `service-${parentServiceId}`; // Connect to parent service node
         } else {
-          console.warn('Could not find parent service for source service item:', conn.source_service_item_id);
-          return; // Skip this edge if we can't find the parent service
+          // Service item not in loaded services - this is normal when:
+          // 1. Service item belongs to inactive service
+          // 2. Service item belongs to service with inactive parent CMDB item
+          // 3. Service is filtered out from current view
+          // Skip this edge as the parent service node is not rendered
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`ℹ️ Skipping edge for service item ${conn.source_service_item_id}: parent service not in current view`);
+          }
+          return;
         }
       } else if (conn.source_service_id) {
         sourceNode = flowNodes.find(n => n.id === `service-${conn.source_service_id}`);

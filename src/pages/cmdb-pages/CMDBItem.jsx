@@ -1,10 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Pencil, Trash2, Link, Plus, Layers, Eye } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
 import { useWorkspace } from '../../hooks/cmdb-hooks/useWorkspace';
 import { useImageUpload } from '../../hooks/cmdb-hooks/useImageUpload';
+import { useServiceToServiceConnections } from '../../hooks/cmdb-hooks/useServiceToServiceConnections';
+import { useCrossServiceConnections } from '../../hooks/cmdb-hooks/useCrossServiceConnections';
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS } from '../../utils/cmdb-utils/constants';
 import { CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
 import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
@@ -105,17 +112,44 @@ export default function CMDBItem() {
     loading,
   } = useCMDB(currentWorkspace?.id, viewAllMode);
 
+  // Service-to-Service Connections Hook
+  const { connections: serviceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
+
+  // Cross-Service Connections Hook
+  const { connections: crossServiceConnections } = useCrossServiceConnections(currentWorkspace?.id);
+
   // Services state
   const [services, setServices] = useState({});
 
-  // Fetch services for all items
+  // Fetch services for all items WITH service items
   useEffect(() => {
     const fetchServices = async () => {
       const servicesMap = {};
       for (const item of items) {
         try {
           const res = await api.get(`/services/${item.id}`);
-          servicesMap[item.id] = res.data;
+          const services = res.data || [];
+
+          // Fetch service items for each service
+          const servicesWithItems = await Promise.all(
+            services.map(async (service) => {
+              try {
+                const itemsRes = await api.get(`/service-items/${service.id}/items?workspace_id=${currentWorkspace?.id}`);
+                return {
+                  ...service,
+                  service_items: itemsRes.data || []
+                };
+              } catch (err) {
+                console.error(`Failed to fetch service items for service ${service.id}:`, err);
+                return {
+                  ...service,
+                  service_items: []
+                };
+              }
+            })
+          );
+
+          servicesMap[item.id] = servicesWithItems;
         } catch (err) {
           console.error(`Failed to fetch services for item ${item.id}:`, err);
           servicesMap[item.id] = [];
@@ -124,10 +158,10 @@ export default function CMDBItem() {
       setServices(servicesMap);
     };
 
-    if (items.length > 0) {
+    if (items.length > 0 && currentWorkspace) {
       fetchServices();
     }
-  }, [items]);
+  }, [items, currentWorkspace]);
 
   const {
     selectedFiles,
@@ -574,9 +608,286 @@ export default function CMDBItem() {
   };
 
   const getConnectionInfo = (itemId) => {
-    const asSource = connections.filter(c => c.source_id === itemId).length;
-    const asTarget = connections.filter(c => c.target_id === itemId).length;
-    return { dependencies: asTarget, dependents: asSource };
+    const targetItemId = parseInt(itemId);
+
+    // Regular item-to-item connections (Level 1)
+    const itemToItemAsSource = connections.filter(c => parseInt(c.source_id) === targetItemId).length;
+    const itemToItemAsTarget = connections.filter(c => parseInt(c.target_id) === targetItemId).length;
+
+    // Service-to-service connections (Level 2)
+    const itemServices = services[itemId] || [];
+    let serviceToServiceCount = 0;
+    itemServices.forEach(service => {
+      const serviceConns = serviceToServiceConnections.filter(
+        c => parseInt(c.source_service_id) === parseInt(service.id) || parseInt(c.target_service_id) === parseInt(service.id)
+      );
+      serviceToServiceCount += serviceConns.length;
+    });
+
+    // Cross-service connections (Level 3)
+    let crossServiceCount = 0;
+    itemServices.forEach(service => {
+      if (service.service_items && Array.isArray(service.service_items)) {
+        service.service_items.forEach(serviceItem => {
+          const serviceItemConns = crossServiceConnections.filter(
+            c => parseInt(c.source_service_item_id) === parseInt(serviceItem.id) ||
+               parseInt(c.target_service_item_id) === parseInt(serviceItem.id)
+          );
+          crossServiceCount += serviceItemConns.length;
+        });
+      }
+    });
+
+    // TOTAL: All connections involving this item at any level
+    const total = itemToItemAsSource + itemToItemAsTarget + serviceToServiceCount + crossServiceCount;
+
+    console.log(`📊 [${items.find(i => i.id === itemId)?.name || itemId}] connInfo:`, {
+      itemToItemAsSource,
+      itemToItemAsTarget,
+      serviceToServiceCount,
+      crossServiceCount,
+      total,
+      servicesCount: itemServices.length,
+      allServiceItems: itemServices.reduce((acc, s) => acc + (s.service_items?.length || 0), 0)
+    });
+
+    return {
+      dependencies: itemToItemAsTarget,
+      dependents: itemToItemAsSource,
+      serviceConnections: serviceToServiceCount,
+      crossServiceConnections: crossServiceCount,
+      total
+    };
+  };
+
+  const getConnectionDetails = (itemId) => {
+    const itemServices = services[itemId] || [];
+    const targetItemId = parseInt(itemId);
+
+    // Get outgoing connections (as source)
+    const outgoingConnections = connections
+      .filter(c => {
+        const sourceId = c.source_id ? parseInt(c.source_id) : null;
+        const sourceServiceItemId = c.source_service_item_id ? parseInt(c.source_service_item_id) : null;
+        const targetId = c.target_id ? parseInt(c.target_id) : null;
+
+        // Check if this connection belongs to this CMDB item
+        let isFromThisItem = false;
+        if (sourceId === targetItemId) {
+          // Direct item-to-item connection
+          isFromThisItem = true;
+        } else if (sourceServiceItemId) {
+          // Service-item-to-item connection - check if service item belongs to this item's services
+          for (const service of itemServices) {
+            if (service.service_items && Array.isArray(service.service_items)) {
+              const hasThisServiceItem = service.service_items.some(si => parseInt(si.id) === sourceServiceItemId);
+              if (hasThisServiceItem) {
+                isFromThisItem = true;
+                break;
+              }
+            }
+          }
+        }
+
+        return isFromThisItem && targetId;
+      })
+      .map(conn => {
+        const targetItem = items.find(i => i.id === parseInt(conn.target_id));
+
+        // Get source info
+        let sourceName, sourceType;
+        if (conn.source_service_item_id) {
+          // This is a service-item-to-item connection
+          // Find the service item and its parent service
+          for (const [itemId, itemServices] of Object.entries(services)) {
+            const service = itemServices.find(s => s.service_items?.some(si => si.id === conn.source_service_item_id));
+            if (service) {
+              const serviceItem = service.service_items?.find(si => si.id === conn.source_service_item_id);
+              const parentItem = items.find(i => i.id === parseInt(itemId));
+              sourceName = `${parentItem?.name || 'Unknown'} > ${service.name} > ${serviceItem?.name || 'Unknown'}`;
+              sourceType = `Service Item (${serviceItem?.name || 'Unknown'})`;
+              break;
+            }
+          }
+        } else {
+          const sourceItem = items.find(i => i.id === parseInt(conn.source_id));
+          sourceName = sourceItem?.name || `Item ${conn.source_id}`;
+          sourceType = sourceItem?.type || 'Unknown';
+        }
+
+        return {
+          type: 'item-to-item',
+          direction: 'outgoing',
+          connectionType: conn.connection_type || 'depends_on',
+          sourceName,
+          sourceType,
+          targetName: targetItem?.name || `Item ${conn.target_id}`,
+          targetType: targetItem?.type || 'Unknown',
+          isServiceItemConnection: !!conn.source_service_item_id
+        };
+      });
+
+    // Get incoming connections (as target)
+    // Show ALL connections where target is this item, regardless of source
+    const incomingConnections = connections
+      .filter(c => {
+        const targetId = parseInt(c.target_id);
+
+        // Only check if target is this item
+        return targetId === targetItemId;
+      })
+      .map(conn => {
+        // Get source info
+        let sourceName, sourceType;
+        if (conn.source_service_item_id) {
+          // This is a service-item-to-item connection
+          // Find the service item and its parent service
+          for (const [itemId, itemServices] of Object.entries(services)) {
+            const service = itemServices.find(s => s.service_items?.some(si => si.id === conn.source_service_item_id));
+            if (service) {
+              const serviceItem = service.service_items?.find(si => si.id === conn.source_service_item_id);
+              const parentItem = items.find(i => i.id === parseInt(itemId));
+              sourceName = `${parentItem?.name || 'Unknown'} > ${service.name} > ${serviceItem?.name || 'Unknown'}`;
+              sourceType = `Service Item (${serviceItem?.name || 'Unknown'})`;
+              break;
+            }
+          }
+        } else {
+          const sourceItem = items.find(i => i.id === parseInt(conn.source_id));
+          sourceName = sourceItem?.name || `Item ${conn.source_id}`;
+          sourceType = sourceItem?.type || 'Unknown';
+        }
+
+        return {
+          type: 'item-to-item',
+          direction: 'incoming',
+          connectionType: conn.connection_type || 'depends_on',
+          sourceName,
+          sourceType,
+          isServiceItemConnection: !!conn.source_service_item_id
+        };
+      });
+
+    // Get service-to-service connections
+    const serviceConnections = [];
+    itemServices.forEach(service => {
+      const outgoingServiceConns = serviceToServiceConnections.filter(
+        c => parseInt(c.source_service_id) === parseInt(service.id)
+      );
+      outgoingServiceConns.forEach(conn => {
+        const targetService = itemServices.find(s => parseInt(s.id) === parseInt(conn.target_service_id));
+        if (targetService) {
+          serviceConnections.push({
+            type: 'service-to-service',
+            direction: 'outgoing',
+            sourceServiceName: service.name,
+            targetServiceName: targetService.name,
+            connectionType: conn.connection_type || 'depends_on'
+          });
+        }
+      });
+    });
+
+    // Get cross-service connections (both outgoing and incoming)
+    const crossServiceConns = [];
+    itemServices.forEach(service => {
+      if (service.service_items) {
+        service.service_items.forEach(serviceItem => {
+          // Outgoing cross-service connections
+          const outgoing = crossServiceConnections.filter(
+            c => parseInt(c.source_service_item_id) === parseInt(serviceItem.id)
+          );
+          outgoing.forEach(conn => {
+            // Find target service item info
+            let targetServiceItemName = 'Unknown';
+            let targetServiceName = 'Unknown';
+            let targetParentItemName = 'Unknown';
+
+            // Search through all items' services to find the target
+            for (const [itemId, itemServices] of Object.entries(services)) {
+              const targetService = itemServices.find(s => {
+                if (s.service_items) {
+                  return s.service_items.some(si => parseInt(si.id) === parseInt(conn.target_service_item_id));
+                }
+                return false;
+              });
+
+              if (targetService) {
+                const targetServiceItem = targetService.service_items.find(
+                  si => parseInt(si.id) === parseInt(conn.target_service_item_id)
+                );
+                const targetParentItem = items.find(i => i.id === parseInt(itemId));
+                targetServiceItemName = targetServiceItem?.name || 'Unknown';
+                targetServiceName = targetService.name;
+                targetParentItemName = targetParentItem?.name || 'Unknown';
+                break;
+              }
+            }
+
+            crossServiceConns.push({
+              type: 'cross-service',
+              direction: 'outgoing',
+              sourceServiceItemName: serviceItem.name,
+              sourceServiceName: service.name,
+              targetServiceItemName,
+              targetServiceName,
+              targetParentItemName,
+              connectionType: conn.connection_type || 'connects_to'
+            });
+          });
+
+          // Incoming cross-service connections
+          const incoming = crossServiceConnections.filter(
+            c => parseInt(c.target_service_item_id) === parseInt(serviceItem.id)
+          );
+          incoming.forEach(conn => {
+            // Find source service item info
+            let sourceServiceItemName = 'Unknown';
+            let sourceServiceName = 'Unknown';
+            let sourceParentItemName = 'Unknown';
+
+            // Search through all items' services to find the source
+            for (const [itemId, itemServices] of Object.entries(services)) {
+              const sourceService = itemServices.find(s => {
+                if (s.service_items) {
+                  return s.service_items.some(si => parseInt(si.id) === parseInt(conn.source_service_item_id));
+                }
+                return false;
+              });
+
+              if (sourceService) {
+                const sourceServiceItem = sourceService.service_items.find(
+                  si => parseInt(si.id) === parseInt(conn.source_service_item_id)
+                );
+                const sourceParentItem = items.find(i => i.id === parseInt(itemId));
+                sourceServiceItemName = sourceServiceItem?.name || 'Unknown';
+                sourceServiceName = sourceService.name;
+                sourceParentItemName = sourceParentItem?.name || 'Unknown';
+                break;
+              }
+            }
+
+            crossServiceConns.push({
+              type: 'cross-service',
+              direction: 'incoming',
+              sourceServiceItemName,
+              sourceServiceName,
+              sourceParentItemName,
+              targetServiceItemName: serviceItem.name,
+              targetServiceName: service.name,
+              connectionType: conn.connection_type || 'connects_to'
+            });
+          });
+        });
+      }
+    });
+
+    return {
+      outgoing: outgoingConnections,
+      incoming: incomingConnections,
+      serviceConnections,
+      crossServiceConnections: crossServiceConns
+    };
   };
 
   const columns = useMemo(
@@ -640,32 +951,104 @@ export default function CMDBItem() {
           const itemServices = services[item.id] || [];
           const count = itemServices.length;
           return (
-            <div className="flex items-center gap-2">
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                count === 0
-                  ? 'bg-gray-100 text-gray-600'
-                  : 'bg-blue-100 text-blue-700'
-              }`}>
-                {count} Service{count !== 1 ? 's' : ''}
-              </span>
-              {count > 0 && (
-                <div className="flex gap-1">
-                  {itemServices.slice(0, 3).map((service, idx) => (
-                    <div
-                      key={idx}
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        backgroundColor: service.status === 'active' ? '#22c55e' : '#ef4444'
-                      }}
-                      title={`${service.name} (${service.status})`}
-                    />
-                  ))}
-                  {count > 3 && (
-                    <span className="text-xs text-gray-500">+{count - 3}</span>
-                  )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <div className="cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      count === 0
+                        ? 'bg-gray-100 text-gray-600'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {count} Service{count !== 1 ? 's' : ''}
+                    </span>
+                    {count > 0 && (
+                      <div className="flex gap-1">
+                        {itemServices.slice(0, 3).map((service, idx) => (
+                          <div
+                            key={idx}
+                            className="w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor: service.status === 'active' ? '#22c55e' : '#ef4444'
+                            }}
+                          />
+                        ))}
+                        {count > 3 && (
+                          <span className="text-xs text-gray-500">+{count - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </PopoverTrigger>
+              {count > 0 && (
+                <PopoverContent className="w-96 max-h-[400px] overflow-y-auto" align="start" side="right">
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm border-b pb-2">Services & Items ({count})</h4>
+                    {itemServices.map((service) => (
+                      <div key={service.id} className="space-y-1">
+                        {/* Service Header - Always visible */}
+                        <div className="flex items-center justify-between p-2 bg-muted rounded">
+                          <div className="flex items-center gap-2 flex-1">
+                            <div className={`w-2 h-2 rounded-full ${
+                              service.status === 'active' ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
+                            <span className="font-medium text-sm">{service.name}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            service.status === 'active'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {service.status}
+                          </span>
+                        </div>
+
+                        {/* Service Items - Folder-like structure */}
+                        {service.service_items && service.service_items.length > 0 ? (
+                          <div className="ml-2">
+                            {service.service_items.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between py-1.5 px-2 text-xs hover:bg-muted/50 rounded"
+                              >
+                                <div className="flex items-center gap-2 flex-1">
+                                  {/* Indentation like folder structure */}
+                                  <span className="text-muted-foreground">├─</span>
+                                  <div className={`w-1.5 h-1.5 rounded-full ${
+                                    item.status === 'active'
+                                      ? 'bg-green-500'
+                                      : item.status === 'maintenance'
+                                      ? 'bg-yellow-500'
+                                      : 'bg-red-500'
+                                  }`} />
+                                  <span className="text-foreground">{item.name}</span>
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                  item.status === 'active'
+                                    ? 'bg-green-50 text-green-700'
+                                    : item.status === 'maintenance'
+                                    ? 'bg-yellow-50 text-yellow-700'
+                                    : 'bg-red-50 text-red-700'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="ml-6 pl-3 border-l-2 border-muted">
+                            <div className="py-1.5 px-2 text-xs text-muted-foreground italic">
+                              └─ No service items
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
               )}
-            </div>
+            </Popover>
           );
         },
       },
@@ -696,44 +1079,204 @@ export default function CMDBItem() {
         searchable: false,
         sortable: false,
         render: (item) => {
-          // Ambil semua koneksi dari item ini
-          const itemConnections = connections.filter(conn => conn.source_id === item.id);
+          const connInfo = getConnectionInfo(item.id);
+          const connDetails = getConnectionDetails(item.id);
 
-          if (itemConnections.length === 0) {
-            return <span className="text-gray-400 text-xs">Tidak ada koneksi</span>;
-          }
+          console.log(`🔍 [${item.name}] Item ID: ${item.id} (type: ${typeof item.id})`);
+          console.log(`   - Total connections: ${connInfo.total}`);
+          console.log(`   - Outgoing: ${connInfo.dependents}, Incoming: ${connInfo.dependencies}`);
+          console.log(`   - Service-to-Service: ${connInfo.serviceConnections}, Cross-Service: ${connInfo.crossServiceConnections}`);
 
-          // Group koneksi berdasarkan tipe
-          const connectionsByType = {};
-          itemConnections.forEach(conn => {
-            const type = conn.connection_type || 'depends_on';
-            if (!connectionsByType[type]) {
-              connectionsByType[type] = [];
+          // Get ALL service item IDs from all services of this item
+          const allServiceItemIds = [];
+          const itemServices = services[item.id] || [];
+          itemServices.forEach(service => {
+            if (service.service_items && Array.isArray(service.service_items)) {
+              service.service_items.forEach(si => {
+                allServiceItemIds.push(parseInt(si.id));
+              });
             }
-            connectionsByType[type].push(conn);
           });
 
+          console.log(`   - All connections for this item:`, connections.filter(c => {
+            const sid = c.source_id ? parseInt(c.source_id) : null;
+            const tid = c.target_id ? parseInt(c.target_id) : null;
+            const ssid = c.source_service_item_id ? parseInt(c.source_service_item_id) : null;
+            const tsid = c.target_service_item_id ? parseInt(c.target_service_item_id) : null;
+
+            // Match jika:
+            // 1. CMDB item sebagai source/target langsung
+            // 2. Service item ini (dari service item ID yang kita kumpulkan) terlibat
+            return sid === parseInt(item.id) || tid === parseInt(item.id) ||
+                   allServiceItemIds.includes(ssid) || allServiceItemIds.includes(tsid);
+          }));
+
+          console.log(`   - Outgoing details:`, connDetails.outgoing);
+          console.log(`   - Incoming details:`, connDetails.incoming);
+
           return (
-            <div className="space-y-1">
-              {Object.entries(connectionsByType).map(([type, conns]) => {
-                const connType = CONNECTION_TYPES[type] || CONNECTION_TYPES.depends_on;
-                return (
-                  <div
-                    key={type}
-                    className="flex items-center gap-2 text-xs"
-                    title={connType.description}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: connType.color }}
-                    />
-                    <span className="text-gray-700">
-                      {connType.label}: {conns.length}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <div className="cursor-pointer">
+                  {connInfo.total === 0 ? (
+                    <span className="text-gray-400 text-xs">Tidak ada koneksi</span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-3 text-xs"
+                    >
+                      Detail
+                    </Button>
+                  )}
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-[500px] max-h-[500px] overflow-y-auto" align="start" side="right">
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm border-b pb-2">Detail Koneksi: {item.name}</h4>
+
+                  {/* Outgoing Connections (As Source) */}
+                  {connDetails.outgoing.length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-blue-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        Menghubungi Ke ({connDetails.outgoing.length})
+                      </h5>
+                      <div className="space-y-1">
+                        {connDetails.outgoing.map((conn, idx) => (
+                          <div key={idx} className={`p-2 border rounded text-xs ${conn.isServiceItemConnection ? 'bg-indigo-50 border-indigo-200' : 'bg-blue-50 border-blue-200'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                {conn.isServiceItemConnection ? (
+                                  <>
+                                    <p className="font-medium text-foreground text-[10px] text-indigo-700">Via Service Item:</p>
+                                    <p className="text-foreground font-semibold">{conn.sourceName}</p>
+                                  </>
+                                ) : (
+                                  <p className="font-medium text-foreground">{conn.sourceName}</p>
+                                )}
+                                <p className="text-muted-foreground text-[10px]">Type: {conn.targetType}</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                                {conn.connectionType}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Incoming Connections (As Target) */}
+                  {connDetails.incoming.length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-green-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                        Menjadi Target Dari ({connDetails.incoming.length})
+                      </h5>
+                      <div className="space-y-1">
+                        {connDetails.incoming.map((conn, idx) => (
+                          <div key={idx} className={`p-2 border rounded text-xs ${conn.isServiceItemConnection ? 'bg-indigo-50 border-indigo-200' : 'bg-green-50 border-green-200'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                {conn.isServiceItemConnection ? (
+                                  <>
+                                    <p className="font-medium text-foreground text-[10px] text-indigo-700">Via Service Item:</p>
+                                    <p className="text-foreground font-semibold">{conn.sourceName}</p>
+                                  </>
+                                ) : (
+                                  <p className="font-medium text-foreground">{conn.sourceName}</p>
+                                )}
+                                <p className="text-muted-foreground text-[10px]">Type: {conn.sourceType}</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">
+                                {conn.connectionType}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service-to-Service Connections */}
+                  {connDetails.serviceConnections.length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-purple-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                        Service-to-Service ({connDetails.serviceConnections.length})
+                      </h5>
+                      <div className="space-y-1">
+                        {connDetails.serviceConnections.map((conn, idx) => (
+                          <div key={idx} className="p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-foreground">{conn.sourceServiceName} → {conn.targetServiceName}</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">
+                                {conn.connectionType}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cross-Service Connections - Outgoing */}
+                  {connDetails.crossServiceConnections.filter(c => c.direction === 'outgoing').length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-orange-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                        Cross-Service Outgoing ({connDetails.crossServiceConnections.filter(c => c.direction === 'outgoing').length})
+                      </h5>
+                      <div className="space-y-1">
+                        {connDetails.crossServiceConnections.filter(c => c.direction === 'outgoing').map((conn, idx) => (
+                          <div key={idx} className="p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-foreground">{conn.sourceServiceItemName}</p>
+                                <p className="text-muted-foreground text-[10px]">via {conn.sourceServiceName}</p>
+                                <p className="text-muted-foreground text-[10px]">→ {conn.targetServiceItemName} ({conn.targetParentItemName})</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]">
+                                {conn.connectionType}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cross-Service Connections - Incoming */}
+                  {connDetails.crossServiceConnections.filter(c => c.direction === 'incoming').length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        Cross-Service Incoming ({connDetails.crossServiceConnections.filter(c => c.direction === 'incoming').length})
+                      </h5>
+                      <div className="space-y-1">
+                        {connDetails.crossServiceConnections.filter(c => c.direction === 'incoming').map((conn, idx) => (
+                          <div key={idx} className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-foreground">{conn.sourceServiceItemName}</p>
+                                <p className="text-muted-foreground text-[10px]">from {conn.sourceParentItemName} via {conn.sourceServiceName}</p>
+                                <p className="text-muted-foreground text-[10px]">→ {conn.targetServiceItemName}</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px]">
+                                {conn.connectionType}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           );
         },
       },
@@ -801,7 +1344,7 @@ export default function CMDBItem() {
         ),
       },
     ],
-    [connections, groups, viewAllMode, workspaces, services] // TAMBAHKAN services ke dependencies
+    [connections, serviceToServiceConnections, crossServiceConnections, groups, viewAllMode, workspaces, services]
   );
 
   return (
