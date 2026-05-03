@@ -805,6 +805,7 @@ export const transformItemsToNodes = (items, groups) => {
         style: {
           width: dimensions.itemWidth,
           height: itemHeight,
+          zIndex: 100, // Base z-index for item nodes
         },
         draggable: false,
       });
@@ -819,6 +820,48 @@ export const transformItemsToNodes = (items, groups) => {
       : { x: Math.random() * 400 + 600, y: Math.random() * 300 };
 
     const itemNodeId = String(item.id);
+    const itemServices = servicesMap[item.id] || [];
+
+    // Calculate CMDB item dimensions based on service count (SAME LOGIC AS useFlowData)
+    const serviceCount = itemServices.length;
+    const baseItemHeight = 67; // Tinggi dasar item (header, divider, info)
+    const servicesPerRow = 3;
+
+    // Service node dimensions (MUST MATCH with transformServicesToNodes)
+    const serviceNodeWidth = 47;   // Lebar service node
+    const serviceNodeHeight = 47;   // Tinggi service node
+    const gapY = 10;                // Gap vertikal antar service nodes
+    const serviceRowHeight = serviceNodeHeight + gapY; // Total tinggi per baris = 57px
+
+    let itemHeight = baseItemHeight + 20; // +20px untuk services header dan padding
+    if (serviceCount > 0) {
+      const serviceRows = Math.ceil(serviceCount / servicesPerRow);
+
+      // Service nodes start at Y = 120 (see transformServicesToNodes)
+      // Calculate total height needed for service section
+      const serviceSectionStart = 120;
+      const serviceSectionHeight = serviceRows * serviceRowHeight;
+
+      // Add space for service section + extra padding at bottom
+      itemHeight = baseItemHeight + 20 + serviceSectionHeight + 15; // +15px extra padding di bawah
+    } else {
+      // Minimum height for "No services" text
+      itemHeight = baseItemHeight + 25;
+    }
+
+    // Calculate dynamic width based on service presence and type
+    // web_application type needs more width for URL display
+    const baseItemWidth = item.type === 'web_application' ? 220 : 150;
+    let itemWidth;
+    if (serviceCount === 0) {
+      itemWidth = baseItemWidth;
+    } else {
+      // With services: accommodate 3 services per row
+      // Each service is 47px + 10px gap = 57px per service
+      const horizontalPadding = 24; // 12px padding on each side
+      const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * gapY);
+      itemWidth = Math.max(baseItemWidth, serviceSectionWidth + horizontalPadding);
+    }
 
     flowNodes.push({
       id: itemNodeId,
@@ -833,11 +876,13 @@ export const transformItemsToNodes = (items, groups) => {
         category: item.category,
         location: item.location,
         env_type: item.env_type,
-        services: item.services || [],
+        services: itemServices,
         storage: item.storage || null,
       },
       style: {
-        zIndex: 1,
+        width: itemWidth,
+        height: itemHeight,
+        zIndex: 100, // Base z-index for item nodes
       },
       draggable: false,
     });
@@ -947,9 +992,97 @@ export const transformConnectionsWithPropagation = (
   // Calculate propagated statuses untuk warna edge yang tepat
   const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections);
 
-  // Process item-to-item and item-to-group connections
+  // Process item-to-item, item-to-group, and service-item-to-item connections
   connections.forEach((conn) => {
     if (conn.source_group_id) return; // Skip group-to-item, process separately
+
+    // Handle service-item-to-item connections
+    if (conn.source_service_item_id && conn.target_id) {
+      // Find the service item and its parent service
+      let sourceServiceItem = null;
+      let sourceService = null;
+      let parentItemId = null;
+
+      // Search through items to find the service item
+      for (const item of items) {
+        if (item.services) {
+          for (const service of item.services) {
+            if (service.service_items) {
+              const found = service.service_items.find(si => si.id === conn.source_service_item_id);
+              if (found) {
+                sourceServiceItem = found;
+                sourceService = service;
+                parentItemId = item.id;
+                break;
+              }
+            }
+          }
+          if (sourceServiceItem) break;
+        }
+      }
+
+      if (!sourceServiceItem || !sourceService) {
+        console.warn(`Service item not found for connection:`, conn);
+        return;
+      }
+
+      // Source is the parent service node (service items are not rendered as separate nodes)
+      const sourceId = `service-${sourceService.id}`;
+      const sourceNode = nodes.find(n => n.id === sourceId);
+
+      const targetId = String(conn.target_id);
+      const targetNode = nodes.find(n => n.id === targetId);
+
+      if (!sourceNode || !targetNode) {
+        console.warn(`Nodes not found for service-item-to-item connection:`, { sourceId, targetId });
+        return;
+      }
+
+      const edgeId = `eservice-item-${conn.source_service_item_id}-${conn.target_id}`;
+
+      // Use edgeHandles jika tersedia, fallback ke getBestHandlePositions
+      let sourceHandle, targetHandle;
+      if (edgeHandles[edgeId]) {
+        sourceHandle = edgeHandles[edgeId].sourceHandle;
+        targetHandle = edgeHandles[edgeId].targetHandle;
+      } else {
+        const handles = getBestHandlePositions(sourceNode, targetNode);
+        sourceHandle = handles.sourceHandle;
+        targetHandle = handles.targetHandle;
+      }
+
+      // Determine color based on service item status
+      const strokeColor = getStatusColor(sourceServiceItem.status || 'active', false);
+      const showCrossMarker = shouldShowCrossMarker(sourceServiceItem.status);
+
+      const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
+      const connectionTypeLabel = conn.connection_type ? connectionTypeInfo.label : null;
+
+      const edgeConfig = createEdgeConfig(
+        edgeId,
+        sourceId,
+        targetId,
+        sourceHandle,
+        targetHandle,
+        false, // isGroupConnection
+        strokeColor,
+        showCrossMarker,
+        false, // isHidden
+        conn.connection_type,
+        connectionTypeLabel
+      );
+
+      // Add service-item-to-item connection info to edge data
+      edgeConfig.data = {
+        ...edgeConfig.data,
+        sourceServiceItemId: conn.source_service_item_id,
+        sourceServiceItemName: sourceServiceItem.name,
+        isServiceItemToItemConnection: true
+      };
+
+      flowEdges.push(edgeConfig);
+      return;
+    }
 
     const sourceNode = nodes.find(n => n.id === String(conn.source_id));
 
@@ -1169,7 +1302,8 @@ export const transformServicesToNodes = (services, items, options = {}) => {
     onServiceClick = null,
     onServiceItemsClick = null,
     defaultWidth = 120,
-    defaultHeight = 80
+    defaultHeight = 80,
+    isSharedView = false
   } = options;
 
   if (!services || services.length === 0) {
@@ -1185,14 +1319,14 @@ export const transformServicesToNodes = (services, items, options = {}) => {
     servicesByItem[service.cmdb_item_id].push(service);
   });
 
-  // Services per row for auto-layout inside item
+  // Service node dimensions (MUST MATCH with useFlowData in CMDBVisualization)
   const servicesPerRow = 3;
-  const serviceNodeWidth = 55;  // Size for inside item (slightly larger)
-  const serviceNodeHeight = 55;
+  const serviceNodeWidth = 47;   // Same as CMDBVisualization (was 55)
+  const serviceNodeHeight = 47;   // Same as CMDBVisualization (was 55)
   const gapX = 10;
   const gapY = 10;
   const paddingX = 10;
-  const paddingY = 8;
+  const paddingY = 10;
 
   return services.map(service => {
     // Find parent CMDB item
@@ -1211,16 +1345,14 @@ export const transformServicesToNodes = (services, items, options = {}) => {
     let position = service.position;
 
     if (!position || (position.x === 0 && position.y === 0)) {
-      // Auto-layout position: services are placed below the main content area
-      // CMDB items have header (approx 70px) + content area
-      // Services start at y: 80 (below header/content area)
-
+      // Auto-layout position: Services section starts at Y = 120 (same as CMDBVisualization)
       const row = Math.floor(serviceIndex / servicesPerRow);
       const col = serviceIndex % servicesPerRow;
 
       // Position services inside the item
+      // Services section starts after base height (100px) + 20px padding = 120px
+      const startY = 120 + (row * (serviceNodeHeight + gapY));
       const startX = paddingX + (col * (serviceNodeWidth + gapX));
-      const startY = 80 + (row * (serviceNodeHeight + gapY)); // 80px below top (after divider)
 
       position = { x: startX, y: startY };
     }
@@ -1234,16 +1366,19 @@ export const transformServicesToNodes = (services, items, options = {}) => {
       data: {
         service: {
           ...service,
-          service_items_count: service.service_items_count || 0
+          service_items_count: service.service_items_count || 0,
+          // Include service_items for shared view (avoid API call)
+          service_items: service.service_items || []
         },
         cmdbItemName: parentItem?.name || null,
         cmdbItemId: service.cmdb_item_id,
         workspaceId: parentItem?.workspace_id || service.workspace_id,
-        width: serviceNodeWidth, // Smaller for inside item
+        width: serviceNodeWidth,
         height: serviceNodeHeight,
         onServiceClick: onServiceClick,
         onServiceItemsClick: onServiceItemsClick,
-        isInsideItem: true // Flag to indicate this is inside item
+        isInsideItem: true, // Flag to indicate this is inside item
+        isSharedView: isSharedView // Pass shared view flag
       },
       style: {
         width: serviceNodeWidth,

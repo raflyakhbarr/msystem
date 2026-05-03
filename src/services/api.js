@@ -191,12 +191,19 @@ export const getShareStats = async (id) => {
 /**
  * Get shared CMDB data (public endpoint - no auth required)
  */
-export const getSharedCmdb = async (token) => {
+export const getSharedCmdb = async (token, password = null) => {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+
+  // Add password to headers if provided
+  if (password) {
+    headers['X-Share-Password'] = password;
+  }
+
   const response = await fetch(`${CMDB_API_BASE_URL}/api/cmdb/shared/${token}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 
   if (!response.ok) {

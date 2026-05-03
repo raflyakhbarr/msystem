@@ -55,10 +55,11 @@ const STATUS_COLORS = {
  * - data.width: Lebar node (default: 120)
  * - data.height: Tinggi node (default: 80)
  * - data.isInsideItem: Apakah service node berada di dalam CMDB item
+ * - data.isSharedView: Apakah ini adalah shared view (read-only, no auth)
  * - data.selected: Apakah node sedang dipilih
  */
 export default function ServiceAsNode({ data, selected }) {
-  const { service, onServiceClick, onServiceItemsClick, cmdbItemName, isInsideItem } = data;
+  const { service, onServiceClick, onServiceItemsClick, cmdbItemName, isInsideItem, isSharedView } = data;
 
   const statusConfig = STATUS_COLORS[service.status] || STATUS_COLORS.active;
 
@@ -76,6 +77,16 @@ export default function ServiceAsNode({ data, selected }) {
 
   // Fetch service items data on mount (for badge display)
   useEffect(() => {
+    // In shared view, use pre-loaded service items from service.service_items
+    if (isSharedView) {
+      if (service.service_items && Array.isArray(service.service_items)) {
+        setServiceItems(service.service_items);
+      }
+      setFetchedServiceId(service.id);
+      return;
+    }
+
+    // In normal view, fetch from API
     const fetchServiceItemsOnMount = async () => {
       if (serviceItemsCount === 0) return;
 
@@ -101,13 +112,16 @@ export default function ServiceAsNode({ data, selected }) {
     };
 
     fetchServiceItemsOnMount();
-  }, [service.id, serviceItemsCount, data.workspaceId, data.service?.workspace_id]);
+  }, [service.id, serviceItemsCount, data.workspaceId, data.service?.workspace_id, isSharedView, service.service_items]);
 
-  // Listen to socket events for realtime service item updates
+  // Listen to socket events for realtime service item updates (skip in shared view)
   const { socket } = useSocket();
   const workspaceId = data.workspaceId || data.service?.workspace_id;
 
   useEffect(() => {
+    // Skip socket connections in shared view
+    if (isSharedView) return;
+
     if (!socket || !workspaceId) return;
 
     const handleServiceItemStatusUpdate = async (data) => {
@@ -155,7 +169,7 @@ export default function ServiceAsNode({ data, selected }) {
       socket.off('service_item_status_update', handleServiceItemStatusUpdate);
       socket.off('service_update', handleServiceUpdate);
     };
-  }, [socket, service.id, workspaceId]);
+  }, [socket, service.id, workspaceId, isSharedView]);
 
   // Calculate problematic items (inactive + maintenance) for badge
   const problematicItemsCount = useMemo(() => {
@@ -192,8 +206,11 @@ export default function ServiceAsNode({ data, selected }) {
     onServiceItemsClick?.(service);
   };
 
-  // Fetch service items on hover
+  // Fetch service items on hover (skip in shared view)
   const handleMouseEnter = async () => {
+    // Skip in shared view - data is already loaded
+    if (isSharedView) return;
+
     // Skip if already fetched for this service
     if (fetchedServiceId === service.id) {
       return;

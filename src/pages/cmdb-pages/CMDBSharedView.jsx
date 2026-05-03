@@ -35,8 +35,10 @@ import { transformItemsToNodes, transformConnectionsWithPropagation, getStatusCo
 import {
   calculatePropagatedStatuses
 } from '../../utils/cmdb-utils/statusPropagation';
+import { transformServicesToNodes } from '../../utils/cmdb-utils/flowHelpers';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
+import ServiceAsNode from '../../components/cmdb-components/ServiceAsNode';
 import PasswordDialog from '../../components/cmdb-components/PasswordDialog';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
@@ -46,6 +48,7 @@ import 'reactflow/dist/style.css';
 const nodeTypes = {
   custom: CustomNode,
   group: CustomGroupNode,
+  serviceAsNode: ServiceAsNode,
 };
 
 export default function CMDBSharedView() {
@@ -79,7 +82,17 @@ export default function CMDBSharedView() {
 
       // Transform items to nodes
       const transformedNodes = transformItemsToNodes(data.items, data.groups);
-      setNodes(transformedNodes);
+
+      // Transform services to nodes (including service items as child nodes)
+      const serviceNodes = transformServicesToNodes(
+        data.services || [],
+        data.items,
+        { isSharedView: true } // Pass shared view flag to avoid API calls
+      );
+
+      // Combine all nodes
+      const allNodes = [...transformedNodes, ...serviceNodes];
+      setNodes(allNodes);
 
       // Transform edge_handles array to object format for efficient lookup
       const edgeHandlesObject = {};
@@ -92,16 +105,245 @@ export default function CMDBSharedView() {
         });
       }
 
-      // Transform connections to edges WITH status propagation
-      const transformedEdges = transformConnectionsWithPropagation(
+      // Transform regular item-to-item connections to edges WITH status propagation
+      const itemEdges = transformConnectionsWithPropagation(
         data.connections,
         data.groupConnections || [],
         data.items,
         data.groups,
-        transformedNodes,
+        allNodes,
         edgeHandlesObject
       );
-      setEdges(transformedEdges);
+
+      // Helper function to get stroke color based on service status
+      const getStrokeColor = (status) => {
+        switch (status) {
+          case 'active': return '#10b981'; // Green
+          case 'inactive': return '#ef4444'; // Red
+          case 'maintenance': return '#f59e0b'; // Yellow/Orange
+          default: return '#10b981';
+        }
+      };
+
+      // Helper function to get best handle positions - considering child node absolute positions
+      const getBestHandlePositions = (source, target) => {
+        const sourceParentId = source.parentNode;
+        const targetParentId = target.parentNode;
+
+        // Calculate absolute positions for child nodes
+        let sourceAbsX = source.position.x;
+        let sourceAbsY = source.position.y;
+        let targetAbsX = target.position.x;
+        let targetAbsY = target.position.y;
+
+        // If source is child node, add parent position
+        if (sourceParentId) {
+          const sourceParent = allNodes.find(n => n.id === sourceParentId);
+          if (sourceParent) {
+            sourceAbsX += sourceParent.position.x;
+            sourceAbsY += sourceParent.position.y;
+          }
+        }
+
+        // If target is child node, add parent position
+        if (targetParentId) {
+          const targetParent = allNodes.find(n => n.id === targetParentId);
+          if (targetParent) {
+            targetAbsX += targetParent.position.x;
+            targetAbsY += targetParent.position.y;
+          }
+        }
+
+        const dx = targetAbsX - sourceAbsX;
+        const dy = targetAbsY - sourceAbsY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        if (absDx > absDy) {
+          return dx > 0
+            ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+            : { sourceHandle: 'source-left', targetHandle: 'target-right' };
+        } else {
+          return dy > 0
+            ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+            : { sourceHandle: 'source-top', targetHandle: 'target-bottom' };
+        }
+      };
+
+      // Transform service-to-service connections to edges with DASHED style
+      const serviceToServiceEdges = (data.serviceToServiceConnections || [])
+        .map(conn => {
+          const sourceId = `service-${conn.source_service_id}`;
+          const targetId = `service-${conn.target_service_id}`;
+
+          const sourceNode = allNodes.find(n => n.id === sourceId);
+          const targetNode = allNodes.find(n => n.id === targetId);
+
+          // Skip if nodes not found
+          if (!sourceNode || !targetNode) {
+            console.warn(`Service-to-service edge: nodes not found for ${sourceId} -> ${targetId}`);
+            return null;
+          }
+
+          // Get service status for color
+          const sourceService = (data.services || []).find(s => s.id === conn.source_service_id);
+          const targetService = (data.services || []).find(s => s.id === conn.target_service_id);
+          const sourceStatus = sourceService?.status || 'active';
+          const targetStatus = targetService?.status || 'active';
+
+          // Determine edge status (priority: inactive > maintenance > active)
+          let edgeStatus = 'active';
+          if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
+            edgeStatus = 'inactive';
+          } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
+            edgeStatus = 'maintenance';
+          }
+
+          const strokeColor = getStrokeColor(edgeStatus);
+
+          // Check if there's a saved handle preference
+          let sourceHandle, targetHandle;
+          const edgeId = `service-connection-${conn.id}`; // Use same format as CMDBVisualization
+          if (edgeHandlesObject[edgeId]) {
+            sourceHandle = edgeHandlesObject[edgeId].sourceHandle;
+            targetHandle = edgeHandlesObject[edgeId].targetHandle;
+          } else {
+            const handles = getBestHandlePositions(sourceNode, targetNode);
+            sourceHandle = handles.sourceHandle;
+            targetHandle = handles.targetHandle;
+          }
+
+          return {
+            id: edgeId,
+            source: sourceId,
+            target: targetId,
+            type: 'smoothstep',
+            animated: false,
+            zIndex: 1001, // Same as CMDBVisualization
+            markerEnd: { type: 'arrowclosed', color: strokeColor },
+            style: {
+              stroke: strokeColor,
+              strokeWidth: 2,
+              strokeDasharray: '8,4', // DASHED line untuk service-to-service
+            },
+            data: {
+              connectionType: conn.connection_type || 'depends_on',
+              sourceType: 'service',
+              targetType: 'service',
+            },
+            sourceHandle: sourceHandle,
+            targetHandle: targetHandle,
+            deletable: false,
+            selectable: true,
+            updatable: false,
+          };
+        })
+        .filter(Boolean); // Remove nulls
+
+      // Transform cross-service connections to edges with DOTTED style
+      // Note: Service items are not rendered as separate nodes, so we connect parent services instead
+      const crossServiceEdges = (data.crossServiceConnections || [])
+        .map(conn => {
+          // Find parent services for both service items
+          const sourceService = (data.services || []).find(s =>
+            s.service_items?.some(si => si.id === conn.source_service_item_id)
+          );
+          const targetService = (data.services || []).find(s =>
+            s.service_items?.some(si => si.id === conn.target_service_item_id)
+          );
+
+          if (!sourceService || !targetService) {
+            console.warn(`Cross-service edge: parent services not found for items ${conn.source_service_item_id} -> ${conn.target_service_item_id}`);
+            return null;
+          }
+
+          const sourceId = `service-${sourceService.id}`;
+          const targetId = `service-${targetService.id}`;
+
+          const sourceNode = allNodes.find(n => n.id === sourceId);
+          const targetNode = allNodes.find(n => n.id === targetId);
+
+          if (!sourceNode || !targetNode) {
+            console.warn(`Cross-service edge: nodes not found for ${sourceId} -> ${targetId}`);
+            return null;
+          }
+
+          // Get service status for color
+          const sourceStatus = sourceService?.status || 'active';
+          const targetStatus = targetService?.status || 'active';
+
+          // Determine edge status (priority: inactive > maintenance > active)
+          let edgeStatus = 'active';
+          if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
+            edgeStatus = 'inactive';
+          } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
+            edgeStatus = 'maintenance';
+          }
+
+          const strokeColor = getStrokeColor(edgeStatus);
+
+          // Check if there's a saved handle preference
+          let sourceHandle, targetHandle;
+          const edgeId = `cross-service-connection-${conn.id}`; // Use same format as CMDBVisualization
+          if (edgeHandlesObject[edgeId]) {
+            sourceHandle = edgeHandlesObject[edgeId].sourceHandle;
+            targetHandle = edgeHandlesObject[edgeId].targetHandle;
+          } else {
+            const handles = getBestHandlePositions(sourceNode, targetNode);
+            sourceHandle = handles.sourceHandle;
+            targetHandle = handles.targetHandle;
+          }
+
+          return {
+            id: edgeId,
+            source: sourceId,
+            target: targetId,
+            type: 'smoothstep',
+            animated: false,
+            zIndex: 1002, // Higher than service-to-service edges (same as CMDBVisualization)
+            markerEnd: { type: 'arrowclosed', color: strokeColor },
+            style: {
+              stroke: strokeColor,
+              strokeWidth: 2,
+              strokeDasharray: '3,3', // DOTTED line untuk cross-service connections
+            },
+            data: {
+              connectionType: conn.connection_type || 'connects_to',
+              sourceType: 'service',
+              targetType: 'service',
+              sourceServiceItemName: sourceService.service_items?.find(si => si.id === conn.source_service_item_id)?.name,
+              targetServiceItemName: targetService.service_items?.find(si => si.id === conn.target_service_item_id)?.name,
+            },
+            sourceHandle: sourceHandle,
+            targetHandle: targetHandle,
+            deletable: false,
+            selectable: true,
+            updatable: false,
+          };
+        })
+        .filter(Boolean); // Remove nulls
+
+      // Combine all edges
+      const allEdges = [...itemEdges, ...serviceToServiceEdges, ...crossServiceEdges];
+
+      console.log(`🔗 Edge rendering summary:`, {
+        itemEdges: itemEdges.length,
+        serviceToServiceEdges: serviceToServiceEdges.length,
+        crossServiceEdges: crossServiceEdges.length,
+        total: allEdges.length,
+        totalNodes: allNodes.length,
+        serviceNodes: serviceNodes.length
+      });
+
+      // Log sample edges for debugging
+      if (serviceToServiceEdges.length > 0) {
+        console.log('Sample service-to-service edge:', serviceToServiceEdges[0]);
+      }
+      if (crossServiceEdges.length > 0) {
+        console.log('Sample cross-service edge:', crossServiceEdges[0]);
+      }
+
+      setEdges(allEdges);
 
       // Setup socket for real-time updates
       setupSocket(data.workspace_id, token);
