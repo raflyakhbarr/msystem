@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Handle, Position } from 'reactflow';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -9,6 +9,7 @@ import {
 import ServiceIcon from './ServiceIcon';
 import { API_BASE_URL } from '@/utils/cmdb-utils/constants';
 import api from '@/services/api';
+import { useSocket } from '@/context/SocketContext';
 
 const STATUS_COLORS = {
   active: {
@@ -101,6 +102,60 @@ export default function ServiceAsNode({ data, selected }) {
 
     fetchServiceItemsOnMount();
   }, [service.id, serviceItemsCount, data.workspaceId, data.service?.workspace_id]);
+
+  // Listen to socket events for realtime service item updates
+  const { socket } = useSocket();
+  const workspaceId = data.workspaceId || data.service?.workspace_id;
+
+  useEffect(() => {
+    if (!socket || !workspaceId) return;
+
+    const handleServiceItemStatusUpdate = async (data) => {
+      const eventServiceId = parseInt(data.serviceId);
+      const eventWorkspaceId = parseInt(data.workspaceId);
+
+      // Only update if this event is for this service and workspace
+      if (eventServiceId === service.id && eventWorkspaceId === workspaceId) {
+        console.log(`📡 ServiceAsNode (${service.name}): service_item_status_update received, refreshing items...`);
+
+        try {
+          const res = await api.get(`/service-items/${service.id}/items?workspace_id=${workspaceId}`);
+          const items = res.data || [];
+          setServiceItems(items);
+          console.log(`✅ ServiceAsNode (${service.name}): updated ${items.length} service items`);
+        } catch (err) {
+          console.error('Failed to refresh service items:', err);
+        }
+      }
+    };
+
+    const handleServiceUpdate = async (data) => {
+      const eventServiceId = parseInt(data.serviceId);
+      const eventWorkspaceId = parseInt(data.workspaceId);
+
+      // Only update if this event is for this service and workspace
+      if (eventServiceId === service.id && eventWorkspaceId === workspaceId) {
+        console.log(`📡 ServiceAsNode (${service.name}): service_update received, refreshing items...`);
+
+        try {
+          const res = await api.get(`/service-items/${service.id}/items?workspace_id=${workspaceId}`);
+          const items = res.data || [];
+          setServiceItems(items);
+          console.log(`✅ ServiceAsNode (${service.name}): updated ${items.length} service items after service update`);
+        } catch (err) {
+          console.error('Failed to refresh service items after service update:', err);
+        }
+      }
+    };
+
+    socket.on('service_item_status_update', handleServiceItemStatusUpdate);
+    socket.on('service_update', handleServiceUpdate);
+
+    return () => {
+      socket.off('service_item_status_update', handleServiceItemStatusUpdate);
+      socket.off('service_update', handleServiceUpdate);
+    };
+  }, [socket, service.id, workspaceId]);
 
   // Calculate problematic items (inactive + maintenance) for badge
   const problematicItemsCount = useMemo(() => {

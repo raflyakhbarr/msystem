@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import api from '../../services/api';
 
-export const useVisualizationActions = (items, groups, layananItems, fetchAll, fetchLayanan) => {
+export const useVisualizationActions = (items, groups, fetchAll) => {
   const [alertDialog, setAlertDialog] = useState({
     show: false,
     title: '',
@@ -53,18 +53,13 @@ export const useVisualizationActions = (items, groups, layananItems, fetchAll, f
       const groupId = parseInt(node.id.replace('group-', ''));
       const group = groups.find(g => g.id === groupId);
       return { type: 'group', data: group };
-    } else if (node.type === 'layanan') {
-      // Find layanan data
-      const layananId = parseInt(node.id.replace('layanan-', ''));
-      const layanan = layananItems.find(l => l.id === layananId);
-      return { type: 'layanan', data: layanan };
     } else {
       // Find item data
       const itemId = parseInt(node.id);
       const item = items.find(i => i.id === itemId);
       return { type: 'item', data: item };
     }
-  }, [items, groups, layananItems]);
+  }, [items, groups]);
 
   const handleDeleteFromVisualization = useCallback((node) => {
     if (node.type === 'group') {
@@ -77,23 +72,6 @@ export const useVisualizationActions = (items, groups, layananItems, fetchAll, f
           try {
             await api.delete(`/groups/${groupId}`);
             await fetchAll();
-            return true;
-          } catch (err) {
-            alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
-            return false;
-          }
-        }
-      );
-    } else if (node.type === 'layanan') {
-      const layananId = parseInt(node.id.replace('layanan-', ''));
-
-      showAlert(
-        'Hapus Layanan',
-        'Apakah Anda yakin ingin menghapus layanan ini?',
-        async () => {
-          try {
-            await api.delete(`/layanan/${layananId}`);
-            await fetchLayanan();
             return true;
           } catch (err) {
             alert('Gagal menghapus: ' + (err.response?.data?.error || err.message));
@@ -119,18 +97,13 @@ export const useVisualizationActions = (items, groups, layananItems, fetchAll, f
         }
       );
     }
-  }, [fetchAll, fetchLayanan, showAlert]);
+  }, [fetchAll, showAlert]);
 
   const handleManageConnectionsFromVisualization = useCallback((node) => {
-    if (node.type === 'layanan') {
-      const layananId = parseInt(node.id.replace('layanan-', ''));
-      const layanan = layananItems.find(l => l.id === layananId);
-      return layanan;
-    }
     const itemId = parseInt(node.id);
     const item = items.find(i => i.id === itemId);
     return item;
-  }, [items, layananItems]);
+  }, [items]);
 
   const handleManageGroupConnectionsFromVisualization = useCallback((node) => {
     if (node.type !== 'group') return null;

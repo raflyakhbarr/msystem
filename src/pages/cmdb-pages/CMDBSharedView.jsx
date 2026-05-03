@@ -31,11 +31,9 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSharedCmdb } from '@/services/api';
-import { transformItemsToNodes, transformConnectionsWithPropagation } from '../../utils/cmdb-utils/flowHelpers';
+import { transformItemsToNodes, transformConnectionsWithPropagation, getStatusColor, shouldShowCrossMarker } from '../../utils/cmdb-utils/flowHelpers';
 import {
-  calculatePropagatedStatuses,
-  getStatusColor,
-  shouldShowCrossMarker
+  calculatePropagatedStatuses
 } from '../../utils/cmdb-utils/statusPropagation';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';

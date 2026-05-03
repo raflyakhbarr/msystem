@@ -8,28 +8,36 @@ export default function EdgeContextMenu({
   edge,
   sourceNode,
   targetNode,
-  servicesMap = {}, // Add servicesMap prop
-  serviceItems = {}, // Add serviceItems map for layana-service edges
+  servicesMap = {},
+  serviceItems = {},
   onEdit,
   onDelete,
   onClose,
 }) {
   if (!show || !edge) return null;
-  // Fix: Support both field names used by different edge types
-  // - Service-to-service edges use: connection_type (snake_case)
-  // - Layanan-service edges use: connectionType (camelCase)
+
   const connectionTypeKey = edge.data?.connection_type || edge.data?.connectionType || 'depends_on';
   const connectionType = CONNECTION_TYPES[connectionTypeKey] || CONNECTION_TYPES.depends_on;
 
-  // Check if this is a layana-service edge
-  const isLayanaServiceEdge = edge.id?.startsWith('layana-service-edge-');
+  const getServiceItemName = (nodeId, servicesMap) => {
+    const serviceItemId = String(nodeId).replace('service-item-', '');
+    // Search in all service items from all services
+    for (const itemServices of Object.values(servicesMap)) {
+      for (const service of itemServices) {
+        if (service.service_items) {
+          const serviceItem = service.service_items.find(si => String(si.id) === serviceItemId);
+          if (serviceItem) {
+            return serviceItem.name || 'Service Item';
+          }
+        }
+      }
+    }
+    return 'Service Item';
+  };
 
-  // FIX: Get service name from servicesMap if node is not available
   const getServiceName = (nodeType, nodeId) => {
     if (nodeType === 'service' || String(nodeId).startsWith('service-')) {
-      // Extract service ID from node ID
       const serviceId = String(nodeId).replace('service-', '');
-      // Search in servicesMap for the service
       for (const itemServices of Object.values(servicesMap)) {
         const service = itemServices.find(s => String(s.id) === serviceId);
         if (service) {
@@ -38,6 +46,67 @@ export default function EdgeContextMenu({
       }
       return 'Service';
     }
+    return null;
+  };
+
+  // Check if edge is a service-item connection by inspecting edge ID
+  const isSourceServiceItem = String(edge.source).startsWith('service-item-');
+  const isTargetServiceItem = String(edge.target).startsWith('service-item-');
+  const isSourceService = String(edge.source).startsWith('service-') && !isSourceServiceItem;
+  const isTargetService = String(edge.target).startsWith('service-') && !isTargetServiceItem;
+
+  // Extract service item ID from edge ID
+  // Edge ID format varies:
+  // - CMDB item to service item: e{source_id}-service-item-{serviceItemId} (e.g., e469-service-item-85)
+  // - Service to service item: e{service-id}-service-item-{serviceItemId} (e.g., e47-service-item-85)
+  // - Service item as source: eservice-item-{serviceItemId}-{targetId} (e.g., eservice-item-85-469)
+  const edgeIdStr = String(edge.id || '');
+  let edgeIdServiceItemId = null;
+
+  if (edgeIdStr.startsWith('eservice-item-')) {
+    // New format: eservice-item-{serviceItemId}-{targetId}
+    // Extract service item ID from the beginning
+    const match = edgeIdStr.match(/^eservice-item-(\d+)-/);
+    if (match) {
+      edgeIdServiceItemId = match[1];
+    }
+  } else if (edgeIdStr.includes('-service-item-')) {
+    // Old format: edge ID ends with "-service-item-{serviceItemId}"
+    const match = edgeIdStr.match(/-service-item-(\d+)$/);
+    if (match) {
+      edgeIdServiceItemId = match[1];
+    }
+  }
+
+  // Find service item name by searching all services' service_items
+  // Searches both servicesMap (by cmdb_item_id with nested service_items)
+  // and serviceItems (by service id, where each key maps to an array of service items)
+  const findServiceItemName = (serviceItemId) => {
+    if (!serviceItemId) return null;
+
+    // Search in servicesMap first (keyed by cmdb_item_id)
+    // Each service in servicesMap may have a service_items array
+    for (const itemServices of Object.values(servicesMap)) {
+      for (const service of itemServices) {
+        if (service.service_items && Array.isArray(service.service_items)) {
+          const serviceItem = service.service_items.find(si => String(si.id) === serviceItemId);
+          if (serviceItem) {
+            return serviceItem.name || 'Service Item';
+          }
+        }
+      }
+    }
+
+    // Search in serviceItems (keyed by service id - each value is array of service items)
+    for (const serviceItemsArray of Object.values(serviceItems)) {
+      if (Array.isArray(serviceItemsArray)) {
+        const serviceItem = serviceItemsArray.find(si => String(si.id) === serviceItemId);
+        if (serviceItem) {
+          return serviceItem.name || 'Service Item';
+        }
+      }
+    }
+
     return null;
   };
 
@@ -64,7 +133,6 @@ export default function EdgeContextMenu({
   const glassSize = (radius + 40) * 2;
 
   const getDirectionIcon = () => {
-    // Selalu arrow ke kanan (source → target) untuk semua tipe kecuali 'both'
     switch (connectionType.propagation) {
       case 'both':
         return <ArrowRightLeft className="h-3 w-3" />;
@@ -81,83 +149,81 @@ export default function EdgeContextMenu({
   };
 
   const getConnectionName = (node, nodeType, nodeId) => {
-    // First try to get name from node itself
-    if (node) {
-      // Check if it's a serviceAsNode (service rendered inside CustomNode)
-      if (node.type === 'serviceAsNode' || node.id.startsWith('service-')) {
-        return node.data?.service?.name || node.data?.name || 'Service';
-      }
+    if (!node) return 'Unknown';
 
-      // Check if it's a layanan node
-      if (node.type === 'layanan' || String(node.id).startsWith('layanan-')) {
-        return node.data?.name || 'Layanan';
-      }
+    const nodeIdStr = String(node.id || '');
+    const nodeIsServiceItem = nodeIdStr.startsWith('service-item-');
+    const nodeIsService = nodeIdStr.startsWith('service-') && !nodeIsServiceItem;
 
-      // Default CMDB item
-      return node.data?.name || 'Node';
+    // Use the edgeIdServiceItemId that was extracted earlier (from line 64-81)
+    let serviceItemTargetId = edgeIdServiceItemId;
+
+    // Case 1: Node is explicitly a service item node (not common in CMDBVisualization)
+    if (nodeIsServiceItem) {
+      const serviceItemId = nodeIdStr.replace('service-item-', '');
+      return findServiceItemName(serviceItemId) || 'Service Item';
     }
 
-    // If node is not available, get from edge data
-    if (edge.data) {
-      if (edge.data.source_type === 'service' && edge.source === nodeId) {
-        return getServiceName(edge.data.source_type, edge.data.source_id);
-      }
-      if (edge.data.target_type === 'service' && edge.target === nodeId) {
-        return getServiceName(edge.data.target_type, edge.data.target_id);
+    // Case 2: Edge connects to a service item
+    // The edge ID tells us the actual service item ID (even if target appears as service node in CMDBVisualization)
+    if (serviceItemTargetId) {
+      const isSourceNode = String(edge.source) === nodeIdStr;
+
+      if (nodeIsService) {
+        if (isSourceNode) {
+          // We're the source of the connection
+          // Edge ID format: e{source}-service-item-{targetServiceItemId}
+          // If source is service, it means: Service -> Service Item (user selected service item as source from service)
+          // OR: Service -> Item (where edge.data.serviceItemId is set)
+          // We need to show the SERVICE ITEM NAME if available, not the service name
+
+          // Check if edge.data has serviceItemId (set by useFlowData)
+          let serviceItemNameToUse = null;
+          if (edge.data?.serviceItemId) {
+            serviceItemNameToUse = findServiceItemName(edge.data.serviceItemId);
+          } else if (serviceItemTargetId) {
+            serviceItemNameToUse = findServiceItemName(serviceItemTargetId);
+          }
+
+          if (serviceItemNameToUse) {
+            return serviceItemNameToUse;
+          }
+          // Fallback to service name if service item not found
+          return node.data?.service?.name || node.data?.name || 'Service';
+        } else {
+          // We're the target of the connection (edge goes TO this service node which represents a service item)
+          // Show the actual service item name
+          const serviceItemName = findServiceItemName(serviceItemTargetId);
+          return serviceItemName || 'Service Item';
+        }
+      } else {
+        // This is NOT a service node (CMDB item or other)
+        if (isSourceNode) {
+          // We're the source - show our item name
+          return node.data?.name || 'Item';
+        } else {
+          // We're the target (edge goes TO us) - we're the non-service end
+          return node.data?.name || 'Item';
+        }
       }
     }
 
-    return 'Unknown';
+    // Case 3: Regular service node (no service-item edge)
+    if (node.type === 'serviceAsNode' || node.id.startsWith('service-')) {
+      return node.data?.service?.name || node.data?.name || 'Service';
+    }
+
+    return node.data?.name || 'Node';
   };
 
-  // Get service item name for layana-service edges
-  const getServiceItemName = () => {
-    if (!isLayanaServiceEdge) {
-      return null;
-    }
-
-    // Get service item name directly from edge data (stored as simple string)
-    const serviceItemName = edge.data?.service_item_name;
-
-    if (!serviceItemName) {
-      console.log('❌ Service item name not found in edge data:', {
-        edgeId: edge.id,
-        edgeDataKeys: edge.data ? Object.keys(edge.data) : 'no data',
-        edgeData: edge.data
-      });
-      return 'Service Item';
-    }
-
-    console.log('✅ Found service item name:', serviceItemName);
-    return serviceItemName;
-  };
-
-  // Get detailed connection label for layana-service edges
   const getConnectionLabel = () => {
-    if (!isLayanaServiceEdge) {
-      // Default label for non-layana-service edges
-      return (
-        <div className="flex items-center gap-2">
-          {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
-          <span className="flex items-center" style={{ color: connectionType.color }}>
-            {getDirectionIcon()}
-          </span>
-          {getConnectionName(targetNode, edge.data?.target_type, edge.target)}
-        </div>
-      );
-    }
-
-    // Detailed label for layana-service edges
-    // Show: Layanan -> Service Item (not Service)
-    const serviceItemName = getServiceItemName();
-
     return (
       <div className="flex items-center gap-2">
         {getConnectionName(sourceNode, edge.data?.source_type, edge.source)}
         <span className="flex items-center" style={{ color: connectionType.color }}>
           {getDirectionIcon()}
         </span>
-        <span className="font-semibold">{serviceItemName || 'Service Item'}</span>
+        {getConnectionName(targetNode, edge.data?.target_type, edge.target)}
       </div>
     );
   };
@@ -202,7 +268,7 @@ export default function EdgeContextMenu({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: -70 }}
           exit={{ opacity: 0 }}
-          className={`absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-10 max-w-xs overflow-hidden ${isLayanaServiceEdge ? 'py-2' : ''}`}
+          className="absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 pointer-events-none bottom-10 max-w-xs overflow-hidden"
           style={{
             background: 'rgba(255,255,255,0.6)',
             border: '1px solid rgba(255,255,255,0.8)',
@@ -250,7 +316,7 @@ export default function EdgeContextMenu({
         {/* Radial item buttons */}
         <AnimatePresence>
           {items.map((item, index) => {
-            const angle = index * angleStep;   
+            const angle = index * angleStep;
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
 

@@ -269,8 +269,7 @@ export default function ServiceConnectionModal({
   onSave,
   // Cross-Service props
   workspaceId,
-  onCrossServiceSave,
-  onLayananSave // Callback for layana connections save
+  onCrossServiceSave
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('items');
@@ -288,13 +287,6 @@ export default function ServiceConnectionModal({
   const [isLoadingCrossService, setIsLoadingCrossService] = useState(false);
   const [openCmdbGroups, setOpenCmdbGroups] = useState({});
   const [openServices, setOpenServices] = useState({});
-
-  // Layana connection state
-  const [layananSearch, setLayananSearch] = useState('');
-  const [availableLayananItems, setAvailableLayananItems] = useState([]);
-  const [selectedLayananIds, setSelectedLayananIds] = useState([]);
-  const [layananTypesMap, setLayananTypesMap] = useState({});
-  const [isLoadingLayanan, setIsLoadingLayanan] = useState(false);
 
   // Sync local state with props when modal opens
   useEffect(() => {
@@ -379,43 +371,6 @@ export default function ServiceConnectionModal({
     };
 
     fetchCrossServiceData();
-  }, [activeTab, workspaceId, selectedItem]);
-
-  // Fetch layana data when tab switches to 'layana'
-  useEffect(() => {
-    const fetchLayanaData = async () => {
-      if (activeTab === 'layana' && workspaceId && selectedItem) {
-        setIsLoadingLayanan(true);
-        try {
-          // Fetch available layana items
-          const layanaResponse = await api.get(`/layanan?workspace_id=${workspaceId}`);
-          setAvailableLayananItems(layanaResponse.data || []);
-
-          // Fetch existing layana-service connections for this service item
-          const existingResponse = await api.get(`/layanan-service-connections/service-item/${selectedItem.id}`);
-          const existingConnections = existingResponse.data;
-
-          const selectedIds = existingConnections.map(conn => conn.layanan_id);
-          setSelectedLayananIds(selectedIds);
-
-          const typesMap = {};
-          existingConnections.forEach(conn => {
-            typesMap[conn.layanan_id] = {
-              type: conn.connection_type,
-              propagationEnabled: conn.propagation_enabled,
-              id: conn.id
-            };
-          });
-          setLayananTypesMap(typesMap);
-        } catch (error) {
-          console.error('Failed to fetch layana data:', error);
-        } finally {
-          setIsLoadingLayanan(false);
-        }
-      }
-    };
-
-    fetchLayanaData();
   }, [activeTab, workspaceId, selectedItem]);
 
   const handleItemTypeChange = (itemId, typeSlug) => {
@@ -518,107 +473,6 @@ export default function ServiceConnectionModal({
     } catch (error) {
       console.error('❌ Failed to save cross-service connections:', error);
       return { success: false, error: error.response?.data?.error || error.message };
-    } finally {
-      setIsLoadingCrossService(false);
-    }
-  };
-
-  // Layana handlers
-  const handleLayanaToggle = (layananId) => {
-    setSelectedLayananIds(prev => {
-      if (prev.includes(layananId)) {
-        setLayananTypesMap(prevMap => {
-          const newMap = { ...prevMap };
-          delete newMap[layananId];
-          return newMap;
-        });
-        return prev.filter(id => id !== layananId);
-      } else {
-        setLayananTypesMap(prevMap => ({
-          ...prevMap,
-          [layananId]: { type: 'depends_on', propagationEnabled: true }
-        }));
-        return [...prev, layananId];
-      }
-    });
-  };
-
-  const handleLayanaTypeChange = (layananId, typeSlug) => {
-    setLayananTypesMap(prev => ({
-      ...prev,
-      [layananId]: { ...prev[layananId], type: typeSlug }
-    }));
-  };
-
-  const handleLayanaPropagationToggle = (layananId) => {
-    setLayananTypesMap(prev => ({
-      ...prev,
-      [layananId]: { ...prev[layananId], propagationEnabled: !prev[layananId]?.propagationEnabled }
-    }));
-  };
-
-  const handleSaveLayananConnections = async () => {
-    // Validate required data
-    if (!selectedItem?.id) {
-      console.error('❌ selectedItem.id is missing');
-      return { success: false, error: 'Service item not selected' };
-    }
-    if (!workspaceId) {
-      console.error('❌ workspaceId is missing');
-      return { success: false, error: 'Workspace ID is missing' };
-    }
-    if (!selectedItem?.service_id) {
-      console.error('❌ selectedItem.service_id is missing:', selectedItem);
-      return { success: false, error: 'Service ID is missing from selected item' };
-    }
-
-    try {
-      setIsLoadingLayanan(true);
-
-      const existingResponse = await api.get(`/layanan-service-connections/service-item/${selectedItem.id}`);
-      const existingConnections = existingResponse.data;
-      const existingIds = existingConnections.map(conn => conn.layanan_id);
-
-      // Delete removed connections
-      for (const layananId of existingIds) {
-        if (!selectedLayananIds.includes(layananId)) {
-          const connData = existingConnections.find(c => c.layanan_id === layananId);
-          if (connData) {
-            await api.delete(`/layanan-service-connections/${connData.id}`);
-          }
-        }
-      }
-
-      // Create or update connections
-      for (const layananId of selectedLayananIds) {
-        const connData = layananTypesMap[layananId];
-        if (connData && connData.id) {
-          await api.put(`/layanan-service-connections/${connData.id}`, {
-            connection_type: connData.type,
-            propagation_enabled: connData.propagationEnabled
-          });
-        } else {
-          // Get service_id from selectedItem (service item should have service_id)
-          await api.post('/layanan-service-connections', {
-            layanan_id: layananId,
-            service_id: selectedItem.service_id,
-            service_item_id: selectedItem.id,
-            workspace_id: workspaceId,
-            connection_type: connData?.type || 'depends_on',
-            propagation_enabled: connData?.propagationEnabled !== false
-          });
-        }
-      }
-
-      console.log('✅ Layanan connections saved successfully');
-      onLayananSave && onLayananSave(); // Call layana-specific callback
-      onCrossServiceSave && onCrossServiceSave(); // Also call general callback for compatibility
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Failed to save layanan connections:', error);
-      return { success: false, error: error.response?.data?.error || error.message };
-    } finally {
-      setIsLoadingLayanan(false);
     }
   };
 
@@ -658,19 +512,16 @@ export default function ServiceConnectionModal({
             setSearchQuery('');
             if (newTab === 'external') {
               setCrossServiceSearch('');
-            } else if (newTab === 'layana') {
-              setLayananSearch('');
+            } else if (newTab === 'external') {
+              setCrossServiceSearch('');
             }
           }} className="flex-1 flex flex-col min-h-0 pt-5">
-            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
               <TabsTrigger value="items">
                 Ke Items ({selectedConnections.length})
               </TabsTrigger>
               <TabsTrigger value="groups">
                 Ke Groups ({selectedGroupConnections.length})
-              </TabsTrigger>
-              <TabsTrigger value="layana">
-                Ke Layanan ({selectedLayananIds.length})
               </TabsTrigger>
               <TabsTrigger value="external">
                 Ke Eksternal ({crossServiceSelectedIds.length})
@@ -814,128 +665,7 @@ export default function ServiceConnectionModal({
               </div>
             </TabsContent>
 
-            {/* TAB 3: Layana Connections */}
-            <TabsContent value="layana" className="flex-1 overflow-hidden flex flex-col mt-4 min-h-0">
-              <div className="space-y-3 px-1">
-                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200 flex-shrink-0">
-                  <p className="text-xs text-muted-foreground">Koneksi ke layanan (business service)</p>
-                </div>
-
-                {selectedLayananIds.length > 0 && (
-                  <div className="p-3 border rounded-lg bg-purple-50 border-purple-500 flex-shrink-0">
-                    <p className="font-semibold text-sm mb-3">Layanan Terpilih ({selectedLayananIds.length})</p>
-                    <div className="space-y-3 max-h-48 overflow-y-auto">
-                      {availableLayananItems
-                        .filter(layanan => selectedLayananIds.includes(layanan.id))
-                        .slice(0, 10)
-                        .map((layanan) => {
-                          const layananTypeId = layananTypesMap[layanan.id]?.type || 'depends_on';
-
-                          return (
-                            <div
-                              key={`selected-${layanan.id}`}
-                              className="p-3 bg-white rounded-lg border border-purple-200"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-2 flex-1">
-                                  <Checkbox
-                                    checked={true}
-                                    onCheckedChange={() => handleLayanaToggle(layanan.id)}
-                                  />
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <Globe className="h-4 w-4 text-purple-600" />
-                                      <span className="text-sm font-medium">{layanan.name}</span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Status: {layanan.status}
-                                    </div>
-
-                                    {/* Connection Type Selector */}
-                                    <div className="mt-2">
-                                      <ConnectionTypeSelector
-                                        value={layananTypeId}
-                                        onChange={(typeSlug) => handleLayanaTypeChange(layanan.id, typeSlug)}
-                                        size="small"
-                                      />
-                                    </div>
-
-                                    {/* Propagation Toggle */}
-                                    <div className="mt-2 flex items-center gap-2">
-                                      <Checkbox
-                                        checked={layananTypesMap[layanan.id]?.propagationEnabled !== false}
-                                        onCheckedChange={() => handleLayanaPropagationToggle(layanan.id)}
-                                      />
-                                      <span className="text-xs text-muted-foreground">
-                                        Propagasi status
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-                <Input
-                  type="text"
-                  placeholder="Cari layanan..."
-                  value={layananSearch}
-                  onChange={(e) => setLayananSearch(e.target.value)}
-                  className="flex-shrink-0"
-                />
-
-                <div className="overflow-y-auto px-1" style={{ maxHeight: 'calc(90vh - 400px)' }}>
-                {isLoadingLayanan ? (
-                  <p className="text-center py-8 text-muted-foreground text-sm">Loading...</p>
-                ) : (
-                  <div className="space-y-1">
-                    {availableLayananItems
-                      .filter(layanan =>
-                        !selectedLayananIds.includes(layanan.id) && (
-                          !layananSearch ||
-                          layanan.name.toLowerCase().includes(layananSearch.toLowerCase()) ||
-                          String(layanan.id).includes(layananSearch)
-                        )
-                      )
-                      .map((layanan) => {
-                        const isSelected = selectedLayananIds.includes(layanan.id);
-
-                        return (
-                          <div
-                            key={layanan.id}
-                            onClick={() => handleLayanaToggle(layanan.id)}
-                            className="flex items-center gap-2 p-2 hover:bg-secondary rounded-lg cursor-pointer transition-colors"
-                          >
-                            <Checkbox checked={isSelected} />
-                            <Globe className="h-4 w-4 text-purple-600" />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">{layanan.name}</div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                {layanan.status !== 'active' && (
-                                  <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
-                                    layanan.status === 'inactive' ? 'bg-red-100 text-red-600' :
-                                    layanan.status === 'maintenance' ? 'bg-yellow-100 text-yellow-600' :
-                                    'bg-gray-100 text-gray-600'
-                                  }`}>
-                                    {layanan.status}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* TAB 4: Cross-Service Connections */}
+            {/* TAB 3: Cross-Service Connections */}
             <TabsContent value="external" className="flex-1 overflow-hidden flex flex-col mt-4 min-h-0">
               <div className="space-y-3 px-1">
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex-shrink-0">
@@ -1120,9 +850,7 @@ export default function ServiceConnectionModal({
 
         <div className="flex items-center gap-2 justify-end px-6 py-4 border-t bg-background">
           <div className="flex-1 text-sm text-muted-foreground">
-            {activeTab === 'layana'
-              ? `${selectedLayananIds.length} koneksi layana`
-              : activeTab === 'external'
+            {activeTab === 'external'
               ? `${crossServiceSelectedIds.length} koneksi eksternal`
               : `${selectedConnections.length + selectedGroupConnections.length} koneksi`
             }
@@ -1136,15 +864,7 @@ export default function ServiceConnectionModal({
           </Button>
           <Button
             onClick={async () => {
-              if (activeTab === 'layana') {
-                const result = await handleSaveLayananConnections();
-                if (result?.success) {
-                  toast.success('Koneksi layanan berhasil disimpan!');
-                  onClose();
-                } else if (result?.error) {
-                  toast.error('Gagal menyimpan: ' + result.error);
-                }
-              } else if (activeTab === 'external') {
+              if (activeTab === 'external') {
                 const result = await handleSaveCrossServiceConnections();
                 if (result?.success) {
                   toast.success('Koneksi eksternal berhasil disimpan!');
@@ -1156,9 +876,9 @@ export default function ServiceConnectionModal({
                 onSave(localItemTypes, localItemToGroupTypes);
               }
             }}
-            disabled={activeTab === 'layana' ? isLoadingLayanan : activeTab === 'external' ? isLoadingCrossService : false}
+            disabled={activeTab === 'external' ? isLoadingCrossService : false}
           >
-            {(activeTab === 'layana' && isLoadingLayanan) || (activeTab === 'external' && isLoadingCrossService) ? 'Menyimpan...' : 'Simpan'}
+            {activeTab === 'external' && isLoadingCrossService ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </div>
       </DialogContent>

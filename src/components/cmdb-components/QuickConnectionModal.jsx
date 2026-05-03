@@ -8,8 +8,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Command,
   CommandEmpty,
@@ -19,7 +20,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { getConnectionTypeInfo, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
-import api from '@/services/api';
+import { getTypeIcon } from '../../utils/cmdb-utils/constants';
+import api from '../../services/api';
 import {
   Server,
   Database,
@@ -29,14 +31,12 @@ import {
   Shield,
   Wifi,
   ArrowRight,
-  ArrowLeft,
   ArrowRightLeft,
-  Search,
   Check,
   Layers,
-  Briefcase,
   ChevronDown,
   ChevronRight,
+  Package,
 } from 'lucide-react';
 
 export default function QuickConnectionModal({
@@ -45,207 +45,61 @@ export default function QuickConnectionModal({
   targetItem,
   onClose,
   onSave,
-  mode = 'create', // 'create' or 'edit'
+  mode = 'create',
   existingConnectionType = null,
+  existingServiceItemId = null,
   workspaceId = null,
-  nodes = [], // Tambah nodes prop untuk checking node types
+  services = [],
 }) {
-  const [selectedType, setSelectedType] = useState('depends_on');
+  // Determine default connection type based on source and target types
+  const getDefaultConnectionType = () => {
+    // If source is service/service-item and target is CMDB item (not service)
+    const sourceIsService = sourceItem?.service || sourceItem?._entityType === 'service';
+    const targetIsCMDBItem = targetItem && !targetItem?.service && targetItem?._entityType !== 'service';
+
+    if (sourceIsService && targetIsCMDBItem) {
+      return 'consumed_by'; // Service/Service Item → CMDB Item: use consumed_by
+    }
+    return 'depends_on'; // Default for item-to-item
+  };
+
+  const [selectedType, setSelectedType] = useState(() => getDefaultConnectionType());
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Service item selection states
-  const [isLayananConnection, setIsLayananConnection] = useState(false);
-  const [cmdbItemsWithServices, setCmdbItemsWithServices] = useState([]);
-  const [expandedItems, setExpandedItems] = useState(new Set());
-  const [selectedService, setSelectedService] = useState(null);
-  const [selectedServiceItem, setSelectedServiceItem] = useState(null);
-  const [propagationEnabled, setPropagationEnabled] = useState(true);
-  const [loadingServices, setLoadingServices] = useState(false);
-  const [connectionTargetType, setConnectionTargetType] = useState('service_item'); // 'service' or 'service_item'
-  const [selectedDirectService, setSelectedDirectService] = useState(null);
-
-  useEffect(() => {
-    if (show) {
-      setSelectedType(existingConnectionType || 'depends_on');
-      setSearchQuery('');
-
-      // Check if this is a layanan connection
-      checkLayananConnection();
-    }
-  }, [show, existingConnectionType]);
+  // Service/Service Item selection state
+  const [targetType, setTargetType] = useState('service'); // 'service' or 'service_item'
+  const [sourceType, setSourceType] = useState('service'); // 'service' or 'service_item' - for when source is a service
+  const [availableServiceItems, setAvailableServiceItems] = useState([]);
+  const [selectedServiceItemIds, setSelectedServiceItemIds] = useState([]);
+  const [isLoadingServiceItems, setIsLoadingServiceItems] = useState(false);
 
   // Helper function to get actual item data (handles both ReactFlow nodes and plain objects)
   const getItemData = (item) => {
-    // ReactFlow nodes have data in .data property
     if (item && item.data && typeof item.data === 'object') {
       return item.data;
     }
-    // Groups and plain objects use properties directly
     return item;
   };
 
   // Helper function to check if item is a group
   const isGroup = (item) => item && (item.color !== undefined || item.data?.color !== undefined);
 
-  // Helper function to get item ID
-  const getItemId = (item) => {
-    // ReactFlow nodes have id directly
-    if (item && item.id) {
-      return item.id;
-    }
-    return null;
-  };
-
-  // Helper function to check if item is a layanan node
-  const isLayananNode = (item) => {
-    // Prioritaskan cek _entityType (dari connect handler)
-    if (item?._entityType === 'layanan') {
-      return true;
-    }
-
-    // Cek node type
-    if (item?.type === 'layanan') {
-      return true;
-    }
-
-    // Cek data type
-    if (item?.data?.type === 'layanan') {
-      return true;
-    }
-
-    // Cek ID dengan prefix layanan-
-    const id = getItemId(item);
-    if (id && String(id).startsWith('layanan-')) {
-      return true;
-    }
-
-    // Cek di nodes array berdasarkan ID
-    if (id && nodes && nodes.length > 0) {
-      const node = nodes.find(n => String(n.id) === String(id));
-      if (node && node.type === 'layanan') {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  // Check if connection involves layanan nodes and load CMDB items with services
-  const checkLayananConnection = async () => {
-    const isSourceLayanan = isLayananNode(sourceItem);
-    const isTargetLayanan = isLayananNode(targetItem);
-
-    if ((isSourceLayanan || isTargetLayanan) && workspaceId) {
-      setIsLayananConnection(true);
-      await fetchCmdbItemsWithServices();
-    } else {
-      setIsLayananConnection(false);
-    }
-  };
-
-  if (!sourceItem || !targetItem) return null;
-
-  // Fetch CMDB items with their services
-  const fetchCmdbItemsWithServices = async () => {
-    if (!workspaceId) return;
-
-    setLoadingServices(true);
-    try {
-      // Determine which CMDB items to fetch based on connection type
-      let itemsToFetch = [];
-
-      if (isLayananNode(sourceItem) && !isLayananNode(targetItem)) {
-        // Layanan -> CMDB Item: Only fetch services from the target CMDB item
-        const targetData = getItemData(targetItem);
-        if (targetData && targetData.id) {
-          itemsToFetch = [targetData];
-        }
-      } else if (!isLayananNode(sourceItem) && isLayananNode(targetItem)) {
-        // CMDB Item -> Layanan: Only fetch services from the source CMDB item
-        const sourceData = getItemData(sourceItem);
-        if (sourceData && sourceData.id) {
-          itemsToFetch = [sourceData];
-        }
-      } else if (isLayananNode(sourceItem) && isLayananNode(targetItem)) {
-        // Layanan -> Layanan: Fetch all CMDB items (keep original behavior)
-        const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
-        itemsToFetch = response.data;
-      } else {
-        // CMDB Item -> CMDB Item: Fetch all items (keep original behavior for non-layanan connections)
-        const response = await api.get('/cmdb', { params: { workspace_id: workspaceId } });
-        itemsToFetch = response.data;
-      }
-
-      // Fetch services only for the target CMDB items
-      const itemsWithServices = await Promise.all(
-        itemsToFetch.map(async (item) => {
-          try {
-            const servicesResponse = await api.get(`/services/${item.id}`);
-
-            // Fetch service items for each service
-            const servicesWithItems = await Promise.all(
-              servicesResponse.data.map(async (service) => {
-                try {
-                  const serviceItemsResponse = await api.get(`/service-items/${service.id}/items`, {
-                    params: { workspace_id: workspaceId }
-                  });
-                  return {
-                    ...service,
-                    items: serviceItemsResponse.data || []
-                  };
-                } catch (err) {
-                  console.error(`Failed to fetch service items for service ${service.id}:`, err);
-                  return {
-                    ...service,
-                    items: []
-                  };
-                }
-              })
-            );
-
-            return {
-              ...item,
-              services: servicesWithItems || [],
-            };
-          } catch (err) {
-            console.error(`Failed to fetch services for item ${item.id}:`, err);
-            return {
-              ...item,
-              services: [],
-            };
-          }
-        })
-      );
-
-      // Filter items that have services
-      const itemsWithServicesOnly = itemsWithServices.filter(
-        (item) => item.services && item.services.length > 0
-      );
-
-      setCmdbItemsWithServices(itemsWithServicesOnly);
-    } catch (err) {
-      console.error('Failed to fetch CMDB items:', err);
-    } finally {
-      setLoadingServices(false);
-    }
+  // Helper function to check if item is a service (service node)
+  const isServiceNode = (item) => {
+    const data = getItemData(item);
+    const id = String(item?.id || '');
+    return id.startsWith('service-') || data?.type === 'service' || item?._entityType === 'service';
   };
 
   const getItemIcon = (item) => {
     const iconProps = { size: 32, className: 'text-foreground' };
     const data = getItemData(item);
 
-    // Check if it's a layanan node
-    if (isLayananNode(item)) {
-      return getLayananIcon();
-    }
-
-    // Check if it's a group
     if (isGroup(item)) {
       return <Layers {...iconProps} />;
     }
 
-    // Otherwise it's an item
     switch (data.type) {
       case 'server': return <Server {...iconProps} />;
       case 'database': return <Database {...iconProps} />;
@@ -254,6 +108,7 @@ export default function QuickConnectionModal({
       case 'hub': return <GitBranch {...iconProps} />;
       case 'firewall': return <Shield {...iconProps} />;
       case 'router': return <Wifi {...iconProps} />;
+      case 'service': return <Package {...iconProps} />;
       default: return <Server {...iconProps} />;
     }
   };
@@ -261,13 +116,11 @@ export default function QuickConnectionModal({
   const getDisplayColor = (item) => {
     const data = getItemData(item);
 
-    // For groups, use their color
     if (isGroup(item)) {
       const groupColor = item.color || data.color;
       return `border-2 style={{ borderColor: '${groupColor}' }}`;
     }
 
-    // For items, use status color
     const statusColor = {
       'active': 'bg-green-500 border-green-600',
       'inactive': 'bg-red-500 border-red-600',
@@ -278,11 +131,131 @@ export default function QuickConnectionModal({
   };
 
   const getItemTypeLabel = (item) => {
-    if (isLayananNode(item)) {
-      return 'Layanan';
-    }
     const data = getItemData(item);
-    return isGroup(item) ? 'Group' : (data.type || 'Item');
+    if (isGroup(item)) return 'Group';
+    if (isServiceNode(item)) return 'Service';
+    return data.type || 'Item';
+  };
+
+  // Check if source or target is a service node
+  const sourceIsService = isServiceNode(sourceItem);
+  const targetIsService = isServiceNode(targetItem);
+  const showServiceOptions = sourceIsService || targetIsService;
+
+  // Fetch service items when component mounts or when needed
+  useEffect(() => {
+    if (!show || !workspaceId) return;
+
+    // Compute showServiceOptions fresh inside the effect
+    const sourceIsServiceLocal = sourceItem && (
+      String(sourceItem?.id || '').startsWith('service-') ||
+      sourceItem?._entityType === 'service'
+    );
+    const targetIsServiceLocal = targetItem && (
+      String(targetItem?.id || '').startsWith('service-') ||
+      targetItem?._entityType === 'service'
+    );
+    const showServiceOptionsLocal = sourceIsServiceLocal || targetIsServiceLocal;
+
+    if (!showServiceOptionsLocal) return;
+    if (targetType !== 'service_item' && sourceType !== 'service_item') return;
+
+    const fetchServiceItems = async () => {
+      console.log('🔵 fetchServiceItems: start', { targetType, sourceType, services: services?.length });
+      console.log('🔵 targetItem:', targetItem);
+      console.log('🔵 sourceItem:', sourceItem);
+
+      setIsLoadingServiceItems(true);
+      try {
+        const serviceItemsData = [];
+        const targetId = String(targetItem?.id || '');
+        const sourceId = String(sourceItem?.id || '');
+        let targetServiceId = null;
+        let sourceServiceId = null;
+
+        // When _entityType is 'service', the item IS the service - use its id directly
+        if (targetItem?._entityType === 'service') {
+          targetServiceId = String(targetItem.id);
+        } else if (targetIsServiceLocal && targetId.startsWith('service-')) {
+          targetServiceId = targetId.replace('service-', '');
+        }
+        if (sourceItem?._entityType === 'service') {
+          sourceServiceId = String(sourceItem.id);
+        } else if (sourceIsServiceLocal && sourceId.startsWith('service-')) {
+          sourceServiceId = sourceId.replace('service-', '');
+        }
+        const serviceIdToUse = targetServiceId || sourceServiceId;
+
+        if (serviceIdToUse && !isNaN(serviceIdToUse)) {
+          const response = await api.get(`/services/${serviceIdToUse}/items?workspace_id=${workspaceId}`);
+          console.log('🔵 Service items response:', response.data);
+          if (response.data && response.data.length > 0) {
+            serviceItemsData.push(...response.data.map(item => ({
+              ...item,
+              serviceName: services.find(s => String(s.id) === serviceIdToUse)?.name || 'Service'
+            })));
+          }
+        } else {
+          for (const service of services) {
+            try {
+              const response = await api.get(`/services/${service.id}/items?workspace_id=${workspaceId}`);
+              if (response.data && response.data.length > 0) {
+                serviceItemsData.push(...response.data.map(item => ({
+                  ...item,
+                  serviceName: service.name
+                })));
+              }
+            } catch (err) {
+              // Skip if no items
+            }
+          }
+        }
+        console.log('🔵 Setting availableServiceItems:', serviceItemsData.length);
+        setAvailableServiceItems(serviceItemsData);
+      } catch (error) {
+        console.error('Failed to fetch service items:', error);
+      } finally {
+        setIsLoadingServiceItems(false);
+      }
+    };
+
+    fetchServiceItems();
+  }, [show, workspaceId, targetType, sourceType, services, targetItem, sourceItem]);
+
+  // Reset state when modal opens/closes or when targetType changes
+  useEffect(() => {
+    if (show) {
+      console.log('🔵 QuickConnectionModal opened:', { mode, existingServiceItemId, targetType, sourceType, sourceIsService, targetIsService });
+      setSelectedServiceItemIds([]);
+      // Reset both target and source types based on which is the service
+      if (sourceIsService && !targetIsService) {
+        // Source is service, target is item - reset sourceType to 'service'
+        setSourceType('service');
+        setTargetType('service'); // not used but reset
+      } else if (targetIsService && !sourceIsService) {
+        // Target is service, source is item - reset targetType to 'service'
+        setTargetType('service');
+        setSourceType('service'); // not used but reset
+      } else {
+        setTargetType('service');
+        setSourceType('service');
+      }
+
+      // If editing a connection with existing service item, pre-populate
+      if (mode === 'edit' && existingServiceItemId) {
+        console.log('🔵 Pre-populating with existingServiceItemId:', existingServiceItemId);
+        setSelectedServiceItemIds([existingServiceItemId]);
+        setTargetType('service_item');
+      }
+    }
+  }, [show, mode, existingServiceItemId, sourceIsService, targetIsService]);
+
+  const handleToggleServiceItem = (itemId) => {
+    setSelectedServiceItemIds(prev =>
+      prev.includes(itemId)
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
   };
 
   const connectionTypeInfo = getConnectionTypeInfo(selectedType);
@@ -290,81 +263,23 @@ export default function QuickConnectionModal({
   const getArrowIcon = () => {
     switch (connectionTypeInfo.propagation) {
       case 'both':
-        // Bidirectional - double arrow
         return <ArrowRightLeft size={28} style={{ color: connectionTypeInfo.color }} />;
       case 'target_to_source':
       case 'source_to_target':
       default:
-        // Selalu arrow ke kanan (source → target) untuk semua tipe kecuali 'both'
         return <ArrowRight size={28} style={{ color: connectionTypeInfo.color }} />;
     }
   };
 
   const handleSave = () => {
-    // If this is a layanan connection, validate selection based on target type
-    if (isLayananConnection) {
-      if (connectionTargetType === 'service_item') {
-        // Connecting to service item
-        if (!selectedService || !selectedServiceItem) {
-          alert('Silakan pilih service item terlebih dahulu untuk koneksi layanan.');
-          return;
-        }
-        onSave(selectedType, {
-          connectionTargetType: 'service_item',
-          serviceId: selectedService.id,
-          serviceItemId: selectedServiceItem.id,
-          propagationEnabled: propagationEnabled,
-        });
-      } else {
-        // Connecting to service directly
-        if (!selectedDirectService) {
-          alert('Silakan pilih service terlebih dahulu untuk koneksi layanan.');
-          return;
-        }
-        onSave(selectedType, {
-          connectionTargetType: 'service',
-          serviceId: selectedDirectService.id,
-          propagationEnabled: propagationEnabled,
-        });
-      }
-    } else {
-      onSave(selectedType, null);
-    }
-  };
-
-  // Helper functions for service item selection UI
-  const toggleItemExpansion = (itemId) => {
-    setExpandedItems((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleServiceExpansion = (itemId, serviceId) => {
-    setExpandedItems((prev) => {
-      const newSet = new Set(prev);
-      const key = `${itemId}-${serviceId}`;
-      if (newSet.has(key)) {
-        newSet.delete(key);
-      } else {
-        newSet.add(key);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectServiceItem = (service, serviceItem) => {
-    setSelectedService(service);
-    setSelectedServiceItem(serviceItem);
-  };
-
-  const getLayananIcon = () => {
-    return <Briefcase size={32} className="text-purple-600" />;
+    // If target type is service_item and we have selected items, pass them
+    // Also check sourceType when source is the service
+    const isSourceService = sourceIsService && !targetIsService;
+    const effectiveTargetType = isSourceService ? sourceType : targetType;
+    const serviceItemData = effectiveTargetType === 'service_item' && selectedServiceItemIds.length > 0
+      ? { selectedServiceItemIds, isSourceService }
+      : null;
+    onSave(selectedType, serviceItemData);
   };
 
   // Filter connection types based on search query
@@ -377,470 +292,388 @@ export default function QuickConnectionModal({
     );
   });
 
+  if (!sourceItem || !targetItem) return null;
+
   return (
     <>
       <Dialog open={show} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{mode === 'edit' ? 'Edit Tipe Koneksi' : 'Buat Koneksi Baru'}</DialogTitle>
-        </DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{mode === 'edit' ? 'Edit Tipe Koneksi' : 'Buat Koneksi Baru'}</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Visual Connection Preview */}
-          <div className="bg-muted rounded-lg p-6">
-            <div className="text-center text-sm text-muted-foreground mb-4 font-medium">
-              VISUALISASI KONEKSI
+          <div className="space-y-6 py-4 flex-1 overflow-y-auto">
+            {/* Visual Connection Preview */}
+            <div className="bg-muted rounded-lg p-6">
+              <div className="text-center text-sm text-muted-foreground mb-4 font-medium">
+                VISUALISASI KONEKSI
+              </div>
+
+              <div className="flex items-center justify-center gap-4">
+                {/* Source Item */}
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${
+                      isGroup(sourceItem) ? '' : getDisplayColor(sourceItem)
+                    }`}
+                    style={
+                      isGroup(sourceItem)
+                        ? {
+                            borderColor: sourceItem.color || getItemData(sourceItem).color,
+                            backgroundColor: `${sourceItem.color || getItemData(sourceItem).color}20`,
+                          }
+                        : {}
+                    }
+                  >
+                    {getItemIcon(sourceItem)}
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">{getItemData(sourceItem).name}</div>
+                    <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(sourceItem)}</div>
+                  </div>
+                </div>
+
+                {/* Connection Arrow */}
+                <div className="flex flex-col items-center gap-2 px-4">
+                  <div className="rounded-full p-2 bg-background border-2 shadow-md">
+                    {getArrowIcon()}
+                  </div>
+                  <div
+                    className="text-xs font-semibold px-2 py-1 rounded text-white"
+                    style={{ backgroundColor: connectionTypeInfo.color }}
+                  >
+                    {connectionTypeInfo.label}
+                  </div>
+                </div>
+
+                {/* Target Item */}
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${
+                      isGroup(targetItem) ? '' : getDisplayColor(targetItem)
+                    }`}
+                    style={
+                      isGroup(targetItem)
+                        ? {
+                            borderColor: targetItem.color || getItemData(targetItem).color,
+                            backgroundColor: `${targetItem.color || getItemData(targetItem).color}20`,
+                          }
+                        : {}
+                    }
+                  >
+                    {getItemIcon(targetItem)}
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">{getItemData(targetItem).name}</div>
+                    <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(targetItem)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description based on propagation rule */}
+              <div className="mt-4 text-center text-sm text-muted-foreground">
+                {connectionTypeInfo.propagation === 'target_to_source' && (
+                  <span>
+                    <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
+                  </span>
+                )}
+                {connectionTypeInfo.propagation === 'source_to_target' && (
+                  <span>
+                    <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
+                  </span>
+                )}
+                {connectionTypeInfo.propagation === 'both' && (
+                  <span>
+                    <strong>{getItemData(sourceItem).name}</strong> dan <strong>{getItemData(targetItem).name}</strong> memiliki hubungan {connectionTypeInfo.label.toLowerCase()}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center justify-center gap-4">
-              {/* Source Item */}
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${
-                    isGroup(sourceItem) || isLayananNode(sourceItem) ? '' : getDisplayColor(sourceItem)
-                  }`}
-                  style={
-                    isGroup(sourceItem)
-                      ? {
-                          borderColor:
-                            sourceItem.color || getItemData(sourceItem).color,
-                          backgroundColor: `${sourceItem.color || getItemData(sourceItem).color}20`,
-                        }
-                      : isLayananNode(sourceItem)
-                      ? {
-                          borderColor: '#a855f7',
-                          backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                        }
-                      : {}
-                  }
-                >
-                  {getItemIcon(sourceItem)}
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-sm">{getItemData(sourceItem).name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(sourceItem)}</div>
-                </div>
-              </div>
-
-              {/* Connection Arrow */}
-              <div className="flex flex-col items-center gap-2 px-4">
-                <div className="rounded-full p-2 bg-background border-2 shadow-md">
-                  {getArrowIcon()}
-                </div>
-                <div
-                  className="text-xs font-semibold px-2 py-1 rounded text-white"
-                  style={{ backgroundColor: connectionTypeInfo.color }}
-                >
-                  {connectionTypeInfo.label}
-                </div>
-              </div>
-
-              {/* Target Item */}
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  className={`w-16 h-16 rounded-lg flex items-center justify-center border-2 ${
-                    isGroup(targetItem) || isLayananNode(targetItem) ? '' : getDisplayColor(targetItem)
-                  }`}
-                  style={
-                    isGroup(targetItem)
-                      ? {
-                          borderColor:
-                            targetItem.color || getItemData(targetItem).color,
-                          backgroundColor: `${targetItem.color || getItemData(targetItem).color}20`,
-                        }
-                      : isLayananNode(targetItem)
-                      ? {
-                          borderColor: '#a855f7',
-                          backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                        }
-                      : {}
-                  }
-                >
-                  {getItemIcon(targetItem)}
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-sm">{getItemData(targetItem).name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{getItemTypeLabel(targetItem)}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Description based on propagation rule */}
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              {connectionTypeInfo.propagation === 'target_to_source' && (
-                <span>
-                  <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
-                </span>
-              )}
-              {connectionTypeInfo.propagation === 'source_to_target' && (
-                <span>
-                  <strong>{getItemData(sourceItem).name}</strong> {connectionTypeInfo.label.toLowerCase()} <strong>{getItemData(targetItem).name}</strong>
-                </span>
-              )}
-              {connectionTypeInfo.propagation === 'both' && (
-                <span>
-                  <strong>{getItemData(sourceItem).name}</strong> dan <strong>{getItemData(targetItem).name}</strong> memiliki hubungan {connectionTypeInfo.label.toLowerCase()}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Connection Type Selector with Search */}
-          <div className="space-y-3">
-            <Label htmlFor="connection-type" className="text-base font-semibold">
-              Pilih Tipe Koneksi
-            </Label>
-
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              id="connection-type"
-              onClick={() => setShowTypeSelector(true)}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: connectionTypeInfo.color }}
-                />
-                <span>{connectionTypeInfo.label}</span>
-              </div>
-              <span className="text-xs text-muted-foreground ml-2">
-                {connectionTypeInfo.propagation === 'both' ? '↔' : '→'}
-              </span>
-            </Button>
-
-            {/* Connection Type Description */}
-            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-3">
-              <p className="text-sm">
-                <span className="font-semibold">Definisi: </span>
-                {getConnectionTypeInfo(selectedType).description || getConnectionTypeInfo(selectedType).label}
-              </p>
-            </div>
-          </div>
-
-          {/* Service Item Selection (Only for Layanan connections) */}
-          {isLayananConnection && (
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">
-                Pilih Service di CMDB Item
-                <span className="text-red-500 ml-1">*</span>
-              </Label>
-
-              {/* Connection Target Type Selector */}
-              <div className="flex items-center gap-4 p-3 bg-gray-50 border rounded">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="connect-service"
-                    name="connection-target"
-                    value="service"
-                    checked={connectionTargetType === 'service'}
-                    onChange={(e) => {
-                      setConnectionTargetType(e.target.value);
-                      setSelectedService(null);
-                      setSelectedServiceItem(null);
-                      setSelectedDirectService(null);
-                    }}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="connect-service" className="text-sm font-medium cursor-pointer">
-                    Koneksi ke Service
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="connect-service-item"
-                    name="connection-target"
-                    value="service_item"
-                    checked={connectionTargetType === 'service_item'}
-                    onChange={(e) => {
-                      setConnectionTargetType(e.target.value);
-                      setSelectedService(null);
-                      setSelectedServiceItem(null);
-                      setSelectedDirectService(null);
-                    }}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="connect-service-item" className="text-sm font-medium cursor-pointer">
-                    Koneksi ke Service Item
-                  </label>
-                </div>
-              </div>
-
-              {loadingServices ? (
-                <div className="p-4 text-center text-sm text-gray-500 border rounded">
-                  Loading services...
-                </div>
-              ) : cmdbItemsWithServices.length === 0 ? (
-                <div className="p-4 text-center text-sm text-gray-500 border rounded">
-                  {isLayananNode(sourceItem) && !isLayananNode(targetItem) ? (
-                    <div>
-                      <p className="font-semibold mb-1">Tidak ada services ditemukan</p>
-                      <p className="text-xs">
-                        CMDB item <strong>{getItemData(targetItem).name}</strong> tidak memiliki services.
-                      </p>
-                    </div>
-                  ) : !isLayananNode(sourceItem) && isLayananNode(targetItem) ? (
-                    <div>
-                      <p className="font-semibold mb-1">Tidak ada services ditemukan</p>
-                      <p className="text-xs">
-                        CMDB item <strong>{getItemData(sourceItem).name}</strong> tidak memiliki services.
-                      </p>
-                    </div>
+            {/* Service/Service Item Toggle - Only show when source or target is a service */}
+            {showServiceOptions && (
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">
+                  {sourceIsService && !targetIsService ? 'Pilih Sumber' : targetIsService && !sourceIsService ? 'Pilih Target' : 'Pilih Target'}
+                </Label>
+                <div className="flex gap-2 p-1 bg-secondary rounded-lg">
+                  {sourceIsService && !targetIsService ? (
+                    /* Source is service - show source toggle */
+                    <>
+                      <Button
+                        variant={sourceType === 'service' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setSourceType('service')}
+                        className="flex-1"
+                      >
+                        <Package className="h-4 w-4 mr-1" />
+                        Service
+                      </Button>
+                      <Button
+                        variant={sourceType === 'service_item' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setSourceType('service_item')}
+                        className="flex-1"
+                      >
+                        Service Item
+                      </Button>
+                    </>
                   ) : (
-                    <p>Tidak ada CMDB item dengan services ditemukan di workspace ini</p>
+                    /* Target is service - show target toggle */
+                    <>
+                      <Button
+                        variant={targetType === 'service' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setTargetType('service')}
+                        className="flex-1"
+                      >
+                        <Package className="h-4 w-4 mr-1" />
+                        Ke Service
+                      </Button>
+                      <Button
+                        variant={targetType === 'service_item' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setTargetType('service_item')}
+                        className="flex-1"
+                      >
+                        Ke Service Item
+                      </Button>
+                    </>
                   )}
                 </div>
-              ) : (
-                <ScrollArea className="h-[300px] border rounded">
-                  <div className="p-2">
-                    {cmdbItemsWithServices.map((item) => (
-                      <div key={item.id} className="mb-2">
-                        {/* CMDB Item */}
-                        <div
-                          className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
-                          onClick={() => toggleItemExpansion(item.id)}
-                        >
-                          {expandedItems.has(item.id) ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                          <Server className="w-4 h-4 text-blue-600" />
-                          <span className="font-medium text-sm">{item.name}</span>
-                          <span className="text-xs text-gray-500">
-                            ({item.services.length} services)
-                          </span>
-                        </div>
 
-                        {/* Services */}
-                        {expandedItems.has(item.id) && (
-                          <div className="ml-6 border-l-2 border-gray-200 pl-2">
-                            {item.services.map((service) => (
-                              <div key={service.id}>
-                                {connectionTargetType === 'service' ? (
-                                  // Direct Service Selection
-                                  <div
-                                    className={`flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer ${
-                                      selectedDirectService?.id === service.id
-                                        ? 'bg-purple-50 border-2 border-purple-500'
-                                        : ''
-                                    }`}
-                                    onClick={() => {
-                                      setSelectedDirectService(service);
-                                      setSelectedService(null);
-                                      setSelectedServiceItem(null);
-                                    }}
-                                  >
-                                    <div
-                                      className={`w-4 h-4 border rounded flex items-center justify-center ${
-                                        selectedDirectService?.id === service.id
-                                          ? 'bg-purple-500 border-purple-500'
-                                          : 'border-gray-300'
-                                      }`}
-                                    >
-                                      {selectedDirectService?.id === service.id && (
-                                        <Check className="w-3 h-3 text-white" />
-                                      )}
-                                    </div>
-                                    <Briefcase className="w-4 h-4 text-purple-600" />
-                                    <span className="text-sm font-medium">{service.name}</span>
-                                    <span className="text-xs text-gray-500">
-                                      ({service.items?.length || 0} items)
-                                    </span>
-                                  </div>
-                                ) : (
-                                  // Service Item Selection (with expand/collapse)
-                                  <>
-                                    <div
-                                      className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
-                                      onClick={() => toggleServiceExpansion(item.id, service.id)}
-                                    >
-                                      {expandedItems.has(`${item.id}-${service.id}`) ? (
-                                        <ChevronDown className="w-4 h-4" />
-                                      ) : (
-                                        <ChevronRight className="w-4 h-4" />
-                                      )}
-                                      <Briefcase className="w-4 h-4 text-purple-600" />
-                                      <span className="text-sm font-medium">{service.name}</span>
-                                    </div>
-
-                                    {/* Service Items */}
-                                    {expandedItems.has(`${item.id}-${service.id}`) && (
-                                      <div className="ml-6 border-l-2 border-gray-200 pl-2">
-                                        {service.items && service.items.length > 0 ? (
-                                          service.items.map((serviceItem) => (
-                                            <div
-                                              key={serviceItem.id}
-                                              className={`flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer ${
-                                                selectedServiceItem?.id === serviceItem.id
-                                                  ? 'bg-blue-50 border-2 border-blue-500'
-                                                  : ''
-                                              }`}
-                                              onClick={() =>
-                                                handleSelectServiceItem(service, serviceItem)
-                                              }
-                                            >
-                                              <div
-                                                className={`w-4 h-4 border rounded flex items-center justify-center ${
-                                                  selectedServiceItem?.id === serviceItem.id
-                                                    ? 'bg-blue-500 border-blue-500'
-                                                    : 'border-gray-300'
-                                                }`}
-                                              >
-                                                {selectedServiceItem?.id === serviceItem.id && (
-                                                  <Check className="w-3 h-3 text-white" />
-                                                )}
-                                              </div>
-                                              <span className="text-sm">{serviceItem.name}</span>
-                                              <span
-                                                className={`text-xs px-2 py-0.5 rounded ${
-                                                  serviceItem.status === 'active'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : serviceItem.status === 'inactive'
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : serviceItem.status === 'maintenance'
-                                                    ? 'bg-yellow-100 text-yellow-700'
-                                                    : 'bg-gray-100 text-gray-700'
-                                                }`}
-                                              >
-                                                {serviceItem.status}
-                                              </span>
-                                            </div>
-                                          ))
-                                        ) : (
-                                          <div className="p-2 text-sm text-gray-500">
-                                            No service items found
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-
-              {/* Selection Info */}
-              {connectionTargetType === 'service' && selectedDirectService && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded">
-                  <div className="text-sm">
-                    <span className="font-medium">Selected Service:</span> {selectedDirectService.name}
-                  </div>
-                </div>
-              )}
-
-              {connectionTargetType === 'service_item' && selectedService && selectedServiceItem && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                  <div className="text-sm">
-                    <span className="font-medium">Selected:</span> {selectedService.name} →{' '}
-                    {selectedServiceItem.name}
-                  </div>
-                </div>
-              )}
-
-              {/* Propagation Toggle */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="propagation"
-                  checked={propagationEnabled}
-                  onChange={(e) => setPropagationEnabled(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <label htmlFor="propagation" className="text-sm font-medium">
-                  Enable Status Propagation (Service status affects Layanan)
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="secondary" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={
-              isLayananConnection &&
-              ((connectionTargetType === 'service_item' && (!selectedService || !selectedServiceItem)) ||
-               (connectionTargetType === 'service' && !selectedDirectService))
-            }
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {mode === 'edit' ? 'Simpan Perubahan' : 'Buat Koneksi'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* Separate Dialog for Connection Type Selection */}
-    <Dialog open={showTypeSelector} onOpenChange={setShowTypeSelector}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
-        </DialogHeader>
-        <Command shouldFilter={false}>
-          <div className="p-3 border-b">
-            <CommandInput
-              placeholder="Cari tipe koneksi..."
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-            />
-          </div>
-          <CommandList style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <CommandEmpty>
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                Tidak ada tipe koneksi ditemukan
-              </div>
-            </CommandEmpty>
-            <CommandGroup>
-              {filteredConnectionTypes.map(([key, type]) => (
-                <CommandItem
-                  key={key}
-                  value={key}
-                  onSelect={() => {
-                    setSelectedType(key);
-                    setShowTypeSelector(false);
-                    setSearchQuery('');
-                  }}
-                  className="cursor-pointer"
-                >
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0 mr-3"
-                    style={{ backgroundColor: type.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{type.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({type.propagation === 'both' ? '↔' : '→'})
-                      </span>
+                {/* Service Item Selection - for target (when target is service, source is not) */}
+                {targetIsService && !sourceIsService && targetType === 'service_item' && (
+                  <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Pilih Service Items:</span>
+                      {selectedServiceItemIds.length > 0 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-xs" onClick={() => setSelectedServiceItemIds([])}>
+                          ×
+                        </Button>
+                      )}
                     </div>
-                    {type.description && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {type.description}
+                    {isLoadingServiceItems ? (
+                      <p className="text-center py-4 text-muted-foreground text-sm">Loading...</p>
+                    ) : availableServiceItems.length > 0 ? (
+                      <div className="space-y-1">
+                        {availableServiceItems.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleToggleServiceItem(item.id)}
+                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedServiceItemIds.includes(item.id)
+                                ? 'bg-purple-50 border border-purple-500'
+                                : 'hover:bg-secondary border border-transparent'
+                            }`}
+                          >
+                            <Checkbox checked={selectedServiceItemIds.includes(item.id)} />
+                            {getTypeIcon(item.type)}
+                            <div className="flex-1">
+                              <span className="text-sm">{item.name}</span>
+                              <Badge variant="outline" className="ml-1 text-xs bg-purple-100 text-purple-700">
+                                {item.serviceName}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-sm italic text-center py-2">
+                        Tidak ada service item tersedia
                       </p>
                     )}
                   </div>
-                  {selectedType === key && (
-                    <Check size={14} className="text-primary ml-auto" />
-                  )}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
-  </>
+                )}
+
+                {/* Service Item Selection - for source (when source is service, target is not) */}
+                {sourceIsService && !targetIsService && sourceType === 'service_item' && (
+                  <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Pilih Service Items (Sumber):</span>
+                      {selectedServiceItemIds.length > 0 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-xs" onClick={() => setSelectedServiceItemIds([])}>
+                          ×
+                        </Button>
+                      )}
+                    </div>
+                    {isLoadingServiceItems ? (
+                      <p className="text-center py-4 text-muted-foreground text-sm">Loading...</p>
+                    ) : availableServiceItems.length > 0 ? (
+                      <div className="space-y-1">
+                        {availableServiceItems.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleToggleServiceItem(item.id)}
+                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedServiceItemIds.includes(item.id)
+                                ? 'bg-purple-50 border border-purple-500'
+                                : 'hover:bg-secondary border border-transparent'
+                            }`}
+                          >
+                            <Checkbox checked={selectedServiceItemIds.includes(item.id)} />
+                            {getTypeIcon(item.type)}
+                            <div className="flex-1">
+                              <span className="text-sm">{item.name}</span>
+                              <Badge variant="outline" className="ml-1 text-xs bg-purple-100 text-purple-700">
+                                {item.serviceName}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-sm italic text-center py-2">
+                        Tidak ada service item tersedia
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Selected Service Items Display (for target) */}
+                {targetIsService && !sourceIsService && targetType === 'service_item' && selectedServiceItemIds.length > 0 && (
+                  <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                    <span className="text-xs text-muted-foreground">Terpilih:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedServiceItemIds.map(id => {
+                        const item = availableServiceItems.find(i => i.id === id);
+                        return (
+                          <Badge key={id} variant="outline" className="bg-purple-100 text-purple-700 text-xs">
+                            {item?.name || `#${id}`}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected Service Items Display (for source) */}
+                {sourceIsService && !targetIsService && sourceType === 'service_item' && selectedServiceItemIds.length > 0 && (
+                  <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                    <span className="text-xs text-muted-foreground">Terpilih (Sumber):</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedServiceItemIds.map(id => {
+                        const item = availableServiceItems.find(i => i.id === id);
+                        return (
+                          <Badge key={id} variant="outline" className="bg-purple-100 text-purple-700 text-xs">
+                            {item?.name || `#${id}`}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Connection Type Selector with Search */}
+            <div className="space-y-3">
+              <Label htmlFor="connection-type" className="text-base font-semibold">
+                Pilih Tipe Koneksi
+              </Label>
+
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                id="connection-type"
+                onClick={() => setShowTypeSelector(true)}
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: connectionTypeInfo.color }}
+                  />
+                  <span>{connectionTypeInfo.label}</span>
+                </div>
+                <span className="text-xs text-muted-foreground ml-2">
+                  {connectionTypeInfo.propagation === 'both' ? '↔' : '→'}
+                </span>
+              </Button>
+
+              {/* Connection Type Description */}
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-3">
+                <p className="text-sm">
+                  <span className="font-semibold">Definisi: </span>
+                  {getConnectionTypeInfo(selectedType).description || getConnectionTypeInfo(selectedType).label}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="secondary" onClick={onClose}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleSave}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={targetType === 'service_item' && selectedServiceItemIds.length === 0}
+            >
+              {mode === 'edit' ? 'Simpan Perubahan' : 'Buat Koneksi'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Separate Dialog for Connection Type Selection */}
+      <Dialog open={showTypeSelector} onOpenChange={setShowTypeSelector}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
+          </DialogHeader>
+          <Command shouldFilter={false}>
+            <div className="p-3 border-b">
+              <CommandInput
+                placeholder="Cari tipe koneksi..."
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+              />
+            </div>
+            <CommandList style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              <CommandEmpty>
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  Tidak ada tipe koneksi ditemukan
+                </div>
+              </CommandEmpty>
+              <CommandGroup>
+                {filteredConnectionTypes.map(([key, type]) => (
+                  <CommandItem
+                    key={key}
+                    value={key}
+                    onSelect={() => {
+                      setSelectedType(key);
+                      setShowTypeSelector(false);
+                      setSearchQuery('');
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0 mr-3"
+                      style={{ backgroundColor: type.color }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{type.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({type.propagation === 'both' ? '↔' : '→'})
+                        </span>
+                      </div>
+                      {type.description && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {type.description}
+                        </p>
+                      )}
+                    </div>
+                    {selectedType === key && (
+                      <Check size={14} className="text-primary ml-auto" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

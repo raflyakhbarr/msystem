@@ -18,11 +18,14 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   const itemCount = groupItems.length;
   const rows = Math.ceil(itemCount / itemsPerRow);
 
-  // Calculate dynamic item width based on service presence
-  const getItemWidth = (servicesCount = 0) => {
-    if (servicesCount === 0) return baseItemWidth;
+  // Calculate dynamic item width based on service presence and type
+  // web_application type needs more width for URL display
+  const getItemWidth = (servicesCount = 0, itemType = 'Server') => {
+    // Adjust base width based on type
+    const adjustedBaseWidth = itemType === 'web_application' ? 220 : baseItemWidth;
+    if (servicesCount === 0) return adjustedBaseWidth;
     const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * serviceGap);
-    return Math.max(baseItemWidth, serviceSectionWidth + horizontalPadding);
+    return Math.max(adjustedBaseWidth, serviceSectionWidth + horizontalPadding);
   };
 
   // Hitung tinggi maksimum per item secara dinamis berdasarkan jumlah service
@@ -38,10 +41,10 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
     return getItemHeight(itemServices.length);
   });
 
-  // Calculate width for each item
+  // Calculate width for each item (considering type)
   const itemWidths = groupItems.map(item => {
     const itemServices = servicesMap[item.id] || [];
-    return getItemWidth(itemServices.length);
+    return getItemWidth(itemServices.length, item.type);
   });
 
   // Get maximum item width for consistency
@@ -183,6 +186,67 @@ export const getStatusColor = (status) => {
 
 export const shouldShowCrossMarker = (status) => {
   return ['inactive', 'maintenance', 'decommissioned', 'disabled'].includes(status);
+};
+
+// Status styling constants - shared across all components
+export const STATUS_COLORS = {
+  active: '#10b981',
+  maintenance: '#f59e0b',
+  inactive: '#ef4444',
+  decommissioned: '#ef4444',
+};
+
+export const STATUS_STYLES = {
+  // Tailwind classes for node/service badges (dark bg)
+  badge: {
+    active: 'bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700',
+    maintenance: 'bg-yellow-500 text-white border-yellow-600 dark:bg-yellow-600 dark:border-yellow-700',
+    inactive: 'bg-red-500 text-white border-red-600 dark:bg-red-600 dark:border-red-700',
+    decommissioned: 'bg-red-500 text-white border-red-600 dark:bg-red-600 dark:border-red-700',
+    default: 'bg-gray-500 text-white border-gray-600 dark:bg-gray-600 dark:border-gray-700',
+  },
+  // Light Tailwind classes for search results / cards
+  badgeLight: {
+    active: 'bg-green-100 text-green-700',
+    inactive: 'bg-red-100 text-red-700',
+    maintenance: 'bg-yellow-100 text-yellow-700',
+    default: 'bg-gray-100 text-gray-700',
+  },
+  // Border colors for nodes
+  border: {
+    active: 'border-green-500 dark:border-green-400',
+    inactive: 'border-red-500 dark:border-red-400',
+    maintenance: 'border-yellow-500 dark:border-yellow-400',
+    decommissioned: 'border-red-500 dark:border-red-400',
+    default: 'border-gray-500 dark:border-gray-400',
+  },
+  // Handle colors for ReactFlow
+  handle: {
+    active: '#22c55e',
+    maintenance: '#eab308',
+    inactive: '#ef4444',
+    decommissioned: '#ef4444',
+  },
+};
+
+// Get status badge class string
+export const getStatusBadgeClass = (status) => {
+  return STATUS_STYLES.badge[status] || STATUS_STYLES.badge.default;
+};
+
+// Get light badge class string (for search results etc)
+export const getStatusBadgeLightClass = (status) => {
+  return STATUS_STYLES.badgeLight[status] || STATUS_STYLES.badgeLight.default;
+};
+
+// Get border class string
+export const getStatusBorderClass = (status) => {
+  return STATUS_STYLES.border[status] || STATUS_STYLES.border.default;
+};
+
+// Get handle color
+export const getStatusHandleColor = (status) => {
+  return STATUS_STYLES.handle[status] || STATUS_STYLES.handle.active;
 };
 
 // Connection type definitions - must match backend

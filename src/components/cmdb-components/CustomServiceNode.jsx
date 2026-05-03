@@ -5,97 +5,31 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { getStatusBadgeClass, getStatusBorderClass, getStatusHandleColor } from '../../utils/cmdb-utils/flowHelpers';
+import { getTypeIcon, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import {
   Info,
-  Server,
-  Database,
-  Network,
-  Monitor,
-  Shield,
-  Wifi,
-  Globe,
-  Laptop,
-  Smartphone,
-  Cloud,
-  Globe2,
   HardDrive,
-  FileText,
-  Printer,
-  Users,
-  Mail,
-  Settings,
-  Layout,
-  Layers
+  Layers,
+  Globe
 } from 'lucide-react';
 import ServiceIcon from './ServiceIcon';
-import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
 export default function CustomServiceNode({ data, id }) {
   const parentService = data.parentService || null;
   const isExternal = data.isExternal || false;
   const externalSource = data.externalSource || null;
 
-  const getIconComponent = (type) => {
-    const iconProps = { size: 20, className: 'text-foreground' };
+  const handleColor = getStatusHandleColor(data.status);
 
-    switch (type) {
-      case 'server': return <Server {...iconProps} />;
-      case 'database': return <Database {...iconProps} />;
-      case 'switch': return <Network {...iconProps} />;
-      case 'workstation': return <Monitor {...iconProps} />;
-      case 'firewall': return <Shield {...iconProps} />;
-      case 'router': return <Wifi {...iconProps} />;
-      case 'web_application': return <Globe {...iconProps} />;
-      case 'desktop_application': return <Laptop {...iconProps} />;
-      case 'mobile_application': return <Smartphone {...iconProps} />;
-      case 'api_service': return <Cloud {...iconProps} />;
-      case 'microservice': return <Layers {...iconProps} />;
-      case 'container': return <Layout {...iconProps} />;
-      case 'load_balancer': return <Wifi {...iconProps} />;
-      case 'proxy_server': return <Globe2 {...iconProps} />;
-      case 'application_server': return <Server {...iconProps} />;
-      case 'file_server': return <FileText {...iconProps} />;
-      case 'print_server': return <Printer {...iconProps} />;
-      case 'domain_controller': return <Users {...iconProps} />;
-      case 'mail_server': return <Mail {...iconProps} />;
-      case 'dns_server':
-      case 'dhcp_server': return <Settings {...iconProps} />;
-      case 'storage': return <HardDrive {...iconProps} />;
-      default: return <Server {...iconProps} />;
-    }
+  // Helper function to convert snake_case to Title Case
+  const formatSnakeCase = (text) => {
+    if (!text) return '';
+    return text
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700';
-      case 'inactive': return 'bg-red-500 text-white border-red-600 dark:bg-red-600 dark:border-red-700';
-      case 'maintenance': return 'bg-yellow-500 text-white border-yellow-600 dark:bg-yellow-600 dark:border-yellow-700';
-      case 'disabled': return 'bg-gray-500 text-white border-gray-600 dark:bg-gray-600 dark:border-gray-700';
-      default: return 'bg-gray-500 text-white border-gray-600 dark:bg-gray-600 dark:border-gray-700';
-    }
-  };
-
-  const getNodeBorderColor = (status) => {
-    switch (status) {
-      case 'active': return 'border-green-500 dark:border-green-400';
-      case 'inactive': return 'border-red-500 dark:border-red-400';
-      case 'maintenance': return 'border-yellow-500 dark:border-yellow-400';
-      case 'disabled': return 'border-gray-500 dark:border-gray-400';
-      default: return 'border-gray-500 dark:border-gray-400';
-    }
-  };
-
-  const getHandleColor = (status) => {
-    switch (status) {
-      case 'active': return '#22c55e';
-      case 'maintenance': return '#eab308';
-      case 'inactive': return '#ef4444';
-      case 'disabled': return '#9ca3af';
-      default: return '#6b7280';
-    }
-  };
-
-  const handleColor = getHandleColor(data.status);
 
   return (
     <>
@@ -103,7 +37,7 @@ export default function CustomServiceNode({ data, id }) {
       <div className={`relative bg-card border-2 rounded shadow-md min-w-[140px] ${
         isExternal
           ? 'border-dashed border-blue-500 bg-blue-50/30 dark:bg-blue-950/30'
-          : getNodeBorderColor(data.status)
+          : getStatusBorderClass(data.status)
       }`}>
         {/* External Badge */}
         {isExternal && (
@@ -155,17 +89,17 @@ export default function CustomServiceNode({ data, id }) {
                     )}
 
                     <span className="font-semibold text-muted-foreground">Tipe:</span>
-                    <span className="text-foreground capitalize">{data.type || '—'}</span>
+                    <span className="text-foreground">{formatSnakeCase(data.type) || '—'}</span>
 
                     <span className="font-semibold text-muted-foreground">Kategori:</span>
-                    <span className="text-foreground capitalize">{data.category || '—'}</span>
+                    <span className="text-foreground">{formatSnakeCase(data.category) || '—'}</span>
 
                     <span className="font-semibold text-muted-foreground">Lokasi:</span>
                     <span className="text-foreground">{data.location || '—'}</span>
 
                     <span className="font-semibold text-muted-foreground">Status:</span>
                     <span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${getStatusColor(data.status)}`}>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${getStatusBadgeClass(data.status)}`}>
                         {data.status || '—'}
                       </span>
                     </span>
@@ -259,7 +193,7 @@ export default function CustomServiceNode({ data, id }) {
           {/* Status Badge */}
           {data.status && (
             <div className="text-xs text-center mb-2">
-              <span className={`px-1.5 py-0.5 rounded ${getStatusColor(data.status)}`}>
+              <span className={`px-1.5 py-0.5 rounded ${getStatusBadgeClass(data.status)}`}>
                 {data.status}
               </span>
             </div>
@@ -268,13 +202,13 @@ export default function CustomServiceNode({ data, id }) {
           <div className="flex items-start gap-2">
             {/* Icon di kiri */}
             <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
-              {getIconComponent(data.type)}
+              {getTypeIcon(data.type, { size: 20, className: 'text-foreground' })}
             </div>
 
             {/* Text di kanan */}
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm truncate">{data.name || 'Unnamed'}</div>
-              <div className="text-xs text-muted-foreground capitalize">{data.type || ''}</div>
+              <div className="text-xs text-muted-foreground">{formatSnakeCase(data.type) || ''}</div>
               {/* {data.ip && (
                 <div className="text-xs text-muted-foreground font-mono truncate">{data.ip}</div>
               )} */}

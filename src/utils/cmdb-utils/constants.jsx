@@ -34,8 +34,9 @@ export const NODE_TYPES = [
   { value: 'storage', label: 'Storage' },
 ];
 
-export const getTypeIcon = (type) => {
-  const props = { size: 14, className: 'inline mr-1' };
+export const getTypeIcon = (type, customProps = {}) => {
+  const defaultProps = { size: 14, className: 'inline mr-1' };
+  const props = { ...defaultProps, ...customProps };
   switch (type) {
     case 'server': return <Server {...props} />;
     case 'database': return <Database {...props} />;

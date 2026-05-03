@@ -12,8 +12,8 @@ import { Plus, Link2, Trash2, Save, Layers, AlertTriangle, Globe, ExternalLink }
 import api from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
 import { useServiceItems } from '../../hooks/cmdb-hooks/useServiceItems';
-import { loadServiceEdgeHandles, saveServiceEdgeHandle, CONNECTION_TYPES } from '../../utils/cmdb-utils/flowHelpers';
-import { calculatePropagatedStatuses, getStatusColor, shouldShowCrossMarker } from '../../utils/cmdb-utils/statusPropagation';
+import { loadServiceEdgeHandles, saveServiceEdgeHandle, CONNECTION_TYPES, getStatusColor, shouldShowCrossMarker } from '../../utils/cmdb-utils/flowHelpers';
+import { calculatePropagatedStatuses } from '../../utils/cmdb-utils/statusPropagation';
 import CustomServiceNode from './CustomServiceNode';
 import CustomServiceGroupNode from './CustomServiceGroupNode';
 import ServiceConnectionModal from './ServiceConnectionModal';

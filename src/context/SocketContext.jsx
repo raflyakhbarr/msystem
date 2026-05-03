@@ -81,12 +81,11 @@ export const SocketProvider = ({ children }) => {
 
       // Cross-service connection updates
       socket.on('cross_service_connection_update', (data) => {
-        const { workspaceId, serviceId, connectionId, action } = data;
+        const { workspaceId, sourceServiceId, targetServiceId } = data;
         console.log('📡 Cross-service connection update received:', {
           workspaceId,
-          serviceId,
-          connectionId,
-          action
+          sourceServiceId,
+          targetServiceId
         });
         // Components handle this via their own listeners
       });

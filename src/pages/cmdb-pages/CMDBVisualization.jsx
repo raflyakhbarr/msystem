@@ -47,8 +47,6 @@ import 'reactflow/dist/style.css';
 import { Square } from 'lucide-react';
 import api from '../../services/api';
 import { useCMDB } from '../../hooks/cmdb-hooks/useCMDB';
-import { useLayanan } from '../../hooks/cmdb-hooks/useLayanan';
-import { useLayananServiceConnections } from '../../hooks/cmdb-hooks/useLayananServiceConnections';
 import { useServiceToServiceConnections } from '../../hooks/cmdb-hooks/useServiceToServiceConnections';
 import { useCrossServiceConnections } from '../../hooks/cmdb-hooks/useCrossServiceConnections';
 import { useFlowData } from '../../hooks/cmdb-hooks/useFlowData';
@@ -59,7 +57,6 @@ import { calculatePropagatedStatuses } from '../../utils/cmdb-utils/statusPropag
 import { INITIAL_ITEM_FORM, INITIAL_GROUP_FORM, STATUS_COLORS, API_BASE_URL } from '../../utils/cmdb-utils/constants';
 import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
-import CustomLayananNode from '../../components/cmdb-components/CustomLayananNode';
 import ServiceAsNode from '../../components/cmdb-components/ServiceAsNode';
 import VisualizationNavbar from '../../components/cmdb-components/VisualizationNavbar';
 import NodeContextMenu from '../../components/cmdb-components/NodeContextMenu';
@@ -68,15 +65,12 @@ import ItemFormModal from '../../components/cmdb-components/ItemFormModal';
 import ConnectionModal from '../../components/cmdb-components/ConnectionModal';
 import QuickConnectionModal from '../../components/cmdb-components/QuickConnectionModal';
 import QuickServiceToServiceConnection from '../../components/cmdb-components/QuickServiceToServiceConnection';
-import QuickLayananServiceConnection from '../../components/cmdb-components/QuickLayananServiceConnection';
-import LayananServiceConnectionModal from '../../components/cmdb-components/LayananServiceConnectionModal';
 import GroupModal from '../../components/cmdb-components/GroupModal';
 import GroupConnectionModal from '../../components/cmdb-components/GroupConnectionModal';
 import ExportModal from '@/components/cmdb-components/ExportModal';
 import ImportModal from '@/components/cmdb-components/ImportModal';
 import ImportPreviewModal from '@/components/cmdb-components/ImportPreviewModal';
 import ShareModal from '@/components/cmdb-components/ShareModal';
-import LayananFormModal from '../../components/cmdb-components/LayananFormModal';
 import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import StorageFormModal from '../../components/cmdb-components/StorageFormModal';
 import { toast } from 'sonner';
@@ -95,7 +89,6 @@ import WorkspaceSwitcher from '@/components/cmdb-components/WorkspaceSwitcher';
 const nodeTypes = {
   custom: CustomNode,
   group: CustomGroupNode,
-  layanan: CustomLayananNode,
   serviceAsNode: ServiceAsNode,
 };
 
@@ -225,31 +218,23 @@ export default function CMDBVisualization() {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showGroupConnectionModal, setShowGroupConnectionModal] = useState(false);
-  const [showLayananModal, setShowLayananModal] = useState(false);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // Connection Modal service selection states
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [selectedServiceItems, setSelectedServiceItems] = useState([]);
 
   // Quick Connection Modal states
   const [showQuickConnectionModal, setShowQuickConnectionModal] = useState(false);
   const [quickConnectionSource, setQuickConnectionSource] = useState(null);
   const [quickConnectionTarget, setQuickConnectionTarget] = useState(null);
+  const [isSavingConnection, setIsSavingConnection] = useState(false);
 
   // Service-to-Service Connection Modal states
   const [showServiceConnectionModal, setShowServiceConnectionModal] = useState(false);
   const [serviceConnectionSource, setServiceConnectionSource] = useState(null);
   const [serviceConnectionTarget, setServiceConnectionTarget] = useState(null);
-
-  // Layana-Service Connection Modal states
-  const [showLayananServiceModal, setShowLayananServiceModal] = useState(false);
-  const [layananServiceSource, setLayananServiceSource] = useState(null);
-  const [layananServiceTarget, setLayananServiceTarget] = useState(null);
-  const [isLayananSource, setIsLayananSource] = useState(true);
-
-  // New LayananServiceConnectionModal state
-  const [layananServiceConnectionModal, setLayananServiceConnectionModal] = useState({
-    show: false,
-    sourceNode: null
-  });
 
   // Connection labels visibility
   const [showConnectionLabels, setShowConnectionLabels] = useState(false);
@@ -258,20 +243,14 @@ export default function CMDBVisualization() {
   const [edgeContextMenu, setEdgeContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, edge: null });
   const [quickConnectionMode, setQuickConnectionMode] = useState('create'); // 'create' or 'edit'
   const [quickConnectionExistingType, setQuickConnectionExistingType] = useState(null);
+  const [quickConnectionExistingServiceItemId, setQuickConnectionExistingServiceItemId] = useState(null);
 
   const [itemFormData, setItemFormData] = useState(INITIAL_ITEM_FORM);
   const [groupFormData, setGroupFormData] = useState(INITIAL_GROUP_FORM);
-  const [layananFormData, setLayananFormData] = useState({
-    name: '',
-    description: '',
-    status: 'active'
-  });
   const [editItemMode, setEditItemMode] = useState(false);
   const [editGroupMode, setEditGroupMode] = useState(false);
-  const [editLayananMode, setEditLayananMode] = useState(false);
   const [currentItemId, setCurrentItemId] = useState(null);
   const [currentGroupId, setCurrentGroupId] = useState(null);
-  const [currentLayananId, setCurrentLayananId] = useState(null);
 
   const [selectedItemForConnection, setSelectedItemForConnection] = useState(null);
   const [selectedConnections, setSelectedConnections] = useState([]);
@@ -339,8 +318,6 @@ export default function CMDBVisualization() {
   const [showTableDrawer, setShowTableDrawer] = useState(false);
 
   const { items, connections, groups, groupConnections, fetchAll } = useCMDB(currentWorkspace?.id);
-  const { layananItems, layananConnections, createLayanan, updateLayanan, deleteLayana, fetchAll: fetchLayanaAll } = useLayanan(currentWorkspace?.id);
-  const { connections: layananServiceConnections, fetchConnections: fetchLayananServiceConnections, createConnection: createLayananServiceConnection, deleteConnection: deleteLayananServiceConnection } = useLayananServiceConnections(currentWorkspace?.id);
   const { connections: serviceToServiceConnections, fetchConnectionsByWorkspace: fetchServiceToServiceConnections } = useServiceToServiceConnections(currentWorkspace?.id);
   const { connections: crossServiceConnections, fetchConnectionsByWorkspace: fetchCrossServiceConnections } = useCrossServiceConnections(currentWorkspace?.id);
 
@@ -420,7 +397,7 @@ export default function CMDBVisualization() {
     handleManageConnectionsFromVisualization,
     alertDialog,
     closeAlert,
-  } = useVisualizationActions(items, groups, layananItems, fetchAll, fetchLayanaAll);
+  } = useVisualizationActions(items, groups, fetchAll);
 
   const {
     highlightedNodeId,
@@ -669,11 +646,8 @@ export default function CMDBVisualization() {
     showConnectionLabels,
     handleServiceClick,
     handleServiceItemsClick,
-    layananItems,           // FIX: Pass layana nodes for propagation
-    layananConnections,     // FIX: Pass layana connections for propagation
-    services,               // FIX: Pass services array for service status lookup
-    serviceItems,           // FIX: Pass service items for realtime edge updates
-    layananServiceConnections // FIX: Pass layana-service connections for edge rendering
+    services,
+    serviceItems
   );
 
   // Save service node position to database
@@ -790,11 +764,6 @@ export default function CMDBVisualization() {
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
-      // Skip layanan edges from highlight processing - they use their own styling
-      if (String(edge.id).startsWith('layanan-edge-')) {
-        return edge;
-      }
-
       let opacity = edge.style?.opacity || 1;
       let strokeWidth = edge.style?.strokeWidth || 2;
       let zIndex = edge.zIndex || 10;
@@ -846,187 +815,11 @@ export default function CMDBVisualization() {
     loadHandles();
   }, []);
 
-  // Calculate propagated status for layanan nodes
-  const calculateLayananStatusAndConnections = useCallback((layanaId) => {
-    const problematicServices = []; // Track services with issues for info icon
-    let propagatedStatus = 'active';
-
-    // Get layana service connections (to service items with propagation)
-    const serviceConnections = layananServiceConnections.filter(
-      conn => conn.layanan_id === layanaId && conn.propagation_enabled
-    );
-
-    // Get layana connections (to services directly)
-    // FIX: Handle both directions: layana → service AND service → layana
-    const directConnections = layananConnections.filter(conn => {
-      const sourceId = typeof conn.source_id === 'string'
-        ? parseInt(conn.source_id.replace('layanan-', ''))
-        : conn.source_id;
-      const targetId = typeof conn.target_id === 'string'
-        ? parseInt(conn.target_id.replace('layanan-', ''))
-        : conn.target_id;
-
-      // Case 1: Layana → Service (layana is source)
-      const isLayanaToService = sourceId === layanaId && conn.target_type === 'service';
-
-      // Case 2: Service → Layana (layana is target)
-      const isServiceToLayana = targetId === layanaId && conn.source_type === 'service';
-
-      return isLayanaToService || isServiceToLayana;
-    });
-
-    // Debug logging - Show ALL layanan connections for this layana
-    const allLayanaConns = layananConnections.filter(conn => {
-      const sourceId = typeof conn.source_id === 'string'
-        ? parseInt(conn.source_id.replace('layanan-', ''))
-        : conn.source_id;
-      const targetId = typeof conn.target_id === 'string'
-        ? parseInt(conn.target_id.replace('layanan-', ''))
-        : conn.target_id;
-      return sourceId === layanaId || targetId === layanaId;
-    });
-
-    // Process service item connections
-    serviceConnections.forEach(conn => {
-      const serviceId = conn.service_id;
-      const serviceItemId = conn.service_item_id;
-
-      // Find service and service item
-      let targetService = null;
-      let targetServiceItem = null;
-      let parentCmdbItem = null;
-
-      for (const item of items) {
-        const itemServices = servicesMap[item.id] || [];
-        targetService = itemServices.find(s => s.id === serviceId);
-        if (targetService) {
-          parentCmdbItem = item;
-          const itemsForService = serviceItems[serviceId] || [];
-          targetServiceItem = itemsForService.find(si => si.id === serviceItemId);
-          break;
-        }
-      }
-
-      if (targetService && parentCmdbItem) {
-        const serviceItemStatus = targetServiceItem?.status || 'unknown';
-
-        // Track problematic services for info icon
-        if (['inactive', 'maintenance', 'decommissioned'].includes(serviceItemStatus)) {
-          problematicServices.push({
-            type: 'service_item',
-            name: targetService.name,
-            itemName: targetServiceItem?.name || 'Unknown',
-            status: serviceItemStatus,
-            cmdbItem: parentCmdbItem.name
-          });
-        }
-
-        // Propagate status from service item
-        if (conn.propagation_enabled && targetServiceItem) {
-          if (serviceItemStatus === 'inactive') {
-            propagatedStatus = 'inactive';
-          } else if (serviceItemStatus === 'maintenance' && propagatedStatus !== 'inactive') {
-            propagatedStatus = 'maintenance';
-          }
-        }
-      }
-    });
-
-    // Process direct service connections - WITH status propagation
-    directConnections.forEach(conn => {
-      // Determine service ID and connection direction
-      let serviceId;
-      let isLayanaSource;
-
-      if (conn.source_type === 'service' && conn.target_type === 'layanan') {
-        // Service → Layana (e.g., consumed_by)
-        serviceId = conn.source_id;
-        isLayanaSource = false;
-      } else if (conn.source_type === 'layanan' && conn.target_type === 'service') {
-        // Layana → Service (e.g., depends_on)
-        serviceId = conn.target_id;
-        isLayanaSource = true;
-      } else {
-        console.warn(`[Layana ${layanaId}] Unknown connection type:`, conn);
-        return;
-      }
-
-      // Find service (for name/display AND status propagation)
-      let targetService = null;
-      let parentCmdbItem = null;
-
-      for (const item of items) {
-        const itemServices = servicesMap[item.id] || [];
-        targetService = itemServices.find(s => s.id === serviceId);
-        if (targetService) {
-          parentCmdbItem = item;
-          break;
-        }
-      }
-
-      if (targetService && parentCmdbItem) {
-        const serviceStatus = targetService.status || 'active';
-        const serviceName = targetService.name;
-
-        // Track problematic services for info icon (only if propagation is enabled)
-        if (conn.propagation_enabled && ['inactive', 'maintenance', 'decommissioned'].includes(serviceStatus)) {
-          problematicServices.push({
-            type: 'service',
-            name: serviceName,
-            status: serviceStatus,
-            cmdbItem: parentCmdbItem.name
-          });
-        }
-
-        // FIX: Determine propagation direction based on connection type
-        const connectionTypeInfo = CONNECTION_TYPES[conn.connection_type] || CONNECTION_TYPES.depends_on;
-        const propagation = connectionTypeInfo.propagation || 'target_to_source';
-
-        // Determine if service status should affect layana status
-        let shouldPropagate = false;
-
-        // CRITICAL FIX: Only propagate if propagation_enabled is true
-        if (!conn.propagation_enabled) {
-          // Don't add to problematicServices if propagation is disabled
-          // Still add to connections for display, but don't propagate status
-        } else if (propagation === 'target_to_source') {
-          // Target affects Source
-          // If Layana → Service: Service (target) affects Layana (source)
-          // If Service → Layana: Layana (target) affects Service (source) - NOT layana!
-          if (isLayanaSource) {
-            shouldPropagate = true; // Layana is source, service is target
-          }
-        } else if (propagation === 'source_to_target') {
-          // Source affects Target
-          // If Layana → Service: Layana (source) affects Service (target) - NOT layana!
-          // If Service → Layana: Service (source) affects Layana (target)
-          if (!isLayanaSource) {
-            shouldPropagate = true; // Service is source, layana is target
-          }
-        } else if (propagation === 'both') {
-          // Bidirectional - both affect each other
-          shouldPropagate = true;
-        }
-
-        // Apply propagation if enabled and service is not active
-        if (shouldPropagate && serviceStatus !== 'active') {
-          // Priority: inactive > maintenance > active
-          if (serviceStatus === 'inactive' || serviceStatus === 'decommissioned') {
-            propagatedStatus = 'inactive';
-          } else if (serviceStatus === 'maintenance' && propagatedStatus !== 'inactive') {
-            propagatedStatus = 'maintenance';
-          }
-        }
-      }
-    });
-
-    return { propagatedStatus, problematicServices };
-  }, [layananServiceConnections, layananConnections, serviceItems, items, servicesMap]);
-
   // Fetch services for all items (as callback so it can be called manually)
   const fetchServices = useCallback(async () => {
     if (!currentWorkspace?.id) {
       setServices([]);
+      setServiceItems({});
       return;
     }
 
@@ -1044,9 +837,32 @@ export default function CMDBVisualization() {
       }));
 
       setServices(servicesWithPreview);
+
+      // Also fetch all service items for each service to build serviceItemToServiceMap
+      const allServiceItems = {};
+      for (const service of servicesWithPreview) {
+        try {
+          const itemsRes = await api.get(`/services/${service.id}/items?workspace_id=${currentWorkspace.id}`);
+          if (itemsRes.data && itemsRes.data.length > 0) {
+            // Add serviceName to each item
+            const itemsWithServiceName = itemsRes.data.map(item => ({
+              ...item,
+              serviceName: service.name
+            }));
+            allServiceItems[service.id] = itemsWithServiceName;
+          } else {
+            allServiceItems[service.id] = [];
+          }
+        } catch (err) {
+          console.error(`Failed to fetch items for service ${service.id}:`, err);
+          allServiceItems[service.id] = [];
+        }
+      }
+      setServiceItems(allServiceItems);
     } catch (err) {
       console.error('Failed to fetch services:', err);
       setServices([]);
+      setServiceItems({});
     } finally {
       setLoadingServices(false);
     }
@@ -1057,477 +873,11 @@ export default function CMDBVisualization() {
     fetchServices();
   }, [fetchServices]);
 
-  // Fetch service items for services that have layana connections
   useEffect(() => {
-    const fetchServiceItems = async () => {
-      if (!currentWorkspace || layananServiceConnections.length === 0) return;
-
-      const serviceItemsMap = {};
-
-      // Get unique service IDs from layana service connections
-      const serviceIds = [...new Set(layananServiceConnections.map(conn => conn.service_id))];
-
-      for (const serviceId of serviceIds) {
-        try {
-          const res = await api.get(`/service-items/${serviceId}/items`, {
-            params: { workspace_id: currentWorkspace.id }
-          });
-          serviceItemsMap[serviceId] = res.data;
-        } catch (err) {
-          console.error(`Failed to fetch service items for service ${serviceId}:`, err);
-          serviceItemsMap[serviceId] = [];
-        }
-      }
-
-      // FIX: Merge with existing serviceItems WITHOUT overwriting realtime updates
-      // Only add new service IDs that don't exist yet in prevServiceItems
-      setServiceItems(prevServiceItems => {
-        const merged = { ...prevServiceItems };
-
-        // Only add service IDs that don't exist yet
-        Object.keys(serviceItemsMap).forEach(serviceId => {
-          // Only add if not already present (preserve realtime updates)
-          if (!merged[serviceId]) {
-            merged[serviceId] = serviceItemsMap[serviceId];
-          }
-        });
-
-        return merged;
-      });
-    };
-
-    fetchServiceItems();
-  }, [layananServiceConnections, currentWorkspace]);
-
-  useEffect(() => {
+    console.log('🔄 TransformToFlowData effect triggered, connections:', connections.length, 'items:', items.length);
     const { flowNodes, flowEdges } = transformToFlowData();
 
-    // FIX: Calculate edge statuses for ALL edges (including layana connections)
-    // Convert serviceItems object to flat array and include layanaServiceConnections
-    const allServiceItems = Object.values(serviceItems).flat();
-    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layananItems, layananConnections, services, allServiceItems, layananServiceConnections);
-
-    // Add layanan nodes
-    const layananNodes = layananItems.map((layanan, index) => {
-      // Berikan posisi default yang berbeda untuk setiap node jika tidak ada position
-      const defaultPosition = layanan.position
-        ? layanan.position
-        : { x: 100 + (index * 250), y: 100 + (index * 150) }; // Spread out nodes
-
-      // Calculate propagated status and problematic services
-      const { propagatedStatus, problematicServices } = calculateLayananStatusAndConnections(layanan.id);
-
-      return {
-        id: `layanan-${layanan.id}`,
-        type: 'layanan',
-        position: defaultPosition,
-        data: {
-          id: layanan.id,
-          name: layanan.name,
-          description: layanan.description,
-          status: propagatedStatus, // Use propagated status instead of original
-          originalStatus: layanan.status, // Keep original for reference
-          workspaceId: layanan.workspace_id,
-          createdAt: layanan.created_at,
-          updatedAt: layanan.updated_at,
-          problematicServices: problematicServices // Add problematic services for info icon
-        }
-      };
-    });
-
-    // Transform services to independent nodes FIRST (before layanaEdges)
-    // DISABLED: Services are now rendered inside CustomNode using ServiceAsNode with isInsideItem=true
-    // This prevents duplication of service nodes
-    // const serviceNodes = transformServicesToNodes(
-    //   services,
-    //   items,
-    //   {
-    //     onServiceClick: handleServiceClick,
-    //     onServiceItemsClick: handleServiceItemsClick
-    //   }
-    // );
-    const serviceNodes = []; // Empty array since services are inside CustomNode
-
-    // Add layanan connections (edges) with status-based styling
-    const layananEdges = layananConnections.map((conn, index) => {
-      const edgeId = `layanan-edge-${conn.id}`;
-      // PENTING: Semua node IDs harus STRING untuk ReactFlow
-      // Layanan nodes: 'layanan-{id}' (string dengan prefix)
-      // Service nodes: 'service-{id}' (string dengan prefix)
-      let sourceId;
-      if (conn.source_type === 'layanan') {
-        sourceId = `layanan-${conn.source_id}`;
-      } else if (conn.source_type === 'service') {
-        sourceId = `service-${conn.source_id}`;
-      } else {
-        console.warn(`[Layana Edge ${edgeId}] Unknown source_type: ${conn.source_type}`);
-        return null;
-      }
-
-      let targetId;
-      if (conn.target_type === 'layanan') {
-        targetId = `layanan-${conn.target_id}`;
-      } else if (conn.target_type === 'service') {
-        targetId = `service-${conn.target_id}`;
-      } else {
-        console.warn(`[Layana Edge ${edgeId}] Unknown target_type: ${conn.target_type}`);
-        return null;
-      }
-
-      // Find source and target nodes to get their status
-      // Include serviceNodes in the search since they're now created before layananEdges
-      const allNodes = [...flowNodes, ...layananNodes, ...serviceNodes];
-      let sourceNode = allNodes.find(n => n.id === sourceId);
-      let targetNode = allNodes.find(n => n.id === targetId);
-
-      // For service nodes, get the service directly from servicesMap
-      let sourceService = null;
-      let targetService = null;
-
-      if (conn.source_type === 'service' && !sourceNode) {
-        // Find the service in servicesMap
-        for (const item of items) {
-          const itemServices = servicesMap[item.id] || [];
-          sourceService = itemServices.find(s => s.id === conn.source_id);
-          if (sourceService) break;
-        }
-        if (!sourceService) {
-          console.warn(`[Layana Edge ${edgeId}] Source service ${conn.source_id} not found in servicesMap`);
-          return null; // Service not found
-        }
-      }
-
-      if (conn.target_type === 'service' && !targetNode) {
-        // Find the service in servicesMap
-        for (const item of items) {
-          const itemServices = servicesMap[item.id] || [];
-          targetService = itemServices.find(s => s.id === conn.target_id);
-          if (targetService) break;
-        }
-        if (!targetService) {
-          console.warn(`[Layana Edge ${edgeId}] Target service ${conn.target_id} not found in servicesMap`);
-          return null; // Service not found
-        }
-      }
-
-      // Check if we have valid nodes or services
-      const hasValidSource = sourceNode || sourceService;
-      const hasValidTarget = targetNode || targetService;
-
-      if (!hasValidSource || !hasValidTarget) {
-        console.warn(`[Layana Edge ${edgeId}] Skipping edge - missing source or target`);
-        return null; // Skip edge jika node tidak ditemukan
-      }
-
-      // FIX: Use edgeStatuses from calculatePropagatedStatuses instead of manual calculation
-      const edgeStatusInfo = edgeStatuses[edgeId];
-
-      let edgeStatus = 'active';
-      let showCrossMarker = false;
-      let strokeColor = '#10b981'; // default green
-
-      if (edgeStatusInfo) {
-        // Use propagated status from statusPropagation.js
-        edgeStatus = edgeStatusInfo.effectiveEdgeStatus || edgeStatus;
-        showCrossMarker = edgeStatus === 'inactive' || edgeStatus === 'maintenance' || edgeStatus === 'decommissioned';
-
-        // Get color based on status
-        const getStrokeColor = (status) => {
-          switch (status) {
-            case 'active': return '#10b981'; // green
-            case 'inactive': return '#ef4444'; // red
-            case 'maintenance': return '#f59e0b'; // yellow
-            case 'decommissioned': return '#ef4444'; // red
-            default: return '#10b981'; // green
-          }
-        };
-
-        strokeColor = getStrokeColor(edgeStatus);
-      } else {
-        // Fallback: Calculate manually if edgeStatusInfo not found
-        const getSourceStatus = () => {
-          if (sourceService) return sourceService.status;
-          return sourceNode?.data?.status || 'active';
-        };
-
-        const getTargetStatus = () => {
-          if (targetService) return targetService.status;
-          return targetNode?.data?.status || 'active';
-        };
-
-        const sourceStatus = getSourceStatus();
-        const targetStatus = getTargetStatus();
-
-        // Determine edge status based on source and target statuses
-        if (sourceStatus === 'inactive' || targetStatus === 'inactive') {
-          edgeStatus = 'inactive';
-          showCrossMarker = true;
-        } else if (sourceStatus === 'maintenance' || targetStatus === 'maintenance') {
-          edgeStatus = 'maintenance';
-        }
-
-        // Get color based on status
-        const getStrokeColor = (status) => {
-          switch (status) {
-            case 'active': return '#10b981'; // green
-            case 'inactive': return '#ef4444'; // red
-            case 'maintenance': return '#f59e0b'; // yellow
-            default: return '#10b981'; // green
-          }
-        };
-
-        strokeColor = getStrokeColor(edgeStatus);
-
-        console.warn(`[Layana Edge ${edgeId}] edgeStatusInfo not found, using fallback:`, {
-          edgeStatus,
-          sourceStatus,
-          targetStatus
-        });
-      }
-
-      // Get handles from edgeHandles state, or use defaults
-      let sourceHandle, targetHandle;
-      if (edgeHandles[edgeId]) {
-        sourceHandle = edgeHandles[edgeId].sourceHandle;
-        targetHandle = edgeHandles[edgeId].targetHandle;
-      } else {
-        // Default handles based on node types
-        // Layanan nodes have handles: 'bottom' (source), 'top' (target), 'left' (source), 'right' (source), 'left-target' (target), 'right-target' (target)
-        // CMDB nodes have handles: 'source-bottom', 'target-bottom', 'source-top', 'target-top', 'source-left', 'target-left', 'source-right', 'target-right'
-        // Service nodes have handles: 'source-{position}' and 'target-{position}' (top, right, bottom, left)
-
-        if (conn.source_type === 'layanan') {
-          // Source is Layanan node - use 'bottom' or 'right' for output
-          sourceHandle = 'bottom';
-        } else {
-          // Source is CMDB node - use 'source-bottom' for output
-          sourceHandle = 'source-bottom';
-        }
-
-        if (conn.target_type === 'layanan') {
-          // Target is Layanan node - use 'top' or 'left-target'/'right-target' for input
-          targetHandle = 'top';
-        } else if (conn.target_type === 'service') {
-          // Target is Service node - use 'target-top' for input
-          targetHandle = 'target-top';
-        } else {
-          // Target is CMDB node - use 'target-top' for input
-          targetHandle = 'target-top';
-        }
-      }
-
-      const edgeConfig = {
-        id: edgeId,
-        source: sourceId,
-        target: targetId,
-        sourceHandle,
-        targetHandle,
-        type: 'smoothstep',
-        animated: false,
-        markerEnd: { type: 'arrowclosed', color: strokeColor },
-        style: {
-          stroke: strokeColor,
-          strokeWidth: 2,  // SAMA DENGAN CMDB (normal = 2)
-          opacity: 1,
-        },
-        zIndex: conn.target_type === 'service' || conn.source_type === 'service' ? 1001 : 10,  // Higher for service edges
-        reconnectable: true,
-        // FIX: Add data for EdgeContextMenu
-        data: {
-          connectionType: conn.connection_type || 'connects_to',
-          source_type: conn.source_type,
-          target_type: conn.target_type,
-          source_id: conn.source_id,
-          target_id: conn.target_id,
-          propagation_enabled: conn.propagation_enabled
-        },
-        // Add connection type label if enabled
-        ...(showConnectionLabels && {
-          label: conn.connection_type || 'connects_to',
-          labelStyle: {
-            fontSize: 10,
-            fontWeight: 600,
-            fill: strokeColor,
-            backgroundColor: 'white',
-            borderRadius: '4px',
-            padding: '2px 4px'
-          },
-          labelBgStyle: {
-            fill: 'transparent',
-            fillOpacity: 0
-          }
-        }),
-        // Add cross marker if inactive
-        ...(showCrossMarker && {
-          label: '✕',
-          labelStyle: {
-            fill: strokeColor,
-            fontWeight: 'bold',
-            fontSize: 20,
-          },
-          labelBgStyle: {
-            fill: 'transparent',
-            fillOpacity: 0
-          }
-        }),
-      };
-
-      return edgeConfig;
-    });
-
-    // Filter out null edges and log the result
-    const validLayananEdges = layananEdges.filter(Boolean);
-
-    // Add layanan service connections (edges to service items with status propagation)
-    const layananServiceEdges = layananServiceConnections.map((conn) => {
-      const edgeId = `layana-service-edge-${conn.id}`;
-
-      // Layanan node ID
-      const layananNodeId = `layanan-${conn.layanan_id}`;
-
-      // Service node ID (Level 2: Service)
-      const serviceNodeId = `service-${conn.service_id}`;
-
-      // Find the service that contains this service item
-      let targetService = null;
-
-      // Search through all items to find the service
-      for (const item of items) {
-        const itemServices = servicesMap[item.id] || [];
-        targetService = itemServices.find(s => s.id === conn.service_id);
-        if (targetService) {
-          break;
-        }
-      }
-
-      if (!targetService) {
-        return null; // Skip if service not found
-      }
-
-      const sourceNode = layananNodes.find(n => n.id === layananNodeId);
-      const targetNode = flowNodes.find(n => n.id === serviceNodeId);
-
-      if (!sourceNode || !targetNode) {
-        return null;
-      }
-
-      // Determine edge status based on service item status (fetch from serviceItems map)
-      let edgeStatus = 'active';
-      let showCrossMarker = false;
-
-      // Get service item status - ALWAYS check regardless of propagation_enabled
-      // because edge should reflect current state of connected service item
-      if (targetService) {
-        // Get service items from the serviceItems map
-        const itemsForService = serviceItems[conn.service_id] || [];
-        const serviceItem = itemsForService.find(item => item.id === conn.service_item_id);
-
-        if (serviceItem) {
-          if (serviceItem.status === 'inactive' || sourceNode?.data?.status === 'inactive') {
-            edgeStatus = 'inactive';
-            showCrossMarker = true;
-          } else if (serviceItem.status === 'maintenance' || sourceNode?.data?.status === 'maintenance') {
-            edgeStatus = 'maintenance';
-          }
-        }
-      }
-
-      const getStrokeColor = (status) => {
-        switch (status) {
-          case 'active': return '#10b981';
-          case 'inactive': return '#ef4444';
-          case 'maintenance': return '#f59e0b';
-          default: return '#10b981';
-        }
-      };
-
-      const strokeColor = getStrokeColor(edgeStatus);
-
-      const edgeConfig = {
-        id: edgeId,
-        source: layananNodeId,
-        target: serviceNodeId, // Connect to Service Node (Level 2), not CMDB Item
-        sourceHandle: edgeHandles[edgeId]?.sourceHandle || 'bottom',
-        targetHandle: edgeHandles[edgeId]?.targetHandle || 'target-top', // Service nodes use 'target-top' handle
-        type: 'smoothstep',
-        animated: false,
-        markerEnd: { type: 'arrowclosed', color: strokeColor },
-        style: {
-          stroke: strokeColor,
-          strokeWidth: 2,
-          opacity: 1,
-        },
-        reconnectable: true,
-        updatable: true, // Enable edge handle repositioning
-        data: {
-          connectionType: conn.connection_type || 'depends_on',
-          showCrossMarker,
-          // Store service item name directly as simple string (ReactFlow might strip complex objects)
-          service_item_name: conn.service_item_name,
-          service_item_id: conn.service_item_id,
-          service_id: conn.service_id,
-        },
-      };
-
-      // Debug log
-      console.log('✅ Created layana-service edge:', {
-        edgeId,
-        service_item_name: edgeConfig.data.service_item_name,
-        service_item_id: edgeConfig.data.service_item_id,
-        service_id: edgeConfig.data.service_id
-      });
-
-      // DEBUG: Verify layanaServiceConnection data is added
-      console.log('✅ Creating layana-service edge with data:', {
-        edgeId,
-        hasLayanaServiceConnection: !!edgeConfig.data.layanaServiceConnection,
-        connectionData: edgeConfig.data.layanaServiceConnection,
-        originalConn: conn,
-        connKeys: Object.keys(conn)
-      });
-
-      // Add cross marker if inactive - don't use spread to avoid overwriting data
-      if (showCrossMarker) {
-        edgeConfig.label = '✕';
-        edgeConfig.labelStyle = {
-          fill: strokeColor,
-          fontWeight: 'bold',
-          fontSize: 20,
-        };
-        edgeConfig.labelBgStyle = {
-          fill: 'transparent',
-          fillOpacity: 0
-        };
-      }
-
-      // Add label for service connection
-      if (showConnectionLabels && conn.connection_type) {
-        const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
-        edgeConfig.label = connectionTypeInfo ? connectionTypeInfo.label : conn.connection_type;
-        edgeConfig.labelStyle = {
-          fontSize: '10px',
-          fontWeight: 600,
-          fill: strokeColor
-        };
-        edgeConfig.labelBgStyle = {
-          fill: 'white',
-          fillOpacity: 0
-        };
-        edgeConfig.labelBgPadding = [6, 6];
-      }
-
-      // FINAL CHECK: Verify data is still there before returning
-      console.log('🔍 Final edgeConfig before return:', {
-        edgeId,
-        hasData: !!edgeConfig.data,
-        hasLayanaServiceConnection: !!edgeConfig.data?.layananServiceConnection,
-        layanaServiceConnection: edgeConfig.data?.layanaServiceConnection
-      });
-
-      return edgeConfig;
-    }).filter(Boolean);
-
-    const allEdges = [...flowEdges, ...validLayananEdges, ...layananServiceEdges];
+    const allEdges = [...flowEdges];
 
     // Create service-to-service edges with DASHED style
     const serviceToServiceEdges = (serviceToServiceConnections || []).map((conn) => {
@@ -1592,7 +942,7 @@ export default function CMDBVisualization() {
 
         // If source is child node, add parent position
         if (sourceParentId) {
-          const sourceParent = [...flowNodes, ...layananNodes].find(n => n.id === sourceParentId);
+          const sourceParent = [...flowNodes].find(n => n.id === sourceParentId);
           if (sourceParent) {
             sourceAbsX += sourceParent.position.x;
             sourceAbsY += sourceParent.position.y;
@@ -1601,7 +951,7 @@ export default function CMDBVisualization() {
 
         // If target is child node, add parent position
         if (targetParentId) {
-          const targetParent = [...flowNodes, ...layananNodes].find(n => n.id === targetParentId);
+          const targetParent = [...flowNodes].find(n => n.id === targetParentId);
           if (targetParent) {
             targetAbsX += targetParent.position.x;
             targetAbsY += targetParent.position.y;
@@ -1768,7 +1118,7 @@ export default function CMDBVisualization() {
 
         // If source is child node, add parent position
         if (sourceParentId) {
-          const sourceParent = [...flowNodes, ...layananNodes].find(n => n.id === sourceParentId);
+          const sourceParent = [...flowNodes].find(n => n.id === sourceParentId);
           if (sourceParent) {
             sourceAbsX += sourceParent.position.x;
             sourceAbsY += sourceParent.position.y;
@@ -1777,7 +1127,7 @@ export default function CMDBVisualization() {
 
         // If target is child node, add parent position
         if (targetParentId) {
-          const targetParent = [...flowNodes, ...layananNodes].find(n => n.id === targetParentId);
+          const targetParent = [...flowNodes].find(n => n.id === targetParentId);
           if (targetParent) {
             targetAbsX += targetParent.position.x;
             targetAbsY += targetParent.position.y;
@@ -1880,9 +1230,9 @@ export default function CMDBVisualization() {
       return edgeConfig;
     }).filter(Boolean);
 
-    setNodes([...flowNodes, ...layananNodes, ...serviceNodes]);
+    setNodes([...flowNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges, ...crossServiceEdges]);
-  }, [transformToFlowData, setNodes, setEdges, layananItems, layananConnections, layananServiceConnections, showConnectionLabels, edgeHandles, items, calculateLayananStatusAndConnections, serviceToServiceConnections, crossServiceConnections, services, serviceItems]); // Added crossServiceConnections dependency for real-time edge status updates
+  }, [items, connections, groups, groupConnections, transformToFlowData, setNodes, setEdges, showConnectionLabels, edgeHandles, serviceToServiceConnections, crossServiceConnections, services, serviceItems]);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -1929,24 +1279,31 @@ export default function CMDBVisualization() {
   }, [nodes]);
 
   // Use SocketContext for real-time updates
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      console.warn('⚠️ Socket not available yet');
+      return;
+    }
 
+    console.log('🔌 Setting up socket listeners, socket connected:', isConnected);
     socketRef.current = socket;
 
     const handleCmdbUpdate = async () => {
-      // Skip fetch if currently saving
-      if (!isSavingRef.current) {
-        // Fetch CMDB data, layana data, layana-service connections, service-to-service connections, and cross-service connections
+      // Skip fetch if currently saving connection to avoid race condition
+      if (!isSavingRef.current && !isSavingConnection) {
+        console.log('📡 cmdb_update event received, fetching all data...');
+        // Fetch CMDB data, services, service-to-service connections, and cross-service connections
         await Promise.all([
           fetchAll(),
-          fetchLayanaAll(),
-          fetchLayananServiceConnections(), // ✅ Tambah ini untuk layana-service edge realtime updates
+          fetchServices(),
           fetchServiceToServiceConnections(),
           fetchCrossServiceConnections()
         ]);
+        console.log('✅ cmdb_update: data fetch complete');
+      } else {
+        console.log('⏸️ cmdb_update event skipped - currently saving');
       }
     };
 
@@ -1995,8 +1352,25 @@ export default function CMDBVisualization() {
       const newStatus = data.newStatus;
       const currentWorkspaceId = currentWorkspace?.id;
 
+      console.log('\n📡 ========================================');
+      console.log('📡 SERVICE ITEM STATUS UPDATE EVENT');
+      console.log('📡 ========================================');
+      console.log('📡 Service Item ID:', eventServiceItemId);
+      console.log('📡 New Status:', newStatus);
+      console.log('📡 Service ID:', eventServiceId);
+      console.log('📡 Event Workspace ID:', eventWorkspaceId);
+      console.log('📡 Current Workspace ID:', currentWorkspaceId);
+      console.log('📡 Should Process:', eventWorkspaceId === currentWorkspaceId);
+      console.log('📡 ========================================\n');
+
       // Only update if this is for our workspace
       if (eventWorkspaceId === currentWorkspaceId) {
+        console.log('📡 Service item status update received:', {
+          serviceItemId: eventServiceItemId,
+          newStatus,
+          serviceId: eventServiceId
+        });
+
         try {
           // FIX: Fetch all service items for the service, not just one item
           // Use eventServiceId (service ID), not eventServiceItemId (service item ID)
@@ -2016,7 +1390,7 @@ export default function CMDBVisualization() {
           });
 
           // Force trigger edge re-calculation by updating services with a timestamp
-          // This ensures layana-service edges re-render with new service item status
+          // This ensures service item edges re-render with updated status
           setServices(prevServices => {
             // Create a new array reference with updated timestamp for the affected service
             const updatedServices = prevServices.map(service => {
@@ -2041,16 +1415,48 @@ export default function CMDBVisualization() {
       }
     };
 
+    const handleCrossServiceConnectionUpdate = async (data) => {
+      // Parse cross-service connection update data
+      // Event format: { sourceServiceId, targetServiceId, workspaceId }
+      const eventWorkspaceId = parseInt(data.workspaceId);
+      const currentWorkspaceId = currentWorkspace?.id;
+
+      // Only update if this is for our workspace
+      if (eventWorkspaceId === currentWorkspaceId) {
+        console.log('📡 Cross-service connection update received in CMDBVisualization:', data);
+        try {
+          // Fetch cross-service connections to get the latest data
+          await fetchCrossServiceConnections();
+          console.log('✅ Cross-service connections refreshed after socket update');
+        } catch (err) {
+          console.warn('Failed to refresh cross-service connections:', err);
+        }
+      }
+    };
+
     socket.on('cmdb_update', handleCmdbUpdate);
     socket.on('service_update', handleServiceUpdate);
     socket.on('service_item_status_update', handleServiceItemStatusUpdate);
+    socket.on('cross_service_connection_update', handleCrossServiceConnectionUpdate);
 
     return () => {
       socket.off('cmdb_update', handleCmdbUpdate);
       socket.off('service_update', handleServiceUpdate);
       socket.off('service_item_status_update', handleServiceItemStatusUpdate);
+      socket.off('cross_service_connection_update', handleCrossServiceConnectionUpdate);
     };
-  }, [socket, fetchAll, fetchLayanaAll, currentWorkspace, setServices, fetchServices, setServiceItems]);
+  }, [socket, isConnected, isSavingConnection, fetchAll, fetchServices, currentWorkspace, setServices, setServiceItems, fetchCrossServiceConnections]);
+
+  // Handle socket reconnection - fetch data when socket reconnects
+  useEffect(() => {
+    if (isConnected && currentWorkspace?.id) {
+      console.log('🔌 Socket reconnected, fetching latest data...');
+      fetchAll();
+      fetchServices();
+      fetchServiceToServiceConnections();
+      fetchCrossServiceConnections();
+    }
+  }, [isConnected, fetchAll, fetchServices, currentWorkspace, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
 
   useEffect(() => {
     localStorage.setItem('cmdb-minimap-enabled', JSON.stringify(showMiniMap));
@@ -2062,24 +1468,6 @@ export default function CMDBVisualization() {
     setCurrentItemId(null);
     setServiceIconUploads({});
     setShowItemModal(true);
-  }, []);
-
-  const handleOpenAddLayanan = useCallback(() => {
-    setLayananFormData({ name: '', description: '', status: 'active' });
-    setEditLayananMode(false);
-    setCurrentLayananId(null);
-    setShowLayananModal(true);
-  }, []);
-
-  const handleEditLayanan = useCallback((layanan) => {
-    setLayananFormData({
-      name: layanan.name || '',
-      description: layanan.description || '',
-      status: layanan.status || 'active'
-    });
-    setEditLayananMode(true);
-    setCurrentLayananId(layanan.id);
-    setShowLayananModal(true);
   }, []);
 
   const handleOpenImport = useCallback(() => {
@@ -2094,12 +1482,13 @@ export default function CMDBVisualization() {
   const handleImportConfirm = useCallback((result) => {
     // Refresh data after import
     fetchAll();
+    fetchServices();
 
     // Emit socket update
     if (socket) {
       socket.emit('cmdb_update');
     }
-  }, [fetchAll, socket]);
+  }, [fetchAll, fetchServices, socket]);
 
   const handleEditItem = useCallback((item) => {
     const itemServices = servicesMap[item.id] || [];
@@ -2306,57 +1695,6 @@ export default function CMDBVisualization() {
     }
   }, [itemFormData, currentWorkspace, getViewportCenter, editItemMode, currentItemId, serviceIconUploads, fetchAll, fetchServices]);
 
-  const handleLayananSubmit = useCallback(async (e) => {
-    e.preventDefault();
-
-    if (!currentWorkspace) {
-      toast.error('Pilih workspace terlebih dahulu');
-      return;
-    }
-
-    const initialPosition = getViewportCenter();
-
-    try {
-      const layananData = {
-        name: layananFormData.name,
-        description: layananFormData.description || null,
-        status: layananFormData.status,
-        position: initialPosition,
-        workspace_id: currentWorkspace.id
-      };
-
-      let result;
-
-      if (editLayananMode) {
-        // Update existing layanan
-        result = await updateLayanan(currentLayananId, {
-          name: layananData.name,
-          description: layananData.description,
-          status: layananData.status
-        });
-      } else {
-        // Create new layanan
-        result = await createLayanan(layananData);
-      }
-
-      if (result.success) {
-        toast.success(editLayananMode ? 'Layanan berhasil diupdate' : 'Layanan berhasil ditambahkan');
-        setShowLayananModal(false);
-
-        setTimeout(() => {
-          setLayananFormData({ name: '', description: '', status: 'active' });
-          setEditLayananMode(false);
-          setCurrentLayananId(null);
-        }, 100);
-      } else {
-        toast.error('Gagal: ' + result.error);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Terjadi kesalahan: ' + (err.response?.data?.error || err.message));
-    }
-  }, [layananFormData, currentWorkspace, getViewportCenter, editLayananMode, currentLayananId, createLayanan, updateLayanan]);
-
   const handleOpenManageGroups = useCallback(() => {
     setGroupFormData(INITIAL_GROUP_FORM);
     setEditGroupMode(false);
@@ -2422,6 +1760,16 @@ export default function CMDBVisualization() {
       .filter(conn => conn.source_id === item.id && conn.target_group_id)
       .map(conn => conn.target_group_id);
 
+    // Load existing service connections (target_service_id)
+    const existingServiceConns = connections
+      .filter(conn => conn.source_id === item.id && conn.target_service_id)
+      .map(conn => conn.target_service_id);
+
+    // Load existing service item connections (target_service_item_id)
+    const existingServiceItemConns = connections
+      .filter(conn => conn.source_id === item.id && conn.target_service_item_id)
+      .map(conn => conn.target_service_item_id);
+
     setSelectedConnections(existingItemConns);
     setSelectedGroupConnections(existingGroupConns);
 
@@ -2444,6 +1792,8 @@ export default function CMDBVisualization() {
       });
 
     setItemToGroupConnectionTypes(existingGroupTypes);
+    setSelectedServices(existingServiceConns);
+    setSelectedServiceItems(existingServiceItemConns);
     setShowConnectionModal(true);
   }, [connections]);
 
@@ -2458,8 +1808,10 @@ export default function CMDBVisualization() {
     }));
   }, []);
 
-  const handleSaveConnections = useCallback(async (itemConnTypes = {}, groupConnTypes = {}) => {
+  const handleSaveConnections = useCallback(async (itemConnTypes = {}, groupConnTypes = {}, serviceData = {}) => {
     if (!selectedItemForConnection || !currentWorkspace) return;
+
+    const { selectedServices = [], selectedServiceItems = [], serviceConnectionTypes = {}, serviceItemConnectionTypes = {} } = serviceData;
 
     try {
       // SIMPLER & MORE ROBUST APPROACH:
@@ -2503,6 +1855,46 @@ export default function CMDBVisualization() {
         });
       }
 
+      // Handle service connections (remove all, then add back)
+      const existingServiceConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_service_id);
+
+      for (const conn of existingServiceConns) {
+        await api.delete(`/cmdb/connections/item-to-service/${selectedItemForConnection.id}/${conn.target_service_id}`);
+      }
+
+      for (const serviceId of selectedServices) {
+        const connectionType = serviceConnectionTypes[serviceId]?.type || selectedConnectionType;
+        await api.post('/cmdb/connections', {
+          source_id: selectedItemForConnection.id,
+          target_id: null,
+          workspace_id: currentWorkspace.id,
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType),
+          target_service_id: serviceId
+        });
+      }
+
+      // Handle service item connections (remove all, then add back)
+      const existingServiceItemConns = connections
+        .filter(conn => conn.source_id === selectedItemForConnection.id && conn.target_service_item_id);
+
+      for (const conn of existingServiceItemConns) {
+        await api.delete(`/cmdb/connections/item-to-service-item/${selectedItemForConnection.id}/${conn.target_service_item_id}`);
+      }
+
+      for (const serviceItemId of selectedServiceItems) {
+        const connectionType = serviceItemConnectionTypes[serviceItemId]?.type || selectedConnectionType;
+        await api.post('/cmdb/connections', {
+          source_id: selectedItemForConnection.id,
+          target_id: null,
+          workspace_id: currentWorkspace.id,
+          connection_type: connectionType,
+          direction: getConnectionDirection(connectionType),
+          target_service_item_id: serviceItemId
+        });
+      }
+
       await fetchAll();
       setShowConnectionModal(false);
     } catch (err) {
@@ -2521,40 +1913,40 @@ export default function CMDBVisualization() {
 
   // Handler for drag-to-connect (Quick Connection Modal)
   const handleConnect = useCallback((connection) => {
-    // Detect if source or target is a group, layanan, or service
+    // Detect if source or target is a group, service, or service_item
     const isSourceGroup = String(connection.source).startsWith('group-');
     const isTargetGroup = String(connection.target).startsWith('group-');
-    const isSourceLayanan = String(connection.source).startsWith('layanan-');
-    const isTargetLayanan = String(connection.target).startsWith('layanan-');
     const isSourceService = String(connection.source).startsWith('service-');
     const isTargetService = String(connection.target).startsWith('service-');
+    const isSourceServiceItem = String(connection.source).startsWith('service-item-');
+    const isTargetServiceItem = String(connection.target).startsWith('service-item-');
 
-    let sourceItem, targetItem, sourceGroup, targetGroup, sourceLayanan, targetLayanan, sourceService, targetService;
+    let sourceItem, targetItem, sourceGroup, targetGroup, sourceService, targetService, sourceServiceItem, targetServiceItem;
 
+    // Parse source
     if (isSourceGroup) {
       const sourceGroupId = Number(String(connection.source).replace('group-', ''));
       sourceGroup = groups.find(g => g.id === sourceGroupId);
-    } else if (isSourceLayanan) {
-      const sourceLayananId = Number(String(connection.source).replace('layanan-', ''));
-      sourceLayanan = layananItems.find(l => l.id === sourceLayananId);
     } else if (isSourceService) {
       const sourceServiceId = Number(String(connection.source).replace('service-', ''));
-      // Find service from services array
       sourceService = services.find(s => s.id === sourceServiceId);
+    } else if (isSourceServiceItem) {
+      const sourceServiceItemId = Number(String(connection.source).replace('service-item-', ''));
+      sourceServiceItem = serviceItems.find(si => si.id === sourceServiceItemId);
     } else {
       sourceItem = items.find(item => item.id === Number(connection.source));
     }
 
+    // Parse target
     if (isTargetGroup) {
       const targetGroupId = Number(String(connection.target).replace('group-', ''));
       targetGroup = groups.find(g => g.id === targetGroupId);
-    } else if (isTargetLayanan) {
-      const targetLayananId = Number(String(connection.target).replace('layanan-', ''));
-      targetLayanan = layananItems.find(l => l.id === targetLayananId);
     } else if (isTargetService) {
       const targetServiceId = Number(String(connection.target).replace('service-', ''));
-      // Find service from services array
       targetService = services.find(s => s.id === targetServiceId);
+    } else if (isTargetServiceItem) {
+      const targetServiceItemId = Number(String(connection.target).replace('service-item-', ''));
+      targetServiceItem = serviceItems.find(si => si.id === targetServiceItemId);
     } else {
       targetItem = items.find(item => item.id === Number(connection.target));
     }
@@ -2583,72 +1975,79 @@ export default function CMDBVisualization() {
       return;
     }
 
-    // Handle layanan → service connections (direct connection to service, not service item)
-    if ((sourceLayanan && targetService) || (sourceService && targetLayanan)) {
-      const layananId = sourceLayanan ? sourceLayanan.id : targetLayanan.id;
-      const serviceId = sourceService ? sourceService.id : targetService.id;
-      const isSourceLay = !!sourceLayanan;
+    // Handle CMDB Item to/from Service connections
+    // (Item <-> Service, Item <-> ServiceItem, Service <-> Item, ServiceItem <-> Item)
+    const isItemToService = (sourceItem && (targetService || targetServiceItem)) ||
+                           (targetItem && (sourceService || sourceServiceItem));
 
-      const existingConn = layananConnections.find(
-        conn => conn.source_id === layananId &&
-                conn.source_type === 'layanan' &&
-                conn.target_id === serviceId &&
-                conn.target_type === 'service'
-      );
+    if (isItemToService) {
+      // For item-to-service connections, use QuickConnectionModal with special handling
+      // Determine which is source and which is target for display
+      let itemNode, serviceNode;
 
-      if (existingConn) {
-        toast.error('Koneksi layanan-service sudah ada!');
+      if (sourceItem && targetService) {
+        // Item (source) -> Service (target)
+        itemNode = sourceItem;
+        serviceNode = targetService;
+      } else if (sourceItem && targetServiceItem) {
+        // Item (source) -> Service Item (target)
+        itemNode = sourceItem;
+        serviceNode = { ...targetServiceItem, _entityType: 'service_item' };
+      } else if (targetItem && sourceService) {
+        // Service (source) -> Item (target)
+        // Keep service as source (not swapped)
+        serviceNode = sourceService;
+        itemNode = targetItem;
+      } else if (targetItem && sourceServiceItem) {
+        // Service Item (source) -> Item (target)
+        serviceNode = { ...sourceServiceItem, _entityType: 'service_item' };
+        itemNode = targetItem;
+      }
+
+      if (!itemNode || !serviceNode) {
+        console.error('Could not determine item/service nodes:', { sourceItem, targetItem, sourceService, targetService, sourceServiceItem, targetServiceItem });
         return;
       }
 
-      // Open layana-service connection modal
-      setLayananServiceSource(isSourceLay ? sourceLayanan : sourceService);
-      setLayananServiceTarget(isSourceLay ? targetService : targetLayanan);
-      setIsLayananSource(isSourceLay);
-      setShowLayananServiceModal(true);
+      // Set source and target for QuickConnectionModal
+      // For item-to-service: source is item, target is service
+      // For service-to-item: source is service, target is item
+      const isServiceSource = sourceService || sourceServiceItem;
+      if (isServiceSource) {
+        // Service -> Item: source is service, target is item
+        setQuickConnectionSource({ ...serviceNode, _entityType: 'service' });
+        setQuickConnectionTarget({ ...itemNode, _entityType: 'item' });
+      } else {
+        // Item -> Service (or Item -> Service Item): source is item, target is service
+        setQuickConnectionSource({ ...itemNode, _entityType: 'item' });
+        setQuickConnectionTarget({ ...serviceNode, _entityType: 'service' });
+      }
+      setQuickConnectionMode('create');
+      setQuickConnectionExistingType(null);
+      setShowQuickConnectionModal(true);
       return;
     }
 
-    // BLOCK: CMDB item → layanan connections (NOT ALLOWED)
-    // Only service → layana connections are allowed
-    if ((sourceItem && targetLayanan) || (sourceLayanan && targetItem)) {
-      // Silent abort - don't show any error or modal
-      console.log('[handleConnect] Blocked CMDB item ↔ layana connection. Only service ↔ layana allowed.');
-      return;
-    }
-
-    // Check if we have valid source and target (excluding layana - handled above)
+    // Check if we have valid source and target
     if ((!sourceItem && !sourceGroup) || (!targetItem && !targetGroup)) {
-      return;
-    }
-
-    // Check for unsupported connections involving layana (should be blocked above)
-    if (sourceLayanan || targetLayanan) {
-      console.log('[handleConnect] Layana connection should not reach this point');
       return;
     }
 
     // Check if connection already exists
     let existingConn = null;
-    // Note: CMDB item ↔ layana connections are blocked above
-    // This only handles CMDB item ↔ CMDB item, group connections, etc.
     if (sourceItem && targetItem) {
-      // Item-to-item
       existingConn = connections.find(
         conn => conn.source_id === sourceItem.id && conn.target_id === targetItem.id
       );
     } else if (sourceItem && targetGroup) {
-      // Item-to-group
       existingConn = connections.find(
         conn => conn.source_id === sourceItem.id && conn.target_group_id === targetGroup.id
       );
     } else if (sourceGroup && targetItem) {
-      // Group-to-item
       existingConn = connections.find(
         conn => conn.source_group_id === sourceGroup.id && conn.target_id === targetItem.id
       );
     } else if (sourceGroup && targetGroup) {
-      // Group-to-group - not supported in quick connection yet
       toast.info('Gunakan Group Connection Modal untuk koneksi group-to-group');
       return;
     }
@@ -2658,15 +2057,7 @@ export default function CMDBVisualization() {
       return;
     }
 
-    // Block layana from reaching the quick connection modal
-    // Layana connections should be handled by layana-service modal above
-    if (sourceLayanan || targetLayanan) {
-      console.log('[handleConnect] Layana connection should not reach quick connection modal');
-      return;
-    }
-
-    // Set source and target (can be item, group)
-    // Note: Layana is explicitly excluded above
+    // Set source and target (can be item or group)
     const sourceData = sourceGroup || sourceItem;
     const targetData = targetGroup || targetItem;
 
@@ -2678,7 +2069,7 @@ export default function CMDBVisualization() {
     setQuickConnectionMode('create');
     setQuickConnectionExistingType(null);
     setShowQuickConnectionModal(true);
-  }, [items, connections, groups, layananItems, layananConnections, services, serviceToServiceConnections]);
+  }, [items, connections, groups, services, serviceItems, serviceToServiceConnections]);
 
   const handleSaveServiceConnection = useCallback(async (sourceServiceId, targetServiceId, connectionType, options = {}) => {
     if (!currentWorkspace) return;
@@ -2749,217 +2140,305 @@ export default function CMDBVisualization() {
     }
   }, [currentWorkspace, fetchServiceToServiceConnections, fetchCrossServiceConnections, services]);
 
-  const handleSaveLayananServiceConnection = useCallback(async (connectionType, propagationEnabled = true) => {
-    if (!currentWorkspace || !layananServiceSource || !layananServiceTarget) return;
-
-    try {
-      // FIX: Send propagation_enabled parameter to API
-      const response = await api.post('/layanan/connections', {
-        source_type: isLayananSource ? 'layanan' : 'service',
-        source_id: layananServiceSource.id,
-        target_type: isLayananSource ? 'service' : 'layanan',
-        target_id: layananServiceTarget.id,
-        workspace_id: currentWorkspace.id,
-        connection_type: connectionType,
-        propagation_enabled: propagationEnabled  // FIX: Add this field
-      });
-
-      toast.success('Koneksi layanan-service berhasil dibuat!');
-      await fetchLayanaAll();
-      setShowLayananServiceModal(false);
-      setLayananServiceSource(null);
-      setLayananServiceTarget(null);
-    } catch (error) {
-      console.error('Failed to create layana-service connection:', error);
-      toast.error(error.response?.data?.error || 'Gagal membuat koneksi layanan-service');
-    }
-  }, [currentWorkspace, fetchLayanaAll, layananServiceSource, layananServiceTarget, isLayananSource]);
-
   const handleSaveQuickConnection = useCallback(async (connectionType, serviceItemData = null) => {
     if (!quickConnectionSource || !quickConnectionTarget || !currentWorkspace) return;
 
     try {
-      // Detect if source or target is a group or layanan using _entityType property
       const isSourceGroup = quickConnectionSource._entityType === 'group';
       const isTargetGroup = quickConnectionTarget._entityType === 'group';
-      const isSourceLayanan = quickConnectionSource._entityType === 'layanan';
-      const isTargetLayanan = quickConnectionTarget._entityType === 'layanan';
+      const isSourceService = quickConnectionSource._entityType === 'service' || String(quickConnectionSource.id).startsWith('service-');
+      const isTargetService = quickConnectionTarget._entityType === 'service' || String(quickConnectionTarget.id).startsWith('service-');
+      const isSourceServiceItem = quickConnectionSource._entityType === 'service_item' || String(quickConnectionSource.id).startsWith('service-item-');
+      const isTargetServiceItem = quickConnectionTarget._entityType === 'service_item' || String(quickConnectionTarget.id).startsWith('service-item-');
 
-      // Check if this involves layanan
-      const involvesLayanan = isSourceLayanan || isTargetLayanan;
+      // Handle CMDB Item to Service / Service Item connections
+      const isItemToService = (quickConnectionSource._entityType === 'item' && (isTargetService || isTargetServiceItem)) ||
+                             (quickConnectionTarget._entityType === 'item' && (isSourceService || isSourceServiceItem));
 
-      // Check if this involves groups with layanan (not supported by database)
-      const involvesGroupWithLayanan = (isSourceGroup && isTargetLayanan) || (isSourceLayanan && isTargetGroup);
+      if (isItemToService) {
+        // Determine the CMDB item and service/serviceitem
+        let cmdbItem, serviceOrItem;
+        let isServiceAsSource = false;
 
-      if (involvesGroupWithLayanan) {
-        toast.error('Koneksi group-to-layanan tidak didukung. Gunakan item sebagai perantara.');
-        return;
-      }
-
-      // Handle layanan to service item connection
-      if (involvesLayanan && serviceItemData) {
-        const layananNode = isSourceLayanan ? quickConnectionSource : quickConnectionTarget;
-        // Handle both string IDs with 'layanan-' prefix and numeric IDs
-        const layananId = typeof layananNode.id === 'string'
-          ? parseInt(layananNode.id.replace('layanan-', ''))
-          : layananNode.id;
-
-        // Check connection target type
-        if (serviceItemData.connectionTargetType === 'service') {
-          // Direct layana → service connection using layana_connections table
-          const response = await api.post('/layanan/connections', {
-            source_type: 'layanan',  // Always layana since involvesLayanan is true
-            source_id: layananId,
-            target_type: 'service',
-            target_id: serviceItemData.serviceId,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            propagation_enabled: serviceItemData.propagationEnabled !== undefined ? serviceItemData.propagationEnabled : true
-          });
-
-          toast.success('Koneksi layanan ke service berhasil dibuat!');
-          await fetchLayanaAll();
+        if (quickConnectionSource._entityType === 'item') {
+          cmdbItem = quickConnectionSource;
+          serviceOrItem = quickConnectionTarget;
+        } else if (quickConnectionTarget._entityType === 'item') {
+          // Service is the source, item is the target - SWAP for saving
+          cmdbItem = quickConnectionTarget;
+          serviceOrItem = quickConnectionSource;
+          isServiceAsSource = true;
         } else {
-          // Layana → service item connection using layana_service_connections table
-          const result = await createLayananServiceConnection({
-            layanan_id: layananId,
-            service_id: serviceItemData.serviceId,
-            service_item_id: serviceItemData.serviceItemId,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            propagation_enabled: serviceItemData.propagationEnabled,
-          });
+          console.error('Unknown connection pattern:', { quickConnectionSource, quickConnectionTarget });
+          return;
+        }
 
-          if (result.success) {
-            toast.success('Koneksi layanan ke service item berhasil dibuat!');
-            await fetchLayanaAll();
+        console.log('   Processing item-to-service connection:', { cmdbItem, serviceOrItem, isServiceAsSource });
+        console.log('   serviceItemData from modal:', serviceItemData);
+
+        // Get the service or service item details
+        let targetServiceId, targetServiceItemId, sourceServiceItemId;
+
+        // If serviceItemData is provided (user selected from modal), use it
+        if (serviceItemData && serviceItemData.selectedServiceItemIds && serviceItemData.selectedServiceItemIds.length > 0) {
+          // User selected service items from the modal
+          if (serviceItemData.isSourceService) {
+            // Service is the source, user selected service item FROM the service as source
+            sourceServiceItemId = serviceItemData.selectedServiceItemIds[0];
           } else {
-            toast.error(result.error || 'Gagal membuat koneksi');
+            // Service is the target, user selected service item FROM the service as target
+            targetServiceItemId = serviceItemData.selectedServiceItemIds[0];
+          }
+
+          // NOTE: We do NOT set targetServiceId here
+          // The parent service can be derived from service_items.service_id in the database
+          // Edge rendering in useFlowData will use serviceItemToServiceMap to find the parent service
+        } else if (isServiceAsSource) {
+          // Service is the source, so we need to get target (which is item, not service)
+          // For service->item connection, source is service, target is item
+          // We set source_service_id in this case
+          const sourceIdStr = String(serviceOrItem.id || '');
+          if (sourceIdStr.startsWith('service-')) {
+            targetServiceId = Number(sourceIdStr.replace('service-', ''));
+          } else {
+            targetServiceId = serviceOrItem.id;
+          }
+        } else if (isTargetService || quickConnectionTarget._entityType === 'service') {
+          // Fallback to target service if explicitly targeted
+          const targetIdStr = String(serviceOrItem.id || '');
+          if (targetIdStr.startsWith('service-')) {
+            targetServiceId = Number(targetIdStr.replace('service-', ''));
+          } else {
+            targetServiceId = serviceOrItem.id;
+          }
+        } else if (isTargetServiceItem || quickConnectionTarget._entityType === 'service_item') {
+          // Extract service item ID from serviceOrItem.id (could be "service-item-3" or just "3")
+          const serviceItemIdStr = String(serviceOrItem.id || '');
+          if (serviceItemIdStr.startsWith('service-item-')) {
+            targetServiceItemId = Number(serviceItemIdStr.replace('service-item-', ''));
+          } else {
+            targetServiceItemId = serviceOrItem.id;
+          }
+          // Also get parent service ID for service item connections
+          // Since user selected "Ke Service Item" from modal, quickConnectionTarget IS the parent service
+          if (quickConnectionTarget._entityType === 'service') {
+            targetServiceId = Number(quickConnectionTarget.id);
+          } else {
+            const targetIdStr = String(quickConnectionTarget.id || '');
+            if (targetIdStr.startsWith('service-') && !targetIdStr.startsWith('service-item-')) {
+              targetServiceId = Number(targetIdStr.replace('service-', ''));
+            } else {
+              // Try to find parent service from services array
+              for (const service of services) {
+                const serviceItemsArray = serviceItems[service.id];
+                if (serviceItemsArray && Array.isArray(serviceItemsArray)) {
+                  const found = serviceItemsArray.find(si => si.id === targetServiceItemId);
+                  if (found) {
+                    targetServiceId = service.id;
+                    break;
+                  }
+                }
+              }
+            }
           }
         }
 
+        // Check for duplicate connection before saving
+        // Only check in create mode (not edit mode)
+        if (quickConnectionMode === 'create') {
+          const actualSourceId = isServiceAsSource ? serviceOrItem.id : cmdbItem.id;
+          const isDuplicate = connections.some(conn => {
+            // Must be same source
+            if (conn.source_id !== actualSourceId) return false;
+
+            // Check if both target_service_id and target_service_item_id match
+            if (targetServiceId && conn.target_service_id === targetServiceId) {
+              // Same service connection
+              return true;
+            }
+            if (targetServiceItemId && conn.target_service_item_id === targetServiceItemId) {
+              // Same service item connection
+              return true;
+            }
+            // Also check target_id match for service->item connections
+            if (isServiceAsSource && cmdbItem && conn.target_id === cmdbItem.id) {
+              return true;
+            }
+            return false;
+          });
+
+          if (isDuplicate) {
+            toast.error('Koneksi sudah ada! Tidak boleh membuat koneksi duplikat.');
+            return;
+          }
+        }
+
+        try {
+          // Save to connections table with target_service_id
+          // For item-to-service, we set target_id = null and only use target_service_id
+          let connectionData;
+
+          if (isServiceAsSource) {
+            // Service is the source, item is the target
+            // If user selected a service item as source, use source_service_item_id
+            // Otherwise, use source_service_id (service as source)
+            if (sourceServiceItemId) {
+              // User selected service item FROM the service as source
+              connectionData = {
+                source_service_item_id: sourceServiceItemId, // service item as source
+                source_id: null,
+                source_service_id: null, // Must be null when using source_service_item_id
+                target_id: cmdbItem.id, // item as target
+                target_service_id: null,
+                target_service_item_id: null,
+                workspace_id: currentWorkspace.id,
+                connection_type: connectionType,
+                direction: getConnectionDirection(connectionType)
+              };
+              console.log('\n🔗 ========================================');
+              console.log('🔗 CREATING SERVICE-ITEM-TO-ITEM CONNECTION');
+              console.log('🔗 ========================================');
+              console.log('🔗 Source Service Item ID:', sourceServiceItemId);
+              console.log('🔗 Target CMDB Item ID:', cmdbItem.id);
+              console.log('🔗 Target CMDB Item Name:', cmdbItem.name);
+              console.log('🔗 Connection Type:', connectionType);
+              console.log('🔗 Connection Data:', JSON.stringify(connectionData, null, 2));
+              console.log('🔗 ========================================\n');
+            } else {
+              // User selected the service itself as source (not a service item)
+              connectionData = {
+                source_service_id: serviceOrItem.id, // service as source
+                source_id: null,
+                target_id: cmdbItem.id, // item as target
+                workspace_id: currentWorkspace.id,
+                connection_type: connectionType,
+                direction: getConnectionDirection(connectionType)
+              };
+            }
+          } else {
+            // Item is the source, service is the target
+            connectionData = {
+              source_id: cmdbItem.id,
+              target_id: null, // Set to null since we're connecting to a service, not an item
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType),
+              target_service_id: targetServiceId,
+              target_service_item_id: targetServiceItemId
+            };
+          }
+
+          console.log('   Saving item-to-service connection:', connectionData);
+          setIsSavingConnection(true);
+          const response = await api.post('/cmdb/connections', connectionData);
+          console.log('   Connection saved successfully:', response.data);
+
+          toast.success('Koneksi item-to-service berhasil dibuat!');
+          await Promise.all([fetchAll(), fetchServices(), fetchServiceToServiceConnections(), fetchCrossServiceConnections()]);
+
+          // Add small delay to ensure React has processed the state updates
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          setIsSavingConnection(false);
+          setShowQuickConnectionModal(false);
+          setQuickConnectionSource(null);
+          setQuickConnectionTarget(null);
+          return;
+        } catch (err) {
+          console.error('   Failed to save item-to-service connection:', err);
+          toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
+          return;
+        }
+      }
+
+      try {
+        setIsSavingConnection(true);
+
+        if (quickConnectionMode === 'edit') {
+          // Update existing connection
+          if (!isSourceGroup && !isTargetGroup) {
+            await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Tipe koneksi berhasil diubah!');
+          } else if (isSourceGroup && !isTargetGroup) {
+            await api.put(`/cmdb/connections/from-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Tipe koneksi group-to-item berhasil diubah!');
+          } else if (!isSourceGroup && isTargetGroup) {
+            await api.put(`/cmdb/connections/to-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Tipe koneksi item-to-group berhasil diubah!');
+          } else {
+            toast.error('Edit koneksi group-to-group: Gunakan Group Connection Modal.');
+          }
+        } else {
+          // Create new connection
+          if (isSourceGroup && isTargetGroup) {
+            await api.post('/groups/connections', {
+              source_id: quickConnectionSource.id,
+              target_id: quickConnectionTarget.id,
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Koneksi group-to-group berhasil dibuat!');
+          } else if (isSourceGroup && !isTargetGroup) {
+            await api.post('/cmdb/connections/from-group', {
+              source_group_id: quickConnectionSource.id,
+              target_id: quickConnectionTarget.id,
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Koneksi group-to-item berhasil dibuat!');
+          } else if (!isSourceGroup && isTargetGroup) {
+            await api.post('/cmdb/connections/to-group', {
+              source_id: quickConnectionSource.id,
+              target_group_id: quickConnectionTarget.id,
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Koneksi item-to-group berhasil dibuat!');
+          } else {
+            await api.post('/cmdb/connections', {
+              source_id: quickConnectionSource.id,
+              target_id: quickConnectionTarget.id,
+              workspace_id: currentWorkspace.id,
+              connection_type: connectionType,
+              direction: getConnectionDirection(connectionType)
+            });
+            toast.success('Koneksi berhasil dibuat!');
+          }
+        }
+
+        await Promise.all([fetchAll(), fetchServices(), fetchServiceToServiceConnections(), fetchCrossServiceConnections()]);
+
+        // Add small delay to ensure React has processed the state updates
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        setIsSavingConnection(false);
         setShowQuickConnectionModal(false);
         setQuickConnectionSource(null);
         setQuickConnectionTarget(null);
-        return;
+      } catch (apiError) {
+        setIsSavingConnection(false);
+        throw apiError; // Re-throw to outer catch block
       }
-
-      if (quickConnectionMode === 'edit') {
-        // Update existing connection - not supported for layanan yet
-        if (involvesLayanan) {
-          toast.info('Edit koneksi layanan: Hapus dan buat kembali dengan tipe baru.');
-          return;
-        }
-        // Update existing connection
-        if (!isSourceGroup && !isTargetGroup) {
-          // Item-to-item
-          await api.put(`/cmdb/connections/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Tipe koneksi berhasil diubah!');
-        } else if (isSourceGroup && !isTargetGroup) {
-          // Group-to-item
-          await api.put(`/cmdb/connections/from-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Tipe koneksi group-to-item berhasil diubah!');
-        } else if (!isSourceGroup && isTargetGroup) {
-          // Item-to-group
-          await api.put(`/cmdb/connections/to-group/${quickConnectionSource.id}/${quickConnectionTarget.id}`, {
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Tipe koneksi item-to-group berhasil diubah!');
-        } else {
-          toast.error('Edit koneksi group-to-group: Gunakan Group Connection Modal.');
-        }
-      } else {
-        // Create new connection
-        if (involvesLayanan) {
-          // Check if this is layana → service connection
-          const isSourceService = quickConnectionSource._entityType === 'service';
-          const isTargetService = quickConnectionTarget._entityType === 'service';
-
-          if ((isSourceLayanan && isTargetService) || (isSourceService && isTargetLayanan)) {
-            // Layana ↔ Service direct connection (ALLOWED)
-            const layananId = isSourceLayanan ? quickConnectionSource.id : quickConnectionTarget.id;
-            const serviceId = isSourceService ? quickConnectionSource.id : quickConnectionTarget.id;
-
-            const response = await api.post('/layanan/connections', {
-              source_type: isSourceLayanan ? 'layanan' : 'service',
-              source_id: layananId,
-              target_type: isSourceService ? 'layanan' : 'service',
-              target_id: serviceId,
-              workspace_id: currentWorkspace.id,
-              connection_type: connectionType,
-              propagation_enabled: true
-            });
-
-            toast.success('Koneksi layanan-service berhasil dibuat!');
-            await fetchLayanaAll();
-          } else {
-            // REMOVED: Layana ↔ CMDB connections are no longer supported
-            toast.error('Koneksi layanan hanya boleh ke service. Silakan drag dari service node.');
-            return;
-          }
-        } else if (isSourceGroup && isTargetGroup) {
-          // Group-to-group - use group connection endpoint
-          await api.post('/groups/connections', {
-            source_id: quickConnectionSource.id,
-            target_id: quickConnectionTarget.id,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Koneksi group-to-group berhasil dibuat!');
-        } else if (isSourceGroup && !isTargetGroup) {
-          // Group-to-item
-          await api.post('/cmdb/connections/from-group', {
-            source_group_id: quickConnectionSource.id,
-            target_id: quickConnectionTarget.id,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Koneksi group-to-item berhasil dibuat!');
-        } else if (!isSourceGroup && isTargetGroup) {
-          // Item-to-group
-          await api.post('/cmdb/connections/to-group', {
-            source_id: quickConnectionSource.id,
-            target_group_id: quickConnectionTarget.id,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Koneksi item-to-group berhasil dibuat!');
-        } else {
-          // Item-to-item
-          await api.post('/cmdb/connections', {
-            source_id: quickConnectionSource.id,
-            target_id: quickConnectionTarget.id,
-            workspace_id: currentWorkspace.id,
-            connection_type: connectionType,
-            direction: getConnectionDirection(connectionType)
-          });
-          toast.success('Koneksi berhasil dibuat!');
-        }
-      }
-
-      // Fetch cmdb, layana, service-to-service connections, and cross-service connections data
-      await Promise.all([fetchAll(), fetchLayanaAll(), fetchServiceToServiceConnections(), fetchCrossServiceConnections()]);
-      setShowQuickConnectionModal(false);
-      setQuickConnectionSource(null);
-      setQuickConnectionTarget(null);
     } catch (err) {
       console.error('Save connection error:', err);
       toast.error('Gagal menyimpan koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchLayanaAll, fetchServiceToServiceConnections, fetchCrossServiceConnections, getConnectionDirection, saveEdgeHandle, edgeHandles]);
+  }, [quickConnectionSource, quickConnectionTarget, quickConnectionMode, currentWorkspace, fetchAll, fetchServiceToServiceConnections, fetchCrossServiceConnections, getConnectionDirection]);
 
   // Edge Context Menu handlers
   const handleEdgeContextMenu = useCallback((event, edge) => {
@@ -2979,8 +2458,9 @@ export default function CMDBVisualization() {
       sourceNode,
       targetNode,
       servicesMap, // Pass servicesMap for service name lookup
+      serviceItems, // Pass serviceItems for service item name lookup
     });
-  }, [nodes, servicesMap]);
+  }, [nodes, servicesMap, serviceItems]);
 
   const closeEdgeContextMenu = useCallback(() => {
     setEdgeContextMenu(prev => ({ ...prev, show: false }));
@@ -2990,33 +2470,64 @@ export default function CMDBVisualization() {
     if (!edgeContextMenu.edge) return;
 
     try {
-      // Deteksi apakah koneksi layanan, group-to-item, item-to-group, atau group-to-group
-      const isLayananEdge = String(edgeContextMenu.edge.id).startsWith('layanan-edge-');
-      const isLayananServiceEdge = String(edgeContextMenu.edge.id).startsWith('layana-service-edge-');
-      const isGroupToItem = String(edgeContextMenu.edge.source).startsWith('group-');
-      const isItemToGroup = String(edgeContextMenu.edge.target).startsWith('group-');
+      const edge = edgeContextMenu.edge;
+      const isGroupToItem = String(edge.source).startsWith('group-');
+      const isItemToGroup = String(edge.target).startsWith('group-');
       const isGroupToGroup = isGroupToItem && isItemToGroup;
-      const isServiceConnection = String(edgeContextMenu.edge.id).startsWith('service-connection-');
+      const isServiceToServiceConnection = String(edge.id).startsWith('service-connection-');
+      const isCrossServiceConnection = String(edge.id).startsWith('cross-service-connection-');
+      const isSourceService = String(edge.source).startsWith('service-');
+      const isTargetService = String(edge.target).startsWith('service-');
+      const isServiceToItem = isSourceService && !isTargetService && String(edge.target).match(/^\d+$/);
+      // Check if this is an item-to-service-item connection (edge id contains '-service-' pattern)
+      const isItemToServiceItem = isTargetService && String(edge.id).includes('-service-item-') && !isServiceToServiceConnection;
+      // Check if this is a service-item-to-item connection (service item as source)
+      // Edge ID format: eservice-item-{serviceItemId}-{targetId}
+      const isServiceItemToItem = String(edge.id).startsWith('eservice-item-');
 
       let deleteUrl;
-      if (isLayananServiceEdge) {
-        // Layanan-service edge: DELETE /api/layanan-service-connections/:id
-        const connectionId = String(edgeContextMenu.edge.id).replace('layana-service-edge-', '');
-        // Validate connectionId is a valid number before deleting
-        if (!connectionId || isNaN(Number(connectionId))) {
-          console.error('Invalid connection ID for layanan-service connection:', connectionId);
-          toast.error('Invalid connection ID');
+      if (isServiceToServiceConnection) {
+        // Service-to-service connection: DELETE /api/service-to-service-connections/:id
+        const connectionId = String(edge.id).replace('service-connection-', '');
+        deleteUrl = `/service-to-service-connections/${connectionId}`;
+      } else if (isCrossServiceConnection) {
+        // Cross-service connection (service item to service item): DELETE /api/cross-service-connections/:id
+        const connectionId = String(edge.id).replace('cross-service-connection-', '');
+        deleteUrl = `/cross-service-connections/${connectionId}`;
+      } else if (isServiceItemToItem) {
+        // Service-item-to-item connection: source is service item, target is item
+        // Edge ID format: eservice-item-{serviceItemId}-{targetId}
+        // Need to DELETE by source_service_item_id
+        const edgeIdStr = String(edge.id);
+        const serviceItemIdMatch = edgeIdStr.match(/^eservice-item-(\d+)-(\d+)$/);
+        if (serviceItemIdMatch) {
+          const sourceServiceItemId = serviceItemIdMatch[1]; // Service item ID
+          const targetItemId = serviceItemIdMatch[2]; // Target CMDB item ID
+          deleteUrl = `/cmdb/connections/service-item-to-item/${sourceServiceItemId}/${targetItemId}`;
+        } else {
+          console.error('Invalid service-item-to-item edge ID format:', edgeIdStr);
+          toast.error('Format edge ID tidak valid untuk service-item-to-item connection');
           return;
         }
-        deleteUrl = `/layanan-service-connections/${connectionId}`;
-      } else if (isLayananEdge) {
-        // Layanan edge: DELETE /api/layanan/connections/:id
-        const connectionId = String(edgeContextMenu.edge.id).replace('layanan-edge-', '');
-        deleteUrl = `/layanan/connections/${connectionId}`;
-      } else if (isServiceConnection) {
-        // Service-to-service connection: DELETE /api/service-to-service-connections/:id
-        const connectionId = String(edgeContextMenu.edge.id).replace('service-connection-', '');
-        deleteUrl = `/service-to-service-connections/${connectionId}`;
+      } else if (isServiceToItem) {
+        // Service-to-item connection: source is service, target is item
+        // Edge id pattern: e{service-x}-{itemId}
+        const sourceServiceId = String(edge.source).replace('service-', '');
+        const targetItemId = edge.target;
+        deleteUrl = `/cmdb/connections/from-service/${sourceServiceId}/${targetItemId}`;
+      } else if (isItemToServiceItem) {
+        // Item-to-service-item connection: DELETE /api/cmdb/connections/item-to-service-item/:sourceId/:targetServiceItemId
+        // Edge id pattern: e{source_id}-service-item-{serviceItemId}
+        const sourceId = edge.source;
+        const edgeIdStr = String(edge.id);
+        const targetServiceItemId = edgeIdStr.replace(`e${sourceId}-service-item-`, '');
+        deleteUrl = `/cmdb/connections/item-to-service-item/${sourceId}/${targetServiceItemId}`;
+      } else if (isTargetService) {
+        // Item-to-service connection: DELETE /api/cmdb/connections/item-to-service/:sourceId/:targetServiceId
+        // For item-to-service, target_id in DB is NULL and target_service_id stores the service ID
+        const sourceId = edge.source;
+        const targetServiceId = String(edge.target).replace('service-', '');
+        deleteUrl = `/cmdb/connections/item-to-service/${sourceId}/${targetServiceId}`;
       } else if (isGroupToGroup) {
         // Group-to-group: DELETE /api/groups/connections/:sourceId/:targetId
         const sourceGroupId = String(edgeContextMenu.edge.source).replace('group-', '');
@@ -3038,11 +2549,9 @@ export default function CMDBVisualization() {
       await api.delete(deleteUrl);
       toast.success('Koneksi berhasil dihapus');
 
-      // Fetch cmdb, layana, layanan-service, service-to-service connections, and cross-service connections data
+      // Fetch cmdb, service-to-service connections, and cross-service connections data
       await Promise.all([
         fetchAll(),
-        fetchLayanaAll(),
-        fetchLayananServiceConnections(),
         fetchServiceToServiceConnections(),
         fetchCrossServiceConnections()
       ]);
@@ -3050,7 +2559,7 @@ export default function CMDBVisualization() {
       console.error('Delete connection error:', err);
       toast.error('Gagal menghapus koneksi: ' + (err.response?.data?.error || err.message));
     }
-  }, [edgeContextMenu.edge, fetchAll, fetchLayanaAll, fetchLayananServiceConnections, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
+  }, [edgeContextMenu.edge, fetchAll, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
 
   const handleEditEdge = useCallback(() => {
     if (!edgeContextMenu.edge) return;
@@ -3058,17 +2567,42 @@ export default function CMDBVisualization() {
     const edge = edgeContextMenu.edge;
 
     // Deteksi tipe koneksi
-    const isLayananEdge = String(edge.id).startsWith('layanan-edge-');
     const isGroupToItem = String(edge.source).startsWith('group-');
     const isItemToGroup = String(edge.target).startsWith('group-');
     const isGroupToGroup = isGroupToItem && isItemToGroup;
+    const isItemToService = String(edge.target).startsWith('service-') && !String(edge.target).startsWith('service-item-');
 
-    let sourceItem, targetItem, sourceGroup, targetGroup, sourceLayanan, targetLayanan;
+    let sourceItem, targetItem, sourceGroup, targetGroup;
     let connectionType = edge.data?.connectionType || edge.label || 'depends_on';
 
-    // Handle layanan edge - edit not supported yet
-    if (isLayananEdge) {
-      toast.info('Edit koneksi layanan: Hapus dan buat kembali dengan tipe baru.');
+    // Handle item-to-service connections
+    if (isItemToService) {
+      const sourceId = Number(edge.source);
+      const targetServiceId = Number(String(edge.target).replace('service-', ''));
+
+      sourceItem = items.find(item => item.id === sourceId);
+      const targetService = services.find(s => Number(s.id) === targetServiceId);
+
+      if (!sourceItem || !targetService) {
+        toast.error('Source item atau target service tidak ditemukan!');
+        return;
+      }
+
+      // Find the connection in the connections array
+      // Since we now only save target_service_id for direct service connections,
+      // and target_service_item_id for service item connections (no target_service_id),
+      // we need to find by source + target_service_item
+      const existingConnection = connections.find(
+        conn => conn.source_id === sourceId && conn.target_service_item_id
+      );
+      const existingServiceItemId = existingConnection?.target_service_item_id || null;
+
+      setQuickConnectionSource({ ...sourceItem, _entityType: 'item' });
+      setQuickConnectionTarget({ ...targetService, _entityType: 'service' });
+      setQuickConnectionMode('edit');
+      setQuickConnectionExistingType(connectionType);
+      setQuickConnectionExistingServiceItemId(existingServiceItemId);
+      setShowQuickConnectionModal(true);
       return;
     }
 
@@ -4018,14 +3552,14 @@ export default function CMDBVisualization() {
     
     isSavingRef.current = true;
     setIsAutoSaving(true);
-    
+
     try {
       const updatePromises = [];
-      
+
       changedNodeIds.forEach((nodeId) => {
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
-        
+
         if (node.type === 'custom' && !node.parentNode) {
           updatePromises.push(
             api.put(`/cmdb/${node.id}/position`, {
@@ -4039,16 +3573,6 @@ export default function CMDBVisualization() {
             api.put(`/groups/${groupId}/position`, {
               position: { x: node.position.x, y: node.position.y },
               skipEmit: true // Skip individual emits
-            })
-          );
-        } else if (node.type === 'layanan') {
-          const layananId = typeof node.id === 'string'
-            ? node.id.replace('layanan-', '')
-            : node.id;
-          updatePromises.push(
-            api.put(`/layanan/${layananId}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-              skipEmit: true // Skip individual emits for batch update
             })
           );
         }
@@ -4112,16 +3636,6 @@ export default function CMDBVisualization() {
               skipEmit: true // Skip individual emits
             })
           );
-        } else if (node.type === 'layanan') {
-          const layananId = typeof node.id === 'string'
-            ? node.id.replace('layanan-', '')
-            : node.id;
-          updatePromises.push(
-            api.put(`/layanan/${layananId}/position`, {
-              position: { x: node.position.x, y: node.position.y },
-              skipEmit: true // Skip individual emits for batch update
-            })
-          );
         }
       });
 
@@ -4151,12 +3665,10 @@ export default function CMDBVisualization() {
     const editData = handleEditFromVisualization(contextMenu.node);
     if (editData.type === 'group') {
       handleEditGroup(editData.data);
-    } else if (editData.type === 'layanan') {
-      handleEditLayanan(editData.data);
     } else {
       handleEditItem(editData.data);
     }
-  }, [contextMenu.node, handleEditFromVisualization, handleEditGroup, handleEditLayanan, handleEditItem]);
+  }, [contextMenu.node, handleEditFromVisualization, handleEditGroup, handleEditItem]);
 
   const handleContextDelete = useCallback(async () => {
     await handleDeleteFromVisualization(contextMenu.node);
@@ -4186,11 +3698,6 @@ export default function CMDBVisualization() {
   }, [contextMenu.node, toggleNodeVisibility]);
 
   const handleContextRemoveFromGroup = useCallback(async () => {
-    if (!contextMenu.node || contextMenu.node.type === 'layanan') {
-      toast.error('Layanan tidak dapat berada dalam group');
-      return;
-    }
-
     if (!contextMenu.node.parentNode) {
       toast.error('Item tidak dalam group');
       return;
@@ -4219,40 +3726,6 @@ export default function CMDBVisualization() {
       toast.error(`Gagal: ${err.response?.data?.error || err.message}`);
     }
   }, [contextMenu.node, fetchAll]);
-
-  // Handlers for LayananServiceConnectionModal
-  const handleOpenLayananServiceConnection = useCallback(() => {
-    if (!contextMenu.node || contextMenu.node.type !== 'layanan') return;
-
-    setLayananServiceConnectionModal({
-      show: true,
-      sourceNode: contextMenu.node
-    });
-    closeContextMenu();
-  }, [contextMenu.node, closeContextMenu]);
-
-  const handleCloseLayananServiceConnection = useCallback(() => {
-    setLayananServiceConnectionModal({
-      show: false,
-      sourceNode: null
-    });
-  }, []);
-
-  const handleSaveLayananServiceConnectionModal = useCallback(async (connectionData) => {
-    try {
-      await api.post('/layanan/connections', connectionData);
-      toast.success('Koneksi layanan berhasil dibuat!');
-      await Promise.all([
-        fetchLayanaAll(),
-        fetchLayananServiceConnections() // Also fetch layana-service connections for edge rendering
-      ]);
-      handleCloseLayananServiceConnection();
-    } catch (error) {
-      console.error('Failed to create layana-service connection:', error);
-      toast.error('Gagal membuat koneksi: ' + (error.response?.data?.error || error.message));
-      throw error;
-    }
-  }, [fetchLayanaAll, fetchLayananServiceConnections, handleCloseLayananServiceConnection]);
 
     const toggleTableDrawer = useCallback(() => {
     setShowTableDrawer(prev => !prev);
@@ -4444,7 +3917,6 @@ export default function CMDBVisualization() {
         onSavePositions={handleSavePositions}
         onOpenAddItem={handleOpenAddItem}
         onOpenManageGroups={handleOpenManageGroups}
-        onOpenAddLayanan={handleOpenAddLayanan}
         onOpenExportModal={() => setShowExportModal(true)}
         onOpenImportModal={handleOpenImport}
         onOpenShareModal={() => setShowShareModal(true)}
@@ -4725,7 +4197,6 @@ export default function CMDBVisualization() {
             onDelete={handleContextDelete}
             onManageConnections={handleContextManageConnections}
             onManageGroupConnections={handleContextManageGroupConnections}
-            onManageLayananServiceConnections={handleOpenLayananServiceConnection}
             onRemoveFromGroup={handleContextRemoveFromGroup}
             onToggleVisibility={handleContextToggleVisibility}
             onClose={closeContextMenu}
@@ -4891,24 +4362,6 @@ export default function CMDBVisualization() {
         onStorageDelete={handleStorageDelete}
       />
 
-      <LayananFormModal
-        show={showLayananModal}
-        editMode={editLayananMode}
-        formData={layananFormData}
-        currentWorkspace={currentWorkspace}
-        onClose={() => {
-          setShowLayananModal(false);
-          setLayananFormData({ name: '', description: '', status: 'active' });
-          setEditLayananMode(false);
-          setCurrentLayananId(null);
-        }}
-        onSubmit={handleLayananSubmit}
-        onInputChange={(e) => {
-          const { name, value } = e.target;
-          setLayananFormData(prev => ({ ...prev, [name]: value }));
-        }}
-      />
-
       <StorageFormModal
         show={showStorageModal}
         storage={itemFormData.storage}
@@ -4934,6 +4387,8 @@ export default function CMDBVisualization() {
         onItemToGroupTypeChange={handleItemToGroupTypeChange}
         workspaceId={currentWorkspace?.id}
         nodes={nodes}
+        existingServiceConnections={selectedServices}
+        existingServiceItemConnections={selectedServiceItems}
       />
 
       <GroupModal
@@ -5012,12 +4467,15 @@ export default function CMDBVisualization() {
           setShowQuickConnectionModal(false);
           setQuickConnectionMode('create');
           setQuickConnectionExistingType(null);
+          setQuickConnectionExistingServiceItemId(null);
         }}
         onSave={handleSaveQuickConnection}
         mode={quickConnectionMode}
         existingConnectionType={quickConnectionExistingType}
+        existingServiceItemId={quickConnectionExistingServiceItemId}
         workspaceId={currentWorkspace?.id}
         nodes={nodes}
+        services={services}
       />
 
       <QuickServiceToServiceConnection
@@ -5030,27 +4488,6 @@ export default function CMDBVisualization() {
         onConnect={handleSaveServiceConnection}
         sourceService={serviceConnectionSource}
         targetService={serviceConnectionTarget}
-        workspaceId={currentWorkspace?.id}
-      />
-
-      <QuickLayananServiceConnection
-        open={showLayananServiceModal}
-        onClose={() => {
-          setShowLayananServiceModal(false);
-          setLayananServiceSource(null);
-          setLayananServiceTarget(null);
-        }}
-        onConnect={handleSaveLayananServiceConnection}
-        sourceName={layananServiceSource?.name || ''}
-        targetName={layananServiceTarget?.name || ''}
-        isSourceLayanan={isLayananSource}
-      />
-
-      <LayananServiceConnectionModal
-        open={layananServiceConnectionModal.show}
-        onClose={handleCloseLayananServiceConnection}
-        onConnect={handleSaveLayananServiceConnectionModal}
-        sourceNode={layananServiceConnectionModal.sourceNode}
         workspaceId={currentWorkspace?.id}
       />
 

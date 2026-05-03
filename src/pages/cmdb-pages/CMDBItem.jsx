@@ -296,7 +296,14 @@ export default function CMDBItem() {
     );
   };
 
-  const handleSaveConnections = async () => {
+  const handleSaveConnections = async (itemConnTypes, groupConnTypes, serviceConnData) => {
+    console.log('🟢 handleSaveConnections called');
+    console.log('   - itemConnTypes:', itemConnTypes);
+    console.log('   - groupConnTypes:', groupConnTypes);
+    console.log('   - serviceConnData:', serviceConnData);
+    console.log('   - selectedItemForConnection:', selectedItemForConnection);
+    console.log('   - currentWorkspace:', currentWorkspace?.id);
+
     // VALIDASI WORKSPACE
     if (!currentWorkspace && !viewAllMode) {
       toast.error('Pilih workspace terlebih dahulu');
@@ -316,7 +323,10 @@ export default function CMDBItem() {
       const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
       const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
 
+      console.log('📦 Item connections - toAdd:', itemsToAdd, 'toRemove:', itemsToRemove);
+
       for (const targetId of itemsToAdd) {
+        console.log(`   Creating item connection: ${selectedItemForConnection.id} -> ${targetId}`);
         await api.post('/cmdb/connections', {
           source_id: selectedItemForConnection.id,
           target_id: targetId,
@@ -335,16 +345,51 @@ export default function CMDBItem() {
       const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
       const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
 
+      console.log('📦 Group connections - toAdd:', groupsToAdd, 'toRemove:', groupsToRemove);
+
       for (const groupId of groupsToAdd) {
         await api.post('/cmdb/connections/to-group', {
           source_id: selectedItemForConnection.id,
           target_group_id: groupId,
-          workspace_id: currentWorkspace.id 
+          workspace_id: currentWorkspace.id
         });
       }
 
       for (const groupId of groupsToRemove) {
         await api.delete(`/cmdb/connections/to-group/${selectedItemForConnection.id}/${groupId}`);
+      }
+
+      // Handle service connections
+      if (serviceConnData && (serviceConnData.selectedServices.length > 0 || serviceConnData.selectedServiceItems.length > 0)) {
+        console.log('📦 Service connections data:', JSON.stringify(serviceConnData, null, 2));
+
+        // For Service Items - create cross-service connections
+        for (const itemId of serviceConnData.selectedServiceItems) {
+          try {
+            const connType = serviceConnData.serviceItemConnectionTypes[itemId]?.type || 'connects_to';
+            console.log(`   Creating cross-service connection to service item ${itemId} with type ${connType}`);
+
+            // cross-service-connections API
+            const response = await api.post('/cross-service-connections', {
+              source_service_item_id: selectedItemForConnection.id, // This should be source service item
+              target_service_item_id: itemId,
+              workspace_id: currentWorkspace.id,
+              connection_type: connType,
+              direction: 'forward'
+            });
+            console.log('   Cross-service connection created:', response.data);
+          } catch (err) {
+            console.error('Failed to create service item connection:', err);
+          }
+        }
+
+        // For Services
+        for (const serviceId of serviceConnData.selectedServices) {
+          console.log(`   Service ${serviceId} selected`);
+          // Note: CMDB-to-Service direct connections may need different handling
+        }
+      } else {
+        console.log('📦 No service connections to save (serviceConnData is empty)');
       }
 
       fetchConnections();
@@ -915,6 +960,7 @@ export default function CMDBItem() {
         onSave={handleSaveConnections}
         onToggleConnection={handleToggleConnection}
         onToggleGroupConnection={handleToggleGroupConnection}
+        workspaceId={currentWorkspace?.id}
       />
 
       <GroupModal

@@ -44,7 +44,6 @@ export default function VisualizationNavbar({
   onSavePositions,
   onOpenAddItem,
   onOpenManageGroups,
-  onOpenAddLayanan,
   onOpenExportModal,
   onOpenImportModal,
   onOpenShareModal,
@@ -138,17 +137,6 @@ export default function VisualizationNavbar({
               >
                 <Layers />
                 <span className="hidden xl:inline ml-1">Groups</span>
-              </Button>
-
-              <Button
-                onClick={onOpenAddLayanan}
-                variant="secondary"
-                size="sm"
-                title="Tambah Layanan Baru"
-                disabled={!currentWorkspace || viewAllMode}
-              >
-                <Plus />
-                <span className="hidden xl:inline ml-1">Layanan</span>
               </Button>
 
               <Button

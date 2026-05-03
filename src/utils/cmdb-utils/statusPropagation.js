@@ -3,7 +3,7 @@
  * Status dari dependency akan merambat ke semua dependent nodes
  */
 
-import { CONNECTION_TYPES } from './flowHelpers';
+import { CONNECTION_TYPES, getStatusColor, shouldShowCrossMarker } from './flowHelpers';
 
 /**
  * Build dependency graph dari connections
@@ -13,12 +13,9 @@ import { CONNECTION_TYPES } from './flowHelpers';
  *
  * @param {Array} connections - Array koneksi item-to-item dan item-to-group
  * @param {Array} groupConnections - Array koneksi group-to-group
- * @param {Array} layananConnections - Array koneksi layanan (optional)
- * @param {Array} services - Array services (optional)
- * @param {Array} layananServiceConnections - Array koneksi layanan-service item (optional)
  * @returns {Object} Graph dengan struktur { nodeId: { dependencies: Set, dependents: Set } }
  */
-export const buildDependencyGraph = (connections, groupConnections, layananConnections = [], services = [], layananServiceConnections = []) => {
+export const buildDependencyGraph = (connections, groupConnections) => {
   const graph = {};
 
   // Helper untuk inisialisasi node di graph
@@ -33,64 +30,67 @@ export const buildDependencyGraph = (connections, groupConnections, layananConne
 
   // Process item-to-item dan item-to-group connections
   connections.forEach((conn) => {
-    const sourceId = String(conn.source_id);
-    let targetId;
+    let sourceId, targetId;
 
-    if (conn.target_id) {
+    // Determine source ID
+    if (conn.source_service_item_id) {
+      sourceId = `service-item-${conn.source_service_item_id}`;
+    } else if (conn.source_service_id) {
+      sourceId = `service-${conn.source_service_id}`;
+    } else if (conn.source_id) {
+      sourceId = String(conn.source_id);
+    } else if (conn.source_group_id) {
+      sourceId = `group-${conn.source_group_id}`;
+    } else {
+      return; // Skip jika tidak ada valid source
+    }
+
+    // Determine target ID
+    if (conn.target_service_item_id) {
+      targetId = `service-item-${conn.target_service_item_id}`;
+    } else if (conn.target_service_id) {
+      targetId = `service-${conn.target_service_id}`;
+    } else if (conn.target_id) {
       targetId = String(conn.target_id);
     } else if (conn.target_group_id) {
       targetId = `group-${conn.target_group_id}`;
+    } else {
+      return; // Skip jika tidak ada valid target
     }
 
-    if (targetId) {
-      ensureNode(sourceId);
-      ensureNode(targetId);
+    ensureNode(sourceId);
+    ensureNode(targetId);
 
-      // Dapatkan tipe koneksi untuk menentukan arah propagasi
-      const connType = conn.connection_type || 'depends_on';
-      const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-      const propagation = connectionInfo.propagation || 'target_to_source';
+    // Dapatkan tipe koneksi untuk menentukan arah propagasi
+    const connType = conn.connection_type || 'depends_on';
+    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
+    const propagation = connectionInfo.propagation || 'target_to_source';
 
-      // ✅ EXPLICIT PROPAGATION RULES (bukan forward/backward yang membingungkan)
-      if (propagation === 'target_to_source') {
-        // Target affects Source
-        // Jika TARGET bermasalah → SOURCE terpengaruh
-        // Source bergantung pada target
-        // Example: depends_on (source depends on target)
-        graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
-        graph[targetId].dependents.add(sourceId);   // Target → affects → Source
+    // ✅ EXPLICIT PROPAGATION RULES (bukan forward/backward yang membingungkan)
+    if (propagation === 'target_to_source') {
+      // Target affects Source
+      // Jika TARGET bermasalah → SOURCE terpengaruh
+      // Source bergantung pada target
+      // Example: depends_on (source depends on target)
+      graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
+      graph[targetId].dependents.add(sourceId);   // Target → affects → Source
 
-      } else if (propagation === 'source_to_target') {
-        // Source affects Target
-        // Jika SOURCE bermasalah → TARGET terpengaruh
-        // Target bergantung pada source
-        // Example: contains (container affects content), consumed_by (consumer affects provider)
-        graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
-        graph[sourceId].dependents.add(targetId);   // Source → affects → Target
+    } else if (propagation === 'source_to_target') {
+      // Source affects Target
+      // Jika SOURCE bermasalah → TARGET terpengaruh
+      // Target bergantung pada source
+      // Example: contains (container affects content), consumed_by (consumer affects provider)
+      graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
+      graph[sourceId].dependents.add(targetId);   // Source → affects → Target
 
-      } else if (propagation === 'both') {
-        // Bidirectional: Saling mempengaruhi
-        // Jika salah satu bermasalah → yang lain terpengaruh
-        // Example: connects_to, related_to
-        graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
-        graph[targetId].dependents.add(sourceId);   // Target → affects → Source
-        graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
-        graph[sourceId].dependents.add(targetId);   // Source → affects → Target
-      }
-    }
-  });
-
-  // Process group-to-item connections (dari connections dengan source_group_id)
-  connections.forEach((conn) => {
-    if (conn.source_group_id && conn.target_id) {
-      const sourceId = `group-${conn.source_group_id}`;
-      const targetId = String(conn.target_id);
-
-      ensureNode(sourceId);
-      ensureNode(targetId);
-
-      graph[sourceId].dependents.add(targetId);
-      graph[targetId].dependencies.add(sourceId);
+    } else if (propagation === 'both') {
+      // Bidirectional: Saling mempengaruhi
+      // Jika salah satu bermasalah → yang lain terpengaruh
+      // Example: connects_to, related_to
+      graph[sourceId].dependencies.add(targetId); // Source ← depends on ← Target
+      graph[targetId].dependents.add(sourceId);   // Target → affects → Source
+      graph[targetId].dependencies.add(sourceId); // Target ← depends on ← Source
+      graph[sourceId].dependents.add(targetId);   // Source → affects → Target
     }
   });
 
@@ -104,96 +104,6 @@ export const buildDependencyGraph = (connections, groupConnections, layananConne
 
     graph[sourceId].dependents.add(targetId);
     graph[targetId].dependencies.add(sourceId);
-  });
-
-  // FIX: Process layanan connections (layana ↔ service, layana ↔ cmdb, layana ↔ layana)
-  layananConnections.forEach((conn) => {
-    let sourceId, targetId;
-
-    // Determine source node ID based on source_type
-    if (conn.source_type === 'layanan') {
-      sourceId = `layanan-${conn.source_id}`;
-    } else if (conn.source_type === 'service') {
-      sourceId = `service-${conn.source_id}`;
-    } else {
-      // 'cmdb' or other
-      sourceId = String(conn.source_id);
-    }
-
-    // Determine target node ID based on target_type
-    if (conn.target_type === 'layanan') {
-      targetId = `layanan-${conn.target_id}`;
-    } else if (conn.target_type === 'service') {
-      targetId = `service-${conn.target_id}`;
-    } else {
-      // 'cmdb' or other
-      targetId = String(conn.target_id);
-    }
-
-    ensureNode(sourceId);
-    ensureNode(targetId);
-
-    // Dapatkan tipe koneksi untuk menentukan arah propagasi
-    const connType = conn.connection_type || 'depends_on';
-    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-    const propagation = connectionInfo.propagation || 'target_to_source';
-
-    // Apply propagation rules
-    if (propagation === 'target_to_source') {
-      // Target affects Source
-      graph[sourceId].dependencies.add(targetId);
-      graph[targetId].dependents.add(sourceId);
-    } else if (propagation === 'source_to_target') {
-      // Source affects Target
-      graph[targetId].dependencies.add(sourceId);
-      graph[sourceId].dependents.add(targetId);
-    } else if (propagation === 'both') {
-      // Bidirectional
-      graph[sourceId].dependencies.add(targetId);
-      graph[targetId].dependents.add(sourceId);
-      graph[targetId].dependencies.add(sourceId);
-      graph[sourceId].dependents.add(targetId);
-    }
-  });
-
-  // FIX: Process layanan-service connections (layana ↔ service item)
-  // These connections are between layana nodes and service items (which are inside services)
-  layananServiceConnections.forEach((conn) => {
-    // Only process if propagation is enabled
-    if (!conn.propagation_enabled) {
-      return;
-    }
-
-    // Source is always layana, target is service item
-    const layananId = `layanan-${conn.layanan_id}`;
-    const serviceItemId = `service-item-${conn.service_item_id}`;
-
-    ensureNode(layananId);
-    ensureNode(serviceItemId);
-
-    // Dapatkan tipe koneksi untuk menentukan arah propagasi
-    const connType = conn.connection_type || 'depends_on';
-    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-    const propagation = connectionInfo.propagation || 'target_to_source';
-
-    // Apply propagation rules
-    if (propagation === 'target_to_source') {
-      // Target affects Source (service item affects layana)
-      // When service item becomes inactive, layana should also become inactive
-      graph[layananId].dependencies.add(serviceItemId);
-      graph[serviceItemId].dependents.add(layananId);
-    } else if (propagation === 'source_to_target') {
-      // Source affects Target (layana affects service item)
-      // When layana becomes inactive, service item should also become inactive
-      graph[serviceItemId].dependencies.add(layananId);
-      graph[layananId].dependents.add(serviceItemId);
-    } else if (propagation === 'both') {
-      // Bidirectional: Both affect each other
-      graph[layananId].dependencies.add(serviceItemId);
-      graph[serviceItemId].dependents.add(layananId);
-      graph[serviceItemId].dependencies.add(layananId);
-      graph[layananId].dependents.add(serviceItemId);
-    }
   });
 
   return graph;
@@ -228,15 +138,12 @@ const getAffectedNodesRecursive = (nodeId, graph, visited = new Set()) => {
  * @param {Array} connections - Array koneksi
  * @param {Array} groups - Array groups
  * @param {Array} groupConnections - Array group connections
- * @param {Array} layanaItems - Array layana items (optional)
- * @param {Array} layananConnections - Array layana connections (optional)
  * @param {Array} services - Array services (optional)
  * @param {Array} serviceItems - Array service items (optional)
- * @param {Array} layananServiceConnections - Array layana-service connections (optional)
  * @returns {Object} Map { edgeId: { propagatedStatus, sourceStatus } }
  */
-export const calculatePropagatedStatuses = (items, connections, groups, groupConnections, layanaItems = [], layananConnections = [], services = [], serviceItems = [], layananServiceConnections = []) => {
-  const graph = buildDependencyGraph(connections, groupConnections, layananConnections, services, layananServiceConnections);
+export const calculatePropagatedStatuses = (items, connections, groups, groupConnections, services = [], serviceItems = []) => {
+  const graph = buildDependencyGraph(connections, groupConnections);
   const edgeStatuses = {};
 
   // Map untuk quick lookup item status
@@ -245,25 +152,23 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     itemStatusMap[String(item.id)] = item.status;
   });
 
-  // FIX: Map untuk service status (services belong to CMDB items)
+  // Map untuk service status (services belong to CMDB items)
   const serviceStatusMap = {};
   services.forEach((service) => {
     serviceStatusMap[`service-${service.id}`] = service.status;
   });
 
-  // FIX: Map untuk layanan status
-  const layananStatusMap = {};
-  layanaItems.forEach((layanan) => {
-    layananStatusMap[`layanan-${layanan.id}`] = layanan.status;
-  });
-
-  // FIX: Map untuk service item status (service items belong to services)
+  // Map untuk service item status (service items belong to services)
   const serviceItemStatusMap = {};
   serviceItems.forEach((serviceItem) => {
-    serviceItemStatusMap[`service-item-${serviceItem.id}`] = serviceItem.status;
+    const key = `service-item-${serviceItem.id}`;
+    serviceItemStatusMap[key] = serviceItem.status;
   });
 
-  // Function untuk mendapatkan status node (item, group, service, atau layanan)
+  console.log('🗺️ serviceItemStatusMap created:', Object.keys(serviceItemStatusMap).length, 'entries');
+  console.log('🗺️ Sample entries:', Object.entries(serviceItemStatusMap).slice(0, 3));
+
+  // Function untuk mendapatkan status node (item, group, service, atau service item)
   const getNodeStatus = (nodeId) => {
     if (nodeId.startsWith('group-')) {
       // Untuk group, kita cek apakah ada item di dalamnya yang bermasalah
@@ -287,15 +192,19 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
       }
 
       return 'active';
-    } else if (nodeId.startsWith('service-')) {
-      // FIX: Handle service nodes
-      return serviceStatusMap[nodeId] || 'active';
-    } else if (nodeId.startsWith('layanan-')) {
-      // FIX: Handle layanan nodes
-      return layananStatusMap[nodeId] || 'active';
     } else if (nodeId.startsWith('service-item-')) {
-      // FIX: Handle service item nodes
-      return serviceItemStatusMap[nodeId] || 'active';
+      // MUST check service-item BEFORE service! (service-item-98 starts with service-)
+      const status = serviceItemStatusMap[nodeId] || 'active';
+      console.log(`🔍 getNodeStatus for service-item: ${nodeId} = ${status} (map has key: ${!!serviceItemStatusMap[nodeId]})`);
+      if (!serviceItemStatusMap[nodeId]) {
+        console.log(`⚠️ Missing key in serviceItemStatusMap: ${nodeId}`);
+        console.log(`⚠️ Available keys:`, Object.keys(serviceItemStatusMap).slice(0, 10));
+      }
+      return status;
+    } else if (nodeId.startsWith('service-')) {
+      const status = serviceStatusMap[nodeId] || 'active';
+      console.log(`🔍 getNodeStatus for service: ${nodeId} = ${status}`);
+      return status;
     } else {
       return itemStatusMap[nodeId] || 'active';
     }
@@ -303,7 +212,7 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
 
   // Collect semua nodes dengan status bermasalah
   const problematicNodes = new Set();
-  
+
   // Check items
   items.forEach((item) => {
     if (['inactive', 'maintenance', 'decommissioned'].includes(item.status)) {
@@ -322,21 +231,14 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     }
   });
 
-  // FIX: Check services for problematic status
+  // Check services for problematic status
   services.forEach((service) => {
     if (['inactive', 'maintenance', 'decommissioned'].includes(service.status)) {
       problematicNodes.add(`service-${service.id}`);
     }
   });
 
-  // FIX: Check layanan for problematic status
-  layanaItems.forEach((layanan) => {
-    if (['inactive', 'maintenance', 'decommissioned'].includes(layanan.status)) {
-      problematicNodes.add(`layanan-${layanan.id}`);
-    }
-  });
-
-  // FIX: Check service items for problematic status
+  // Check service items for problematic status
   serviceItems.forEach((serviceItem) => {
     if (['inactive', 'maintenance', 'decommissioned'].includes(serviceItem.status)) {
       problematicNodes.add(`service-item-${serviceItem.id}`);
@@ -349,7 +251,7 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     const status = getNodeStatus(nodeId);
     const affected = getAffectedNodesRecursive(nodeId, graph, new Set());
     affected.delete(nodeId); // Hapus node itu sendiri
-    
+
     affected.forEach((affectedId) => {
       if (!affectedNodesMap.has(affectedId)) {
         affectedNodesMap.set(affectedId, []);
@@ -358,26 +260,72 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     });
   });
 
-  // Process item-to-item and item-to-group connections
+  // Process all connections (item-to-item, item-to-service, service-to-item, service-item-to-item, etc.)
   connections.forEach((conn) => {
-    if (conn.source_group_id) return; // Skip group-to-item, process nanti
-
-    const sourceId = String(conn.source_id);
-    let targetId;
-    let edgeId;
-
-    if (conn.target_id) {
-      targetId = String(conn.target_id);
-      edgeId = `e${conn.source_id}-${conn.target_id}`;
-    } else if (conn.target_group_id) {
-      targetId = `group-${conn.target_group_id}`;
-      edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
+    // Determine source ID
+    let sourceId;
+    if (conn.source_service_item_id) {
+      sourceId = `service-item-${conn.source_service_item_id}`;
+    } else if (conn.source_service_id) {
+      sourceId = `service-${conn.source_service_id}`;
+    } else if (conn.source_id) {
+      sourceId = String(conn.source_id);
+    } else if (conn.source_group_id) {
+      sourceId = `group-${conn.source_group_id}`;
+    } else {
+      return; // Skip jika tidak ada valid source
     }
 
-    if (!targetId) return;
+    // Determine target ID
+    let targetId;
+    if (conn.target_service_item_id) {
+      targetId = `service-item-${conn.target_service_item_id}`;
+    } else if (conn.target_service_id) {
+      targetId = `service-${conn.target_service_id}`;
+    } else if (conn.target_id) {
+      targetId = String(conn.target_id);
+    } else if (conn.target_group_id) {
+      targetId = `group-${conn.target_group_id}`;
+    } else {
+      return; // Skip jika tidak ada valid target
+    }
+
+    // Generate edge ID based on connection type
+    let edgeId;
+    if (conn.source_service_item_id) {
+      // Service item as source: eservice-item-{serviceItemId}-{targetId}
+      edgeId = `eservice-item-${conn.source_service_item_id}-${conn.target_id || conn.target_service_id || conn.target_group_id || conn.target_service_item_id}`;
+    } else if (conn.source_service_id) {
+      // Service as source: eservice-{serviceId}-{targetId}
+      edgeId = `eservice-${conn.source_service_id}-${conn.target_id || conn.target_service_id || conn.target_group_id || conn.target_service_item_id}`;
+    } else if (conn.target_service_item_id && !conn.target_service_id) {
+      // Item to service item: e{source_id}-service-item-{serviceItemId}
+      edgeId = `e${conn.source_id || conn.source_service_id || conn.source_group_id}-service-item-${conn.target_service_item_id}`;
+    } else if (conn.target_service_id) {
+      // Item to service: e{source_id}-service-{serviceId}
+      edgeId = `e${conn.source_id || conn.source_service_id || conn.source_group_id}-service-${conn.target_service_id}`;
+    } else if (conn.target_group_id) {
+      // Item to group: e{source_id}-group{groupId}
+      edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
+    } else {
+      // Item to item: e{source_id}-{target_id}
+      edgeId = `e${conn.source_id}-${conn.target_id}`;
+    }
 
     const sourceStatus = getNodeStatus(sourceId);
     const targetStatus = getNodeStatus(targetId);
+
+    // Debug log for service-to-item connections
+    if (conn.source_service_id && conn.target_id) {
+      console.log('🔗 Service-to-item connection in statusPropagation:', {
+        edgeId,
+        sourceId,
+        targetId,
+        sourceStatus,
+        targetStatus,
+        connType: conn.connection_type
+      });
+    }
 
     // Dapatkan tipe koneksi untuk menentukan arah propagasi
     const connType = conn.connection_type || 'depends_on';
@@ -476,62 +424,6 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     };
   });
 
-  // Process group-to-item connections
-  connections.forEach((conn) => {
-    if (!conn.source_group_id || !conn.target_id) return;
-
-    const sourceId = `group-${conn.source_group_id}`;
-    const targetId = String(conn.target_id);
-    const edgeId = `group${conn.source_group_id}-e${conn.target_id}`;
-
-    const sourceStatus = getNodeStatus(sourceId);
-    const targetStatus = getNodeStatus(targetId);
-
-    // Group-to-item connections: Group affects items (group is dependency)
-    const dependentId = targetId; // Item depends on group
-    const dependencyId = sourceId; // Group affects item
-
-    const dependentAffected = affectedNodesMap.has(dependentId);
-
-    let propagatedStatus = null;
-    let propagatedFrom = null;
-    let isPropagated = false;
-    let effectiveEdgeStatus = sourceStatus;
-
-    if (dependentAffected) {
-      isPropagated = true;
-      const affectingSources = affectedNodesMap.get(dependentId);
-      const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-
-      let worstStatus = 'active';
-      affectingSources.forEach(({ status }) => {
-        if (priorities[status] > priorities[worstStatus]) {
-          worstStatus = status;
-        }
-      });
-
-      propagatedStatus = worstStatus;
-      propagatedFrom = affectingSources.map(s => s.sourceId);
-      effectiveEdgeStatus = worstStatus;
-    } else {
-      // Tidak ada propagasi, edge menunjukkan status dependency (group)
-      effectiveEdgeStatus = sourceStatus;
-    }
-
-    edgeStatuses[edgeId] = {
-      sourceId,
-      targetId,
-      sourceStatus,
-      targetStatus,
-      propagatedStatus,
-      propagatedFrom,
-      isPropagated,
-      effectiveEdgeStatus,
-      connectionType: 'group_to_item',
-      direction: 'forward',
-    };
-  });
-
   // Process group-to-group connections
   groupConnections.forEach((conn) => {
     const sourceId = `group-${conn.source_id}`;
@@ -586,161 +478,5 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     };
   });
 
-  // Process layanan connections (layana ↔ service, layana ↔ cmdb, layana ↔ layana)
-  layananConnections.forEach((conn) => {
-    let sourceId, targetId, edgeId;
-
-    // Determine source node ID based on source_type
-    if (conn.source_type === 'layanan') {
-      sourceId = `layanan-${conn.source_id}`;
-    } else if (conn.source_type === 'service') {
-      sourceId = `service-${conn.source_id}`;
-    } else {
-      // 'cmdb' or other
-      sourceId = String(conn.source_id);
-    }
-
-    // Determine target node ID based on target_type
-    if (conn.target_type === 'layanan') {
-      targetId = `layanan-${conn.target_id}`;
-    } else if (conn.target_type === 'service') {
-      targetId = `service-${conn.target_id}`;
-    } else {
-      // 'cmdb' or other
-      targetId = String(conn.target_id);
-    }
-
-    edgeId = `layanan-edge-${conn.id}`;
-
-    const sourceStatus = getNodeStatus(sourceId);
-    const targetStatus = getNodeStatus(targetId);
-
-    // Dapatkan tipe koneksi untuk menentukan arah propagasi
-    const connType = conn.connection_type || 'depends_on';
-    const connectionInfo = CONNECTION_TYPES[connType] || CONNECTION_TYPES.depends_on;
-    const propagation = connectionInfo.propagation || 'target_to_source';
-
-    // Tentukan node mana yang merupakan dependent (yang terpengaruh)
-    // dan node mana yang merupakan dependency (yang mempengaruhi)
-    let dependentId, dependencyId;
-
-    if (propagation === 'target_to_source') {
-      // Target affects Source (source depends on target)
-      dependentId = sourceId;
-      dependencyId = targetId;
-    } else if (propagation === 'source_to_target') {
-      // Source affects Target (target depends on source)
-      dependentId = targetId;
-      dependencyId = sourceId;
-    } else {
-      // Bidirectional: Keduanya bisa terpengaruh, cek keduanya
-      dependentId = null; // Special case
-      dependencyId = null;
-    }
-
-    let propagatedStatus = null;
-    let propagatedFrom = null;
-    let isPropagated = false;
-    let effectiveEdgeStatus = sourceStatus; // Default
-
-    if (propagation === 'both') {
-      // Untuk bidirectional, cek apakah salah satu node terpengaruh oleh node lain
-      const sourceAffected = affectedNodesMap.has(sourceId);
-      const targetAffected = affectedNodesMap.has(targetId);
-
-      if (sourceAffected || targetAffected) {
-        isPropagated = true;
-        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-
-        // Collect semua affecting sources
-        let allAffecting = [];
-        if (sourceAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(sourceId));
-        if (targetAffected) allAffecting = allAffecting.concat(affectedNodesMap.get(targetId));
-
-        // Ambil status terburuk
-        let worstStatus = 'active';
-        allAffecting.forEach(({ status }) => {
-          if (priorities[status] > priorities[worstStatus]) {
-            worstStatus = status;
-          }
-        });
-
-        propagatedStatus = worstStatus;
-        propagatedFrom = allAffecting.map(s => s.sourceId);
-        effectiveEdgeStatus = worstStatus;
-      } else {
-        // Tidak ada propagasi, gunakan status terburuk dari source/target
-        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-        effectiveEdgeStatus = priorities[sourceStatus] > priorities[targetStatus] ? sourceStatus : targetStatus;
-      }
-    } else {
-      // Untuk source_to_target atau target_to_source, cek apakah dependent terpengaruh oleh dependency (atau node lain)
-      const dependentAffected = affectedNodesMap.has(dependentId);
-
-      if (dependentAffected) {
-        isPropagated = true;
-        const affectingSources = affectedNodesMap.get(dependentId);
-        const priorities = { 'inactive': 3, 'decommissioned': 3, 'maintenance': 2, 'active': 1 };
-
-        let worstStatus = 'active';
-        affectingSources.forEach(({ status }) => {
-          if (priorities[status] > priorities[worstStatus]) {
-            worstStatus = status;
-          }
-        });
-
-        propagatedStatus = worstStatus;
-        propagatedFrom = affectingSources.map(s => s.sourceId);
-        effectiveEdgeStatus = worstStatus;
-      } else {
-        // Tidak ada propagasi, edge menunjukkan status dependency
-        effectiveEdgeStatus = dependencyId === targetId ? targetStatus : sourceStatus;
-      }
-    }
-
-    edgeStatuses[edgeId] = {
-      sourceId,
-      targetId,
-      sourceStatus,
-      targetStatus,
-      propagatedStatus,
-      propagatedFrom,
-      isPropagated,
-      effectiveEdgeStatus,
-      connectionType: connType,
-      propagation,
-    };
-  });
-
   return edgeStatuses;
-};
-
-/**
- * Mendapatkan warna berdasarkan status
- * @param {string} status - Status node
- * @param {boolean} isPropagated - Apakah status ini hasil propagasi
- * @returns {string} Hex color
- */
-export const getStatusColor = (status, isPropagated = false) => {
-  const colors = {
-    active: '#10b981',      // green
-    maintenance: '#f59e0b', // yellow/orange
-    inactive: '#ef4444',    // red
-    decommissioned: '#ef4444', // red
-  };
-
-  const color = colors[status] || colors.active;
-
-  // Jika propagated, bisa kita buat sedikit lebih transparan atau berbeda
-  // Untuk sekarang kita pakai warna yang sama
-  return color;
-};
-
-/**
- * Cek apakah edge harus menampilkan cross marker
- * @param {string} status - Status untuk dicek
- * @returns {boolean}
- */
-export const shouldShowCrossMarker = (status) => {
-  return ['inactive', 'maintenance', 'decommissioned', 'disabled'].includes(status);
 };

@@ -25,7 +25,8 @@ import {
   Clock,
   Network,
   Plus,
-  Trash2
+  Trash2,
+  Package
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';

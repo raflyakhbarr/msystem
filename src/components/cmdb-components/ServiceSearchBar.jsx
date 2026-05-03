@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Layers, Server } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { getStatusBadgeLightClass } from '../../utils/cmdb-utils/flowHelpers';
 
 export default function ServiceSearchBar({ nodes, onNodeSelect, reactFlowInstance }) {
   const [searchValue, setSearchValue] = useState('');
@@ -72,15 +73,6 @@ export default function ServiceSearchBar({ nodes, onNodeSelect, reactFlowInstanc
     return node.data?.type || 'Item';
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-700';
-      case 'inactive': return 'bg-red-100 text-red-700';
-      case 'maintenance': return 'bg-yellow-100 text-yellow-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   return (
     <div ref={searchRef} className="relative w-full max-w-md">
       <div className="relative">
@@ -126,7 +118,7 @@ export default function ServiceSearchBar({ nodes, onNodeSelect, reactFlowInstanc
                       {getNodeTypeLabel(node)}
                     </span>
                     {node.data?.status && node.type !== 'serviceGroup' && (
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(node.data.status)}`}>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusBadgeLightClass(node.data.status)}`}>
                         {node.data.status}
                       </span>
                     )}

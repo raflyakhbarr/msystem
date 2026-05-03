@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X, Info } from 'lucide-react';
+import { getStatusColor } from '../../utils/cmdb-utils/flowHelpers';
 
 /**
  * ServiceToServiceConnections Component
@@ -66,16 +67,6 @@ const ServiceToServiceConnections = ({ services = [], connections = [], onConnec
     // Create curved path
     return `M ${source.x + 20} ${source.y + 20}
             Q ${midX} ${midY - offset} ${target.x + 20} ${target.y + 20}`;
-  };
-
-  // Get stroke color based on STATUS (seperti CMDB item edges)
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return '#10b981'; // green (SAMA DENGAN CMDB)
-      case 'inactive': return '#ef4444'; // red
-      case 'maintenance': return '#f59e0b'; // yellow
-      default: return '#10b981'; // green
-    }
   };
 
   // Get color based on connection type (fallback jika tidak ada status info)

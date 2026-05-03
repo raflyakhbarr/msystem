@@ -3,16 +3,16 @@ import {
   calculateGroupDimensions,
   getBestHandlePositions,
   createEdgeConfig,
-  getConnectionTypeInfo
-} from '../../utils/cmdb-utils/flowHelpers';
-import {
-  calculatePropagatedStatuses,
+  getConnectionTypeInfo,
   getStatusColor,
   shouldShowCrossMarker
+} from '../../utils/cmdb-utils/flowHelpers';
+import {
+  calculatePropagatedStatuses
 } from '../../utils/cmdb-utils/statusPropagation';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, layanaItems = [], layananConnections = [], services = [], serviceItems = {}, layananServiceConnections = []) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, services = [], serviceItems = {}) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -28,8 +28,45 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       }
     });
 
-    // FIX: Hitung propagated statuses dengan layana connections dan services
-    const edgeStatuses = calculatePropagatedStatuses(items, connections, groups, groupConnections, layanaItems, layananConnections, services);
+    // Build a reverse map from service_item_id to service_id for quick lookup
+    // This is used when creating edges to service items - we need to connect to the parent service
+    const serviceItemToServiceMap = {};
+    Object.entries(serviceItems).forEach(([serviceId, items]) => {
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          serviceItemToServiceMap[item.id] = parseInt(serviceId);
+        });
+      }
+    });
+
+    // FIX: Hitung propagated statuses dengan services dan service items
+    // Flatten serviceItems object ke array untuk calculatePropagatedStatuses
+    const flattenedServiceItems = [];
+    Object.entries(serviceItems).forEach(([serviceId, items]) => {
+      if (Array.isArray(items)) {
+        flattenedServiceItems.push(...items);
+      }
+    });
+
+    console.log('🎨 useFlowData: Calculating edge statuses with service items:', {
+      itemsCount: items.length,
+      connectionsCount: connections.length,
+      servicesCount: services.length,
+      serviceItemsCount: flattenedServiceItems.length,
+      sampleServiceItems: flattenedServiceItems.slice(0, 3).map(si => ({ id: si.id, name: si.name, status: si.status }))
+    });
+
+    const edgeStatuses = calculatePropagatedStatuses(
+      items,
+      connections,
+      groups,
+      groupConnections,
+      services,
+      flattenedServiceItems
+    );
+
+    console.log('🎨 useFlowData: Edge statuses calculated:', Object.keys(edgeStatuses).length, 'edges');
+    console.log('🎨 Sample edge statuses:', Object.entries(edgeStatuses).slice(0, 3).map(([edgeId, status]) => ({ edgeId, status })));
 
     // Create group nodes
     groups.forEach((group) => {
@@ -215,7 +252,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       // Calculate CMDB item dimensions based on service count
       // More accurate calculation to ensure service nodes fit properly
       const serviceCount = itemServices.length;
-      const baseItemHeight = 100; // Tinggi dasar item (header, divider, info)
+      const baseItemHeight = 67; // Tinggi dasar item (header, divider, info)
       const servicesPerRow = 3;
 
       // Service node dimensions (MUST MATCH with service node positioning below)
@@ -240,8 +277,9 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         itemHeight = baseItemHeight + 25;
       }
 
-      // Calculate dynamic width based on service presence
-      const baseItemWidth = 150; // Width without services
+      // Calculate dynamic width based on service presence and type
+      // web_application type needs more width for URL display
+      const baseItemWidth = item.type === 'web_application' ? 220 : 150;
       let itemWidth;
       if (serviceCount === 0) {
         itemWidth = baseItemWidth;
@@ -343,27 +381,93 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     // Create edges for item-to-item and item-to-group connections
     connections.forEach((conn) => {
       if (conn.source_group_id) return; // Skip, akan diprocess terpisah
-      
-      const sourceNode = flowNodes.find(n => n.id === String(conn.source_id));
-      
+
+      // Determine source node - could be cmdb_item, service, or service_item
+      let sourceNode;
+      let sourceIdForEdge;
+      let sourceServiceItemId = null; // Track if source is a service item
+
+      if (conn.source_service_item_id) {
+        // Source is a service item - find its parent service and connect to that service node
+        sourceServiceItemId = conn.source_service_item_id;
+        const parentServiceId = serviceItemToServiceMap[conn.source_service_item_id];
+        if (parentServiceId) {
+          sourceNode = flowNodes.find(n => n.id === `service-${parentServiceId}`);
+          sourceIdForEdge = `service-${parentServiceId}`; // Connect to parent service node
+        } else {
+          console.warn('Could not find parent service for source service item:', conn.source_service_item_id);
+          return; // Skip this edge if we can't find the parent service
+        }
+      } else if (conn.source_service_id) {
+        sourceNode = flowNodes.find(n => n.id === `service-${conn.source_service_id}`);
+        sourceIdForEdge = `service-${conn.source_service_id}`;
+      } else {
+        sourceNode = flowNodes.find(n => n.id === String(conn.source_id));
+        sourceIdForEdge = String(conn.source_id);
+      }
+
       let targetNode, targetId, edgeId, strokeColor, isGroupConnection, showCrossMarker;
-      
+      let isServiceConnection = false;
+
       if (conn.target_id) {
         targetNode = flowNodes.find(n => n.id === String(conn.target_id));
         targetId = String(conn.target_id);
-        edgeId = `e${conn.source_id}-${conn.target_id}`;
+        // Special edge ID format for source_service_item_id connections
+        // This ensures EdgeContextMenu can detect that source is a service item
+        if (sourceServiceItemId) {
+          edgeId = `eservice-item-${sourceServiceItemId}-${conn.target_id}`;
+        } else {
+          edgeId = `e${sourceIdForEdge}-${conn.target_id}`;
+        }
         isGroupConnection = false;
       } else if (conn.target_group_id) {
         targetNode = flowNodes.find(n => n.id === `group-${conn.target_group_id}`);
         targetId = `group-${conn.target_group_id}`;
-        edgeId = `e${conn.source_id}-group${conn.target_group_id}`;
+        edgeId = `e${sourceIdForEdge}-group${conn.target_group_id}`;
         isGroupConnection = true;
+      } else if (conn.target_service_id) {
+        // Handle item-to-service OR service-to-item connection
+        targetNode = flowNodes.find(n => n.id === `service-${conn.target_service_id}`);
+        targetId = `service-${conn.target_service_id}`;
+        edgeId = `e${sourceIdForEdge}-service-${conn.target_service_id}`;
+        isGroupConnection = false;
+        isServiceConnection = true;
+      } else if (conn.target_service_item_id) {
+        // Handle item-to-service-item OR service-to-service-item connection
+        // In CMDBVisualization, service items are NOT rendered as separate nodes
+        // So we connect the edge to the PARENT SERVICE node instead
+
+        // Use the actual target_service_item_id in the edge ID so we can delete correctly later
+        const parentServiceId = conn.target_service_id || serviceItemToServiceMap[conn.target_service_item_id];
+        if (parentServiceId) {
+          targetNode = flowNodes.find(n => n.id === `service-${parentServiceId}`);
+          targetId = `service-${parentServiceId}`;
+          edgeId = `e${sourceIdForEdge}-service-item-${conn.target_service_item_id}`;
+          isGroupConnection = false;
+          isServiceConnection = true;
+        } else {
+          // If we can't find the parent service, skip creating this edge in CMDBVisualization
+          return;
+        }
       }
-      
-      if (!sourceNode || !targetNode) return;
+
+      if (!sourceNode || !targetNode) {
+        return;
+      }
 
       // Gunakan status dari propagation calculation
       const edgeStatusInfo = edgeStatuses[edgeId];
+
+      // Debug log for service-item-to-item edges
+      if (sourceServiceItemId) {
+        console.log('🔗 Service-item-to-item edge:', {
+          edgeId,
+          sourceServiceItemId,
+          targetId,
+          edgeStatusInfo,
+          connType: conn.connection_type
+        });
+      }
 
       // Get connection type info (ONLY for label, NOT for color)
       const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);
@@ -393,7 +497,15 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         }
       }
 
-      const isEdgeHidden = hiddenNodes.has(String(conn.source_id)) || hiddenNodes.has(targetId);
+      // Determine the actual source ID for the edge (must be before isEdgeHidden)
+      // Must check source_service_item_id FIRST, then source_service_id, then source_id
+      const actualSourceId = conn.source_service_item_id
+        ? sourceIdForEdge // Already set to parent service node ID from line 367
+        : (conn.source_service_id
+          ? `service-${conn.source_service_id}`
+          : String(conn.source_id));
+
+      const isEdgeHidden = hiddenNodes.has(actualSourceId) || hiddenNodes.has(targetId);
 
       let sourceHandle, targetHandle;
       if (edgeHandles[edgeId]) {
@@ -409,7 +521,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       const edgeConfig = createEdgeConfig(
         edgeId,
-        String(conn.source_id),
+        actualSourceId,
         targetId,
         sourceHandle,
         targetHandle,
@@ -421,6 +533,32 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
         connectionTypeLabel,
         showConnectionLabels
       );
+
+      // Tambahkan info service item ke edge data untuk EdgeContextMenu
+      // Jika edge mengandung "service-item" di ID, berarti ini terkait service item
+      if (edgeId.includes('-service-item-')) {
+        // Extract service item ID dari edge ID
+        const serviceItemIdMatch = edgeId.match(/-service-item-(\d+)$/);
+        if (serviceItemIdMatch) {
+          const serviceItemId = serviceItemIdMatch[1];
+          edgeConfig.data = {
+            ...edgeConfig.data,
+            serviceItemId: serviceItemId,
+            // Jika source adalah service dan edge mengandung service-item,
+            // berarti user memilih service item sebagai source dari service
+            isSourceServiceItem: conn.source_service_id !== null && conn.target_id !== null
+          };
+        }
+      }
+
+      // Jika source adalah service item (dari source_service_item_id)
+      if (sourceServiceItemId) {
+        edgeConfig.data = {
+          ...edgeConfig.data,
+          serviceItemId: String(sourceServiceItemId),
+          isSourceServiceItem: true
+        };
+      }
 
       // Tambahkan info propagasi ke edge data
       if (edgeStatusInfo && edgeStatusInfo.isPropagated) {
@@ -626,7 +764,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
     });
 
     return { flowNodes, flowEdges };
-  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick, layanaItems, layananConnections, services, serviceItems, layananServiceConnections]);
+  }, [items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap, showConnectionLabels, onServiceClick, onServiceItemsClick, services, serviceItems]);
 
   return { transformToFlowData };
 };

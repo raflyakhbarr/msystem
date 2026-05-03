@@ -10,7 +10,6 @@ export default function NodeContextMenu({
   onDelete,
   onManageConnections,
   onManageGroupConnections,
-  onManageLayananServiceConnections,
   onRemoveFromGroup,
   onToggleVisibility,
   onClose,
@@ -24,8 +23,7 @@ export default function NodeContextMenu({
   }
 
   const isGroupNode = node.type === 'group';
-  const isLayananNode = node.type === 'layanan';
-  const isInGroup = node.parentNode && !isGroupNode && !isLayananNode; // Item dalam group (layanan tidak bisa dalam group)
+  const isInGroup = node.parentNode && !isGroupNode;
 
   const items = [
     isGroupNode
@@ -36,21 +34,13 @@ export default function NodeContextMenu({
           color: 'hover:bg-purple-500 hover:text-white',
           iconColor: 'text-purple-600',
         }
-      : isLayananNode
-        ? {
-            label: 'Hubungkan ke Service',
-            icon: <Link className="h-4 w-4" />,
-            onClick: onManageLayananServiceConnections,
-            color: 'hover:bg-indigo-500 hover:text-white',
-            iconColor: 'text-indigo-600',
-          }
-        : {
-            label: 'Kelola Koneksi',
-            icon: <Link className="h-4 w-4" />,
-            onClick: onManageConnections,
-            color: 'hover:bg-blue-500 hover:text-white',
-            iconColor: 'text-blue-600',
-          },
+      : {
+          label: 'Kelola Koneksi',
+          icon: <Link className="h-4 w-4" />,
+          onClick: onManageConnections,
+          color: 'hover:bg-blue-500 hover:text-white',
+          iconColor: 'text-blue-600',
+        },
     ...(isInGroup ? [{
       label: 'Keluarkan dari Group',
       icon: <LogOut className="h-4 w-4" />,
@@ -140,7 +130,7 @@ export default function NodeContextMenu({
             boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
           }}
         >
-          {isGroupNode ? 'Group' : (isLayananNode ? 'Layanan' : 'Node')}: {node.data?.name}
+          {isGroupNode ? 'Group' : 'Node'}: {node.data?.name}
         </motion.div>
 
         {/* Center button */}
