@@ -111,12 +111,20 @@ api.interceptors.response.use(
 
 /**
  * Generate a new share link for a workspace (requires auth)
+ * @param {Object} params - Share link parameters
+ * @param {number} params.workspace_id - Workspace ID
+ * @param {string} params.expiration - Expiration period (never, 1h, 1d, 7d, 30d)
+ * @param {string} [params.password] - Optional password protection
+ * @param {number} [params.service_id] - Optional: Service ID being shared (for filtering external item positions)
+ * @param {number} [params.cmdb_item_id] - Optional: CMDB Item ID being shared
  */
-export const generateShareLink = async ({ workspace_id, expiration = 'never', password }) => {
+export const generateShareLink = async ({ workspace_id, expiration = 'never', password, service_id, cmdb_item_id }) => {
   const response = await api.post('/share/generate', {
     workspace_id,
     expiration,
     password: password || undefined,
+    service_id: service_id || undefined,
+    cmdb_item_id: cmdb_item_id || undefined,
   });
   return response.data;
 };

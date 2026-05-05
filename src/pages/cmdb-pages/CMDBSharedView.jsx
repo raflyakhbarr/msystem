@@ -40,6 +40,7 @@ import CustomNode from '../../components/cmdb-components/CustomNode';
 import CustomGroupNode from '../../components/cmdb-components/CustomGroupNode';
 import ServiceAsNode from '../../components/cmdb-components/ServiceAsNode';
 import PasswordDialog from '../../components/cmdb-components/PasswordDialog';
+import ServiceDetailDialog from '../../components/cmdb-components/ServiceDetailDialog';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
@@ -68,8 +69,46 @@ export default function CMDBSharedView() {
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [verifiedPassword, setVerifiedPassword] = useState(null);
 
+  // Service dialog state
+  const [serviceDialog, setServiceDialog] = useState({
+    show: false,
+    service: null,
+    cmdbItem: null
+  });
+
+  // Store full shared data for ServiceDetailDialog
+  const sharedDataRef = useRef(null);
   const socketRef = useRef(null);
   const reactFlowInstance = useRef(null);
+
+  // Memoize sharedData for ServiceDetailDialog to prevent infinite re-renders
+  const sharedDataForDialog = useMemo(() => {
+    if (!sharedDataRef.current) return null;
+
+    const result = {
+      services: sharedDataRef.current.services || [],
+      serviceToServiceConnections: sharedDataRef.current.serviceToServiceConnections || [],
+      crossServiceConnections: sharedDataRef.current.crossServiceConnections || [],
+      items: sharedDataRef.current.items || [],
+      edgeHandles: sharedDataRef.current.edgeHandlesObject || {},
+      groups: sharedDataRef.current.groups || [],
+      connections: sharedDataRef.current.connections || [],
+      groupConnections: sharedDataRef.current.groupConnections || [],
+      connectionTypes: sharedDataRef.current.connectionTypes || [],
+      serviceEdgeHandles: sharedDataRef.current.serviceEdgeHandles || {},
+      crossServiceEdgeHandles: sharedDataRef.current.crossServiceEdgeHandles || {},
+      // ✅ FIX: Pass PER-SERVICE positions: { [service_id]: { [item_id]: position } }
+      // Each service will use its own view of external item positions
+      externalItemPositions: sharedDataRef.current.externalItemPositions || {}
+    };
+
+    console.log('📦 [CMDBSharedView] sharedDataForDialog created:', {
+      externalItemPositionsServices: Object.keys(result.externalItemPositions).length,
+      perServiceFormat: true
+    });
+
+    return result;
+  }, [sharedDataRef.current?.services?.length]); // Dependency on data length, not object reference
 
   // Fetch shared CMDB data
   const fetchSharedData = useCallback(async (password = null) => {
@@ -77,6 +116,9 @@ export default function CMDBSharedView() {
 
     try {
       const data = await getSharedCmdb(token, password);
+
+      // Store full shared data for later use
+      sharedDataRef.current = data;
 
       setShareInfo(data.share_info);
 
@@ -87,7 +129,10 @@ export default function CMDBSharedView() {
       const serviceNodes = transformServicesToNodes(
         data.services || [],
         data.items,
-        { isSharedView: true } // Pass shared view flag to avoid API calls
+        {
+          isSharedView: true, // Pass shared view flag to avoid API calls
+          onServiceClick: handleServiceClick // Pass click handler
+        }
       );
 
       // Combine all nodes
@@ -104,6 +149,97 @@ export default function CMDBSharedView() {
           };
         });
       }
+
+      // Store edge handles in sharedData ref for ServiceVisualization
+      sharedDataRef.current.edgeHandlesObject = edgeHandlesObject;
+      sharedDataRef.current.connectionTypes = data.connection_types || [];
+
+      // Transform service_edge_handles array to object format
+      const serviceEdgeHandlesObject = {};
+      if (data.service_edge_handles && Array.isArray(data.service_edge_handles)) {
+        data.service_edge_handles.forEach(handle => {
+          serviceEdgeHandlesObject[handle.edge_id] = {
+            sourceHandle: handle.source_handle,
+            targetHandle: handle.target_handle
+          };
+        });
+      }
+      sharedDataRef.current.serviceEdgeHandles = serviceEdgeHandlesObject;
+
+      // Transform cross_service_edge_handles array to object format
+      const crossServiceEdgeHandlesObject = {};
+      if (data.cross_service_edge_handles && Array.isArray(data.cross_service_edge_handles)) {
+        data.cross_service_edge_handles.forEach(handle => {
+          crossServiceEdgeHandlesObject[handle.edge_id] = {
+            sourceHandle: handle.source_handle,
+            targetHandle: handle.target_handle
+          };
+        });
+      }
+      sharedDataRef.current.crossServiceEdgeHandles = crossServiceEdgeHandlesObject;
+
+      // Transform external_item_positions to PER-SERVICE format
+      // Format: { [service_id]: { [external_service_item_id]: position } }
+      // This ensures each service has its own view of external item positions
+      console.log('🔍 [CMDBSharedView] Transforming external_item_positions to PER-SERVICE format');
+
+      const normalizedExternalItemPositions = {};
+      if (data.external_item_positions && Array.isArray(data.external_item_positions)) {
+        console.log('🔍 [CMDBSharedView] RAW external_item_positions from backend:', {
+          totalCount: data.external_item_positions.length,
+          positions: data.external_item_positions.map(pos => ({
+            external_service_item_id: pos.external_service_item_id,
+            position: pos.position,
+            serviceId: pos.service_id
+          }))
+        });
+
+        // ✅ CRITICAL FIX: Group positions by service_id FIRST
+        // Each service should maintain its own view of external item positions
+        data.external_item_positions.forEach(pos => {
+          const serviceId = pos.service_id;
+          const itemId = pos.external_service_item_id;
+
+          // Initialize service object if not exists
+          if (!normalizedExternalItemPositions[serviceId]) {
+            normalizedExternalItemPositions[serviceId] = {};
+          }
+
+          // Only store the most recent position for each item (sorted by updated_at)
+          // If multiple positions exist for same item, keep the most recent one
+          const existingPosition = normalizedExternalItemPositions[serviceId][itemId];
+          if (!existingPosition || (pos.updated_at && existingPosition._updatedAt < new Date(pos.updated_at))) {
+            normalizedExternalItemPositions[serviceId][itemId] = {
+              ...pos.position,
+              _updatedAt: pos.updated_at ? new Date(pos.updated_at) : new Date()
+            };
+          }
+        });
+
+        console.log('✅ [CMDBSharedView] Transformed external_item_positions (PER-SERVICE):', {
+          originalCount: data.external_item_positions.length,
+          servicesCount: Object.keys(normalizedExternalItemPositions).length,
+          services: Object.keys(normalizedExternalItemPositions).map(serviceId => ({
+            serviceId,
+            itemsCount: Object.keys(normalizedExternalItemPositions[serviceId]).length,
+            sampleItems: Object.keys(normalizedExternalItemPositions[serviceId]).slice(0, 2)
+          })),
+          samplePositions: Object.entries(normalizedExternalItemPositions).slice(0, 3).map(([serviceId, positions]) => ({
+            serviceId,
+            itemCount: Object.keys(positions).length,
+            sampleItemPositions: Object.entries(positions).slice(0, 2).map(([itemId, pos]) => ({
+              itemId,
+              x: pos.x,
+              y: pos.y
+            }))
+          }))
+        });
+      } else {
+        console.warn('⚠️ [CMDBSharedView] external_item_positions is invalid, using empty object');
+      }
+
+      // Store normalized format (matches normal mode: { [item_id]: position })
+      sharedDataRef.current.externalItemPositions = normalizedExternalItemPositions;
 
       // Transform regular item-to-item connections to edges WITH status propagation
       const itemEdges = transformConnectionsWithPropagation(
@@ -362,6 +498,77 @@ export default function CMDBSharedView() {
     }
   }, [token, setNodes, setEdges]);
 
+  // Handle service click - open service detail dialog
+  const handleServiceClick = useCallback((service) => {
+    // Find parent CMDB item from current nodes OR from items array
+    let parentItem = null;
+
+    // Search through current nodes to find the parent CMDB item
+    for (const node of nodes) {
+      if (node.data?.cmdbItem) {
+        const cmdbItem = node.data.cmdbItem;
+        // Check if this CMDB item has the service
+        if (cmdbItem.services?.some(s => s.id === service.id)) {
+          parentItem = cmdbItem;
+          break;
+        }
+      }
+      // Also check if node has cmdbItemId directly (for shared view service nodes)
+      if (node.data?.cmdbItemId && node.data?.service?.id === service.id) {
+        // Find the actual cmdbItem from sharedDataRef.items
+        parentItem = sharedDataRef.current?.items?.find(i => i.id === node.data.cmdbItemId);
+        if (parentItem) {
+          console.log('🔍 CMDBSharedView: Found parentItem via cmdbItemId lookup:', parentItem.name);
+          break;
+        }
+      }
+    }
+
+    // If still not found, try to find using service.cmdb_item_id directly
+    if (!parentItem && service.cmdb_item_id) {
+      console.log('🔍 CMDBSharedView: Trying direct lookup via service.cmdb_item_id:', service.cmdb_item_id);
+      parentItem = sharedDataRef.current?.items?.find(i => i.id === service.cmdb_item_id);
+      if (parentItem) {
+        console.log('🔍 CMDBSharedView: Found parentItem via direct lookup:', parentItem.name);
+      }
+    }
+
+    // If still not found, search in sharedDataRef.items for the service
+    if (!parentItem && sharedDataRef.current?.services) {
+      // Find which item owns this service by looking at sharedDataRef
+      for (const item of (sharedDataRef.current.items || [])) {
+        if (item.services?.some(s => s.id === service.id)) {
+          parentItem = item;
+          console.log('🔍 CMDBSharedView: Found parentItem via items search:', parentItem.name);
+          break;
+        }
+      }
+    }
+
+    setServiceDialog({
+      show: true,
+      service: service,
+      cmdbItem: parentItem
+    });
+
+    console.log('🔍 CMDBSharedView: Service clicked', {
+      serviceName: service.name,
+      serviceId: service.id,
+      parentItemName: parentItem?.name,
+      parentItemId: parentItem?.id,
+      parentItemServicesCount: parentItem?.services?.length,
+      serviceCmdbItemId: service.cmdb_item_id
+    });
+  }, [nodes]);
+
+  const handleCloseServiceDialog = useCallback(() => {
+    setServiceDialog({
+      show: false,
+      service: null,
+      cmdbItem: null
+    });
+  }, []);
+
   // Setup socket for real-time updates (read-only)
   const setupSocket = useCallback((workspaceId, shareToken) => {
     if (socketRef.current) {
@@ -397,10 +604,49 @@ export default function CMDBSharedView() {
       fetchSharedData(verifiedPassword);
     });
 
+    // ✅ FIX: Listen for external item position updates (realtime without full refresh)
+    socket.on('external_item_position_update', (data) => {
+      console.log('📡 [CMDBSharedView] External item position update received:', data);
+
+      const { externalServiceItemId, position, workspaceId: updateWorkspaceId, serviceId: updateServiceId } = data;
+
+      // Only process if it's for the current workspace
+      if (updateWorkspaceId !== shareInfo?.workspace_id) {
+        console.log('⏭️ [CMDBSharedView] Skipping external item position update (different workspace)');
+        return;
+      }
+
+      // Update external item positions in sharedDataRef (PER-SERVICE structure)
+      if (sharedDataRef.current?.externalItemPositions) {
+        console.log('✅ [CMDBSharedView] Updating external item position (PER-SERVICE):', {
+          itemId: externalServiceItemId,
+          serviceId: updateServiceId,
+          newPosition: position,
+          currentStructure: 'per-service: { [service_id]: { [item_id]: position } }'
+        });
+
+        // Initialize service object if not exists
+        if (!sharedDataRef.current.externalItemPositions[updateServiceId]) {
+          sharedDataRef.current.externalItemPositions[updateServiceId] = {};
+        }
+
+        // Update position for this specific service
+        sharedDataRef.current.externalItemPositions[updateServiceId][externalServiceItemId] = {
+          ...position,
+          _updatedAt: new Date()
+        };
+
+        // Force re-render by updating state
+        setSharedData({ ...sharedDataRef.current });
+
+        console.log('✅ [CMDBSharedView] External item position updated for service', updateServiceId);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log('Disconnected from share socket');
     });
-  }, [fetchSharedData, verifiedPassword]);
+  }, [fetchSharedData, verifiedPassword, shareInfo?.workspace_id]);
 
   // Handle password verification
   const handlePasswordVerified = (password) => {
@@ -576,6 +822,19 @@ export default function CMDBSharedView() {
           )}
         </ReactFlow>
       </div>
+
+      {/* Service Detail Dialog - View Only Mode */}
+      {serviceDialog.show && sharedDataForDialog && (
+        <ServiceDetailDialog
+          show={serviceDialog.show}
+          service={serviceDialog.service}
+          workspaceId={shareInfo?.workspace_id}
+          cmdbItem={serviceDialog.cmdbItem}
+          onClose={handleCloseServiceDialog}
+          isSharedView={true}
+          sharedData={sharedDataForDialog} // Use memoized object
+        />
+      )}
 
       {/* Password Dialog */}
       <PasswordDialog

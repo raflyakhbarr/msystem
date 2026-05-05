@@ -30,8 +30,17 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../../context/SocketContext';
+import { Eye } from 'lucide-react';
 
-export default function ServiceDetailDialog({ show, service, workspaceId, onClose, cmdbItem }) {
+export default function ServiceDetailDialog({
+  show,
+  service,
+  workspaceId,
+  onClose,
+  cmdbItem,
+  isSharedView = false,
+  sharedData = null // Pre-loaded data for shared view
+}) {
   const [localStatus, setLocalStatus] = useState(service?.status || 'active');
   const [isUpdating, setIsUpdating] = useState(false);
   const isLocalUpdateRef = useRef(false);
@@ -72,15 +81,39 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
         cmdbItemId: cmdbItem?.id,
         cmdbItemName: cmdbItem?.name,
         cmdbItemExists: !!cmdbItem,
-        allServicesCount: allServices.length
+        allServicesCount: allServices.length,
+        isSharedView,
+        mode: isSharedView ? 'SHARED VIEW (Read-Only)' : 'NORMAL VIEW (Edit-Enabled)',
+        sharedDataExists: !!sharedData,
+        sharedServicesCount: sharedData?.services?.length || 0,
+        sharedServiceToServiceConnectionsCount: sharedData?.serviceToServiceConnections?.length || 0,
+        sharedCrossServiceConnectionsCount: sharedData?.crossServiceConnections?.length || 0
       });
 
       if (!cmdbItem) {
         console.warn('⚠️ ServiceDetailDialog: cmdbItem is null/undefined!');
         console.warn('⚠️ This means parent item lookup failed in handleServiceClick');
+        console.warn('⚠️ Available data:', {
+          serviceExists: !!service,
+          serviceId: service?.id,
+          serviceName: service?.name,
+          cmdbItemId: service?.cmdb_item_id,
+          isSharedView,
+          hasSharedData: !!sharedData
+        });
+      }
+
+      if (isSharedView && sharedData) {
+        console.log('📊 ServiceDetailDialog: Shared Data Summary:', {
+          servicesCount: sharedData.services?.length || 0,
+          serviceToServiceConnectionsCount: sharedData.serviceToServiceConnections?.length || 0,
+          crossServiceConnectionsCount: sharedData.crossServiceConnections?.length || 0,
+          itemsCount: sharedData.items?.length || 0,
+          workspaceId: sharedData.workspace_id || 'N/A'
+        });
       }
     }
-  }, [show, service, workspaceId, cmdbItem, allServices.length]);
+  }, [show, service, workspaceId, cmdbItem, allServices.length, isSharedView, sharedData]);
 
   // Update local status when service prop changes (when dialog opens with new data)
   useEffect(() => {
@@ -91,22 +124,32 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
 
   // Fetch latest service data when dialog opens
   useEffect(() => {
-    if (show && service?.id) {
-      // Fetch the latest service data when dialog opens
+    if (show && service?.id && !isSharedView) {
+      // Fetch the latest service data when dialog opens (SKIP in shared view)
       api.get(`/services/single/${service.id}`)
         .then(res => {
           setLocalStatus(res.data.status);
           console.log('✅ ServiceDetailDialog: Fetched latest status on open:', res.data.status);
         })
         .catch(err => console.error('Failed to fetch service status:', err));
+    } else if (show && service?.id && isSharedView) {
+      // In shared view, use status from pre-loaded service data
+      setLocalStatus(service.status);
+      console.log('✅ ServiceDetailDialog: Using pre-loaded status in shared view:', service.status);
     }
-  }, [show, service?.id]);
+  }, [show, service?.id, service?.status, isSharedView]);
 
   // Listen for service updates from SocketContext (always active, even when dialog is closed)
   useEffect(() => {
-    if (!socket || !service?.id || !workspaceId) return;
+    if (!socket || !service?.id || !workspaceId || isSharedView) return; // Skip socket in shared view
 
     const handleServiceUpdate = async (data) => {
+      // Skip API call in shared view
+      if (isSharedView) {
+        console.log('🔒 ServiceDetailDialog: Skipping service update fetch in shared view');
+        return;
+      }
+
       // Convert to number for comparison (backend might send string)
       const eventServiceId = parseInt(data.serviceId);
       const eventWorkspaceId = parseInt(data.workspaceId);
@@ -137,21 +180,67 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     return () => {
       socket.off('service_update', handleServiceUpdate);
     };
-  }, [socket, service?.id, workspaceId]);
+  }, [socket, service?.id, workspaceId, isSharedView]);
 
   // Fetch ALL services in workspace (not just parent CMDB item) for cross-item connections
   useEffect(() => {
-    if (!show || !workspaceId) {
+    // ✅ FIX: In shared view, workspaceId might be undefined, so don't require it
+    if (!show) {
+      setAllServices([]);
+      return;
+    }
+
+    // In shared view, use pre-loaded data
+    if (isSharedView && sharedData?.services) {
+      console.log('✅ ServiceDetailDialog [SHARED VIEW]: Using pre-loaded services:', sharedData.services.length);
+      console.log('✅ ServiceDetailDialog [SHARED VIEW]: sharedData keys:', Object.keys(sharedData));
+      console.log('✅ ServiceDetailDialog [SHARED VIEW]: sharedData.services sample:', sharedData.services.slice(0, 3).map(s => ({
+        id: s.id,
+        id_type: typeof s.id,
+        name: s.name,
+        cmdb_item_id: s.cmdb_item_id,
+        service_items_count: s.service_items?.length || 0
+      })));
+
+      const servicesWithItemInfo = sharedData.services.map(svc => {
+        const parentItem = sharedData.items?.find(item => item.id === svc.cmdb_item_id);
+        return {
+          ...svc,
+          cmdb_item_id: svc.cmdb_item_id,
+          cmdb_item_name: parentItem?.name || 'Unknown Item'
+        };
+      });
+      console.log('✅ ServiceDetailDialog [SHARED VIEW]: servicesWithItemInfo sample:', servicesWithItemInfo.slice(0, 3).map(s => ({
+        id: s.id,
+        id_type: typeof s.id,
+        name: s.name,
+        hasName: !!s.name
+      })));
+      setAllServices(servicesWithItemInfo);
+      return;
+    }
+
+    // Normal mode requires workspaceId
+    if (!workspaceId) {
+      setAllServices([]);
+      return;
+    }
+
+    // Skip API call in shared view if no shared data
+    if (isSharedView) {
+      console.log('🔒 ServiceDetailDialog: No shared data available, setting empty services array');
       setAllServices([]);
       return;
     }
 
     const fetchAllWorkspaceServices = async () => {
-      console.log('🔍 ServiceDetailDialog: Fetching ALL services in workspace:', workspaceId);
+      console.log('🔍 ServiceDetailDialog [NORMAL MODE]: Fetching ALL services in workspace:', workspaceId);
       try {
         // Fetch all CMDB items in workspace first
         const itemsResponse = await api.get(`/cmdb?workspace_id=${workspaceId}`);
         const items = itemsResponse.data || [];
+
+        console.log('🔍 ServiceDetailDialog [NORMAL MODE]: Fetched', items.length, 'CMDB items');
 
         // Fetch services for each CMDB item
         const servicesPromises = items.map(async (item) => {
@@ -171,7 +260,26 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
         const allServicesArrays = await Promise.all(servicesPromises);
         const flatServices = allServicesArrays.flat();
 
-        console.log('✅ ServiceDetailDialog: Fetched', flatServices.length, 'services from', items.length, 'CMDB items');
+        console.log('✅ ServiceDetailDialog [NORMAL MODE]: Fetched', flatServices.length, 'services from', items.length, 'CMDB items');
+
+        // Log sample service with service items for comparison
+        if (flatServices.length > 0) {
+          const sampleService = flatServices[0];
+          console.log('🔍 ServiceDetailDialog [NORMAL MODE]: Sample service:', {
+            id: sampleService.id,
+            name: sampleService.name,
+            cmdb_item_id: sampleService.cmdb_item_id,
+            has_service_items: !!sampleService.service_items,
+            service_items_count: sampleService.service_items?.length || 0,
+            service_items: sampleService.service_items?.slice(0, 3).map(i => ({
+              id: i.id,
+              name: i.name,
+              position: i.position,
+              group_id: i.group_id
+            }))
+          });
+        }
+
         setAllServices(flatServices);
       } catch (err) {
         console.error('❌ Failed to fetch workspace services:', err);
@@ -180,12 +288,32 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     };
 
     fetchAllWorkspaceServices();
-  }, [show, workspaceId]);
+  }, [show, workspaceId, isSharedView, sharedData]);
 
   // Fetch service-to-service connections
   useEffect(() => {
     if (!show || !cmdbItem) {
       setServiceConnections([]);
+      return;
+    }
+
+    // In shared view, use pre-loaded data
+    if (isSharedView && sharedData?.serviceToServiceConnections) {
+      console.log('✅ ServiceDetailDialog: Using pre-loaded service-to-service connections:', sharedData.serviceToServiceConnections.length);
+      // Filter connections for this CMDB item
+      const itemConnections = sharedData.serviceToServiceConnections.filter(conn =>
+        conn.cmdb_item_id === cmdbItem.id
+      );
+      setServiceConnections(itemConnections);
+      setLoadingConnections(false);
+      return;
+    }
+
+    // Skip API call in shared view if no shared data
+    if (isSharedView) {
+      console.log('🔒 ServiceDetailDialog: No shared service connections data available');
+      setServiceConnections([]);
+      setLoadingConnections(false);
       return;
     }
 
@@ -203,12 +331,50 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     };
 
     fetchServiceConnections();
-  }, [show, cmdbItem]);
+  }, [show, cmdbItem, isSharedView, sharedData]);
 
   // Fetch cross-service connections (service item to service item)
   useEffect(() => {
     if (!show || !service?.id) {
       setServiceItemConnections([]);
+      return;
+    }
+
+    // In shared view, use pre-loaded data
+    if (isSharedView && sharedData?.crossServiceConnections) {
+      console.log('✅ ServiceDetailDialog: Using pre-loaded cross-service connections:', sharedData.crossServiceConnections.length);
+      console.log('✅ ServiceDetailDialog [SHARED VIEW] Current service:', {
+        id: service.id,
+        id_type: typeof service.id,
+        name: service.name
+      });
+      // 🔍 DEBUG: Log first connection to check data structure
+      if (sharedData.crossServiceConnections.length > 0) {
+        console.log('🔍 [ServiceDetailDialog] First cross-service connection:', {
+          id: sharedData.crossServiceConnections[0].id,
+          source_service_id: sharedData.crossServiceConnections[0].source_service_id,
+          source_service_id_type: typeof sharedData.crossServiceConnections[0].source_service_id,
+          target_service_id: sharedData.crossServiceConnections[0].target_service_id,
+          target_service_id_type: typeof sharedData.crossServiceConnections[0].target_service_id,
+          source_service_name: sharedData.crossServiceConnections[0].source_service_name,
+          target_service_name: sharedData.crossServiceConnections[0].target_service_name
+        });
+      }
+      // Filter connections that involve this service
+      const relatedConnections = sharedData.crossServiceConnections.filter(conn =>
+        conn.source_service_id === service.id || conn.target_service_id === service.id
+      );
+      console.log('✅ ServiceDetailDialog: Filtered to', relatedConnections.length, 'connections for current service');
+      setServiceItemConnections(relatedConnections);
+      setLoadingServiceItemConnections(false);
+      return;
+    }
+
+    // Skip API call in shared view if no shared data
+    if (isSharedView) {
+      console.log('🔒 ServiceDetailDialog: No shared cross-service connections data available');
+      setServiceItemConnections([]);
+      setLoadingServiceItemConnections(false);
       return;
     }
 
@@ -233,11 +399,41 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     };
 
     fetchCrossServiceConnections();
-  }, [show, service?.id, workspaceId]);
+  }, [show, service?.id, workspaceId, isSharedView, sharedData]);
 
   // Fetch all service items for display
   useEffect(() => {
     if (!show || !allServices.length) {
+      setAllServiceItems([]);
+      return;
+    }
+
+    // In shared view, extract service items from pre-loaded services
+    if (isSharedView && sharedData?.services) {
+      console.log('✅ ServiceDetailDialog: Extracting service items from pre-loaded services');
+      const allServiceItems = [];
+
+      sharedData.services.forEach(svc => {
+        if (svc.service_items && Array.isArray(svc.service_items)) {
+          svc.service_items.forEach(item => {
+            allServiceItems.push({
+              ...item,
+              service_id: svc.id,
+              service_name: svc.name,
+              cmdb_item_name: svc.cmdb_item_id ? sharedData.items?.find(i => i.id === svc.cmdb_item_id)?.name : 'Unknown'
+            });
+          });
+        }
+      });
+
+      console.log('✅ ServiceDetailDialog: Extracted', allServiceItems.length, 'service items from', sharedData.services.length, 'services');
+      setAllServiceItems(allServiceItems);
+      return;
+    }
+
+    // Skip API call in shared view if no shared data
+    if (isSharedView) {
+      console.log('🔒 ServiceDetailDialog: No shared service items data available');
       setAllServiceItems([]);
       return;
     }
@@ -271,10 +467,11 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
     };
 
     fetchAllServiceItems();
-  }, [show, allServices, workspaceId]);
+  }, [show, allServices, workspaceId, isSharedView, sharedData]);
 
   const handleConnectionUpdate = async () => {
     if (!cmdbItem) return;
+    if (isSharedView) return; // Skip in shared view
 
     // Refresh service-to-service connections after modal closes
     try {
@@ -336,6 +533,12 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
   };
 
   const handleStatusChange = async (newStatus) => {
+    // Prevent status changes in shared view mode
+    if (isSharedView) {
+      toast.info('🔒 View-only mode: Status changes are not allowed in shared view');
+      return;
+    }
+
     if (!service) return;
 
     setIsUpdating(true);
@@ -453,9 +656,17 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-1 break-words">
-                    {service.name}
-                  </h2>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight break-words">
+                      {service.name}
+                    </h2>
+                    {isSharedView && (
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <Eye className="w-3 h-3" />
+                        View Only
+                      </Badge>
+                    )}
+                  </div>
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${statusConfig.color}`}>
                     <StatusIcon size={12} />
                     {statusConfig.label}
@@ -502,11 +713,13 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                       <Activity size={16} className="text-slate-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-500 mb-1.5">Status</p>
+                      <p className="text-xs font-medium text-slate-500 mb-1.5">
+                        Status {isSharedView && <span className="text-slate-400">(read-only)</span>}
+                      </p>
                       <Select
                         value={localStatus}
                         onValueChange={handleStatusChange}
-                        disabled={isUpdating}
+                        disabled={isUpdating || isSharedView}
                       >
                         <SelectTrigger className="h-8 text-sm">
                           <SelectValue placeholder="Select status" />
@@ -589,7 +802,7 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                       <Badge variant="secondary" className="text-xs">
                         {serviceConnections.length} {serviceConnections.length !== 1 ? 'Connections' : 'Connection'}
                       </Badge>
-                      {cmdbItem && allServices.length >= 2 && (
+                      {!isSharedView && cmdbItem && allServices.length >= 2 && (
                         <Button
                           onClick={() => setShowServiceConnectionModal(true)}
                           size="sm"
@@ -682,14 +895,16 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                                 </div>
 
                                 {/* Delete Button */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteConnection(conn.id)}
-                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 size={12} />
-                                </Button>
+                                {!isSharedView && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteConnection(conn.id)}
+                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 size={12} />
+                                  </Button>
+                                )}
                               </div>
                             );
                           })}
@@ -751,6 +966,28 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                           const targetServiceItem = allServiceItems.find(item => item.id === conn.target_service_item_id);
                           const connectionTypeConfig = connectionTypes.find(ct => ct.value === conn.connection_type);
 
+                          // 🔍 DEBUG: Log first connection to diagnose issue
+                          if (conn === serviceItemConnections[0]) {
+                            console.log('🔍 [Service Item Connections] First connection:', {
+                              connId: conn.id,
+                              source_service_id: conn.source_service_id,
+                              target_service_id: conn.target_service_id,
+                              source_service_id_type: typeof conn.source_service_id,
+                              target_service_id_type: typeof conn.target_service_id
+                            });
+                            console.log('🔍 [Service Item Connections] allServices sample:', allServices.slice(0, 3).map(s => ({
+                              id: s.id,
+                              id_type: typeof s.id,
+                              name: s.name
+                            })));
+                            console.log('🔍 [Service Item Connections] Lookup results:', {
+                              sourceServiceFound: !!sourceService,
+                              targetServiceFound: !!targetService,
+                              sourceServiceName: sourceService?.name || 'NOT FOUND',
+                              targetServiceName: targetService?.name || 'NOT FOUND'
+                            });
+                          }
+
                           return (
                             <div
                               key={conn.id}
@@ -787,14 +1024,16 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                               </div>
 
                               {/* Delete Button */}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteServiceItemConnection(conn.id)}
-                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 size={12} />
-                              </Button>
+                              {!isSharedView && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteServiceItemConnection(conn.id)}
+                                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
+                              )}
                             </div>
                           );
                         })}
@@ -863,6 +1102,8 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
                 <ServiceVisualization
                   service={service}
                   workspaceId={workspaceId}
+                  isSharedView={isSharedView}
+                  sharedData={sharedData}
                 />
               </div>
             </div>
@@ -881,6 +1122,13 @@ export default function ServiceDetailDialog({ show, service, workspaceId, onClos
         currentService={service}
         onConnectionUpdate={async () => {
           if (!workspaceId) return;
+
+          // Skip API calls in shared view
+          if (isSharedView) {
+            console.log('🔒 ServiceDetailDialog: Skipping connection update refresh in shared view');
+            return;
+          }
+
           // Refresh ALL workspace services after connection update (for cross-item connections)
           try {
             console.log('🔄 Refreshing ALL workspace services after connection update...');

@@ -43,6 +43,14 @@ const nodeTypes = {
   serviceGroup: CustomServiceGroupNode,
 };
 
+// Memoize these objects to prevent ReactFlow infinite re-renders
+const CONNECTION_LINE_STYLE = { stroke: '#3b82f6', strokeWidth: 2 };
+
+const getMiniMapNodeColor = (node) => {
+  if (node.type === 'serviceGroup') return '#f59e0b';
+  return '#3b82f6';
+};
+
 // Helper function to safely parse position from database
 const parsePosition = (positionData) => {
   if (!positionData) return { x: 0, y: 0 };
@@ -72,7 +80,8 @@ const parsePosition = (positionData) => {
 const calculateCrossServicePropagatedStatuses = (
   localItems,
   crossServiceConnections,
-  externalServiceItems
+  externalServiceItems,
+  isSharedView = false // ✅ FIX: Add isSharedView parameter with default value
 ) => {
   const edgeStatuses = {};
 
@@ -85,6 +94,7 @@ const calculateCrossServicePropagatedStatuses = (
       name: externalItem.name,
       type: externalItem.type,
       isExternal: true,
+      isSharedView: isSharedView || false, // ✅ FIX: Pass isSharedView flag
     });
   });
 
@@ -275,7 +285,22 @@ const calculateCrossServicePropagatedStatuses = (
   return edgeStatuses;
 };
 
-export default function ServiceVisualization({ service, workspaceId }) {
+export default function ServiceVisualization({
+  service,
+  workspaceId,
+  isSharedView = false,
+  sharedData = null // Pre-loaded data for shared view
+}) {
+  // Debug log for props on mount
+  console.log('🎯 ServiceVisualization: Mounted', {
+    isSharedView,
+    serviceId: service?.id,
+    serviceName: service?.name,
+    workspaceId,
+    hasSharedData: !!sharedData,
+    sharedDataKeys: sharedData ? Object.keys(sharedData) : null
+  });
+
   const reactFlowInstance = useRef(null);
   const nodesRef = useRef([]);
   const isReorderingRef = useRef(false);
@@ -395,6 +420,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
   // Use refs to always get latest state values and avoid stale closures
   const crossServiceConnectionsRef = useRef(crossServiceConnections);
   const crossServiceEdgeHandlesRef = useRef(crossServiceEdgeHandles);
+  const autoLayoutedPositionsRef = useRef(new Map()); // Cache auto-layouted positions
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -412,27 +438,191 @@ export default function ServiceVisualization({ service, workspaceId }) {
   const canUndo = pastNodes.length > 0;
   const canRedo = futureNodes.length > 0;
 
-  const {
-    items,
-    connections,
-    groups,
-    groupConnections,
-    fetchAll,
-    createServiceGroup,
-    updateServiceGroup,
-    deleteServiceGroup,
-    saveServiceGroupConnections
-  } = useServiceItems(service.id, workspaceId);
+  // Extract pre-loaded data from sharedData (for shared view)
+  const preLoadedData = useMemo(() => {
+    if (!isSharedView || !sharedData?.services) {
+      return null;
+    }
+
+    console.log('🔧 ServiceVisualization: Extracting pre-loaded data for shared view');
+    console.log('🔧 SharedData keys:', Object.keys(sharedData));
+    console.log('🔧 sharedData.services count:', sharedData.services.length);
+    console.log('🔧 sharedData.serviceEdgeHandles:', sharedData.serviceEdgeHandles ? Object.keys(sharedData.serviceEdgeHandles).length : 'null');
+    console.log('🔧 sharedData.crossServiceEdgeHandles:', sharedData.crossServiceEdgeHandles ? Object.keys(sharedData.crossServiceEdgeHandles).length : 'null');
+    console.log('🔧 sharedData.externalItemPositions:', sharedData.externalItemPositions ? Object.keys(sharedData.externalItemPositions).length : 'null');
+    console.log('🔧 sharedData.connectionTypes:', sharedData.connectionTypes ? sharedData.connectionTypes.length : 'null');
+
+    // Find service in sharedData
+    const sharedService = sharedData.services.find(s => s.id === service.id);
+    if (!sharedService) {
+      console.warn('⚠️ Service not found in sharedData');
+      console.warn('⚠️ Looking for service.id:', service.id);
+      console.warn('⚠️ Available services:', sharedData.services.map(s => ({id: s.id, name: s.name})));
+      return null;
+    }
+
+    console.log('🔧 Found sharedService:', sharedService.name, 'with', sharedService.service_items?.length, 'items');
+
+    // Extract service items
+    const items = sharedService.service_items || [];
+
+    // Log service items positioning for debugging
+    if (items.length > 0) {
+      const itemsInGroups = items.filter(item => item.group_id);
+      const ungroupedItems = items.filter(item => !item.group_id);
+
+      console.log('📦 [SHARED VIEW] Service Items Structure:', {
+        serviceId: service.id,
+        serviceName: service.name,
+        totalItems: items.length,
+        itemsInGroups: itemsInGroups.length,
+        ungroupedItems: ungroupedItems.length,
+        itemsSample: items.slice(0, 3).map(item => ({
+          id: item.id,
+          name: item.name,
+          position: item.position,
+          group_id: item.group_id,
+          status: item.status
+        }))
+      });
+    }
+
+    // Extract internal connections (item-to-item)
+    const connections = sharedService.service_connections || [];
+
+    // Extract groups
+    const groups = sharedService.service_groups || [];
+
+    // Log group positions for debugging
+    if (groups.length > 0) {
+      console.log('🔧 Groups positions:', groups.map(g => ({
+        id: g.id,
+        name: g.name,
+        position: g.position
+      })));
+    }
+
+    // Extract group connections
+    const groupConnections = sharedService.service_group_connections || [];
+
+    console.log('✅ ServiceVisualization: Pre-loaded data extracted:', {
+      itemsCount: items.length,
+      connectionsCount: connections.length,
+      groupsCount: groups.length,
+      groupConnectionsCount: groupConnections.length
+    });
+
+    return {
+      items,
+      connections,
+      groups,
+      groupConnections,
+      isPreLoaded: true
+    };
+  }, [isSharedView, service.id, sharedData?.services]);
+
+  // IMPORTANT: useServiceItems hook MUST be called conditionally based on isSharedView
+  // This is safe because isSharedView is a prop that doesn't change during component lifetime
+  // Once a ServiceVisualization is mounted in shared view mode, it never switches to normal mode
+  // and vice versa. This prevents hook order violations.
+  const serviceItemsData = !isSharedView
+    ? (() => {
+        console.log('🔍 ServiceVisualization [NORMAL MODE]: Using useServiceItems hook for service:', service?.id);
+        const data = useServiceItems(service.id, workspaceId);
+        console.log('🔍 ServiceVisualization [NORMAL MODE]: useServiceItems returned:', {
+          itemsCount: data.items?.length || 0,
+          connectionsCount: data.connections?.length || 0,
+          groupsCount: data.groups?.length || 0,
+          groupConnectionsCount: data.groupConnections?.length || 0,
+          sampleItems: data.items?.slice(0, 3).map(i => ({id: i.id, name: i.name, position: i.position, group_id: i.group_id})),
+          sampleGroups: data.groups?.slice(0, 3).map(g => ({id: g.id, name: g.name, position: g.position}))
+        });
+        return data;
+      })()
+    : {
+        // Mock data for shared view - prevents unnecessary API calls and hook order issues
+        items: [],
+        connections: [],
+        groups: [],
+        groupConnections: [],
+        loading: false,
+        fetchAll: () => Promise.resolve(),
+        createServiceGroup: () => Promise.resolve(),
+        updateServiceGroup: () => Promise.resolve(),
+        deleteServiceGroup: () => Promise.resolve(),
+        saveServiceGroupConnections: () => Promise.resolve(),
+      };
+
+  // Use pre-loaded data in shared view, otherwise use hook data
+  const items = preLoadedData ? preLoadedData.items : serviceItemsData.items;
+  const connections = preLoadedData ? preLoadedData.connections : serviceItemsData.connections;
+  const groups = preLoadedData ? preLoadedData.groups : serviceItemsData.groups;
+  const groupConnections = preLoadedData ? preLoadedData.groupConnections : serviceItemsData.groupConnections;
+
+  // Use appropriate functions based on view mode
+  const fetchAll = serviceItemsData.fetchAll;
+  const createServiceGroup = serviceItemsData.createServiceGroup;
+  const updateServiceGroup = serviceItemsData.updateServiceGroup;
+  const deleteServiceGroup = serviceItemsData.deleteServiceGroup;
+  const saveServiceGroupConnections = serviceItemsData.saveServiceGroupConnections;
 
   // Load service edge handles on mount
   useEffect(() => {
+    // Skip API call in shared view
+    if (isSharedView) {
+      // Use pre-loaded edge handles from sharedData
+      if (sharedData?.edgeHandles) {
+        console.log('📦 ServiceVisualization: Using pre-loaded edge handles:', Object.keys(sharedData.edgeHandles).length);
+        setEdgeHandles(sharedData.edgeHandles);
+      }
+      // Use pre-loaded service edge handles (for internal item connections)
+      if (sharedData?.serviceEdgeHandles) {
+        console.log('📦 ServiceVisualization: Using pre-loaded service edge handles:', Object.keys(sharedData.serviceEdgeHandles).length);
+        console.log('📦 Service edge handles sample:', Object.entries(sharedData.serviceEdgeHandles).slice(0, 3));
+        // Merge with existing edgeHandles
+        setEdgeHandles(prev => ({ ...prev, ...sharedData.serviceEdgeHandles }));
+      }
+      // Use pre-loaded cross-service edge handles
+      if (sharedData?.crossServiceEdgeHandles) {
+        console.log('📦 ServiceVisualization: Using pre-loaded cross-service edge handles:', Object.keys(sharedData.crossServiceEdgeHandles).length);
+        console.log('📦 Cross-service edge handles sample:', Object.entries(sharedData.crossServiceEdgeHandles).slice(0, 3));
+        setCrossServiceEdgeHandles(sharedData.crossServiceEdgeHandles);
+      }
+      // Use pre-loaded external item positions
+      if (sharedData?.externalItemPositions) {
+        // ✅ FIX: Extract service-specific positions from new per-service format
+        // New format: { [service_id]: { [item_id]: position } }
+        const serviceSpecificPositions = sharedData.externalItemPositions[service.id] || {};
+
+        console.log('📦 ServiceVisualization: Extracting service-specific external item positions:', {
+          viewingServiceId: service.id,
+          viewingServiceName: service.name,
+          totalServicesWithData: Object.keys(sharedData.externalItemPositions).length,
+          itemCountForThisService: Object.keys(serviceSpecificPositions).length,
+          samplePositions: Object.entries(serviceSpecificPositions).slice(0, 2).map(([itemId, pos]) => ({
+            itemId,
+            x: pos.x,
+            y: pos.y
+          }))
+        });
+
+        setExternalItemPositions(serviceSpecificPositions);
+      }
+      return;
+    }
+
     const loadHandles = async () => {
       if (!service?.id) return;
       const handles = await loadServiceEdgeHandles(service.id, workspaceId);
       setEdgeHandles(handles);
     };
     loadHandles();
-  }, [service?.id, workspaceId]);
+  }, [service?.id, workspaceId, isSharedView, sharedData?.edgeHandles, sharedData?.serviceEdgeHandles, sharedData?.crossServiceEdgeHandles, sharedData?.externalItemPositions]);
+
+  // Clear auto-layout cache when service changes
+  useEffect(() => {
+    autoLayoutedPositionsRef.current.clear();
+  }, [service?.id]);
 
   // Siapkan data parent service dengan icon_preview
   const parentServiceData = useMemo(() => service ? {
@@ -498,6 +688,15 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   // Fetch connection types on mount
   useEffect(() => {
+    // Skip API call in shared view - connection types should be in sharedData
+    if (isSharedView) {
+      if (sharedData?.connectionTypes) {
+        console.log('📦 ServiceVisualization: Using pre-loaded connection types:', sharedData.connectionTypes.length);
+        setConnectionTypes(sharedData.connectionTypes);
+      }
+      return;
+    }
+
     const fetchConnectionTypes = async () => {
       try {
         const response = await api.get('/cmdb/connection-types');
@@ -507,10 +706,150 @@ export default function ServiceVisualization({ service, workspaceId }) {
       }
     };
     fetchConnectionTypes();
-  }, []);
+  }, [isSharedView, sharedData?.connectionTypes?.length]);
 
   // Fetch cross-service connections on mount
   useEffect(() => {
+    // In shared view with pre-loaded data, use it directly
+    if (isSharedView && sharedData?.crossServiceConnections) {
+      console.log('📦 ServiceVisualization: Using pre-loaded cross-service connections');
+
+      // Filter connections for this service
+      const relevantConnections = sharedData.crossServiceConnections.filter(conn => {
+        const isRelevant = conn.source_service_id === service.id || conn.target_service_id === service.id;
+        return isRelevant;
+      });
+
+      // Process external service items
+      const externalItems = [];
+      const externalItemIds = new Set();
+
+      relevantConnections.forEach(conn => {
+        // Add external service items
+        if (conn.source_service_id === service.id && conn.target_service_id !== service.id) {
+          if (!externalItemIds.has(conn.target_service_item_id)) {
+            externalItemIds.add(conn.target_service_item_id);
+            const targetService = sharedData.services.find(s => s.id === conn.target_service_id);
+            const targetServiceItem = targetService?.service_items?.find(si => si.id === conn.target_service_item_id);
+            if (targetServiceItem) {
+              // ✅ FIX: Use PER-SERVICE format { [service_id]: { [item_id]: position } }
+              // Get positions for the CURRENT viewing service, not the target service
+              const serviceSpecificPositions = sharedData.externalItemPositions?.[service.id] || {};
+              const savedPosition = serviceSpecificPositions[targetServiceItem.id] || null;
+
+              // ✅ FIXED: Accept {x: 0, y: 0} as valid position (user might place item there intentionally)
+              const hasExplicitPosition = savedPosition !== null;
+
+              console.log('🔍 [SHARED VIEW] External item position (PER-SERVICE FORMAT):', {
+                externalItemId: targetServiceItem.id,
+                externalItemName: targetServiceItem.name,
+                externalItemParentService: targetService.name,
+                viewingServiceId: service.id,
+                viewingServiceName: service.name,
+                selectedPosition: savedPosition,
+                hasExplicitPosition,
+                format: 'per-service: { [service_id]: { [item_id]: position } }'
+              });
+
+              externalItems.push({
+                id: targetServiceItem.id,
+                name: targetServiceItem.name,
+                type: targetServiceItem.type,
+                status: targetServiceItem.status,
+                cmdbItemId: targetService.cmdb_item_id,
+                serviceId: targetService.id,
+                serviceName: targetService.name,
+                cmdbItemName: targetService.cmdb_item_id ? sharedData.items?.find(i => i.id === targetService.cmdb_item_id)?.name : 'Unknown',
+                isExternal: true,
+                isSharedView: isSharedView || false, // ✅ FIX: Pass isSharedView flag
+                position: hasExplicitPosition ? savedPosition : null
+              });
+            }
+          }
+        } else if (conn.target_service_id === service.id && conn.source_service_id !== service.id) {
+          if (!externalItemIds.has(conn.source_service_item_id)) {
+            externalItemIds.add(conn.source_service_item_id);
+            const sourceService = sharedData.services.find(s => s.id === conn.source_service_id);
+            const sourceServiceItem = sourceService?.service_items?.find(si => si.id === conn.source_service_item_id);
+            if (sourceServiceItem) {
+              // ✅ FIX: Use PER-SERVICE format { [service_id]: { [item_id]: position } }
+              // Get positions for the CURRENT viewing service, not the source service
+              const serviceSpecificPositions = sharedData.externalItemPositions?.[service.id] || {};
+              const savedPosition = serviceSpecificPositions[sourceServiceItem.id] || null;
+
+              // ✅ FIXED: Accept {x: 0, y: 0} as valid position (user might place item there intentionally)
+              const hasExplicitPosition = savedPosition !== null;
+
+              console.log('🔍 [SHARED VIEW] External item position (PER-SERVICE FORMAT):', {
+                externalItemId: sourceServiceItem.id,
+                externalItemName: sourceServiceItem.name,
+                externalItemParentService: sourceService.name,
+                viewingServiceId: service.id,
+                viewingServiceName: service.name,
+                selectedPosition: savedPosition,
+                hasExplicitPosition,
+                format: 'per-service: { [service_id]: { [item_id]: position } }'
+              });
+
+              externalItems.push({
+                id: sourceServiceItem.id,
+                name: sourceServiceItem.name,
+                type: sourceServiceItem.type,
+                status: sourceServiceItem.status,
+                cmdbItemId: sourceService.cmdb_item_id,
+                serviceId: sourceService.id,
+                serviceName: sourceService.name,
+                cmdbItemName: sourceService.cmdb_item_id ? sharedData.items?.find(i => i.id === sourceService.cmdb_item_id)?.name : 'Unknown',
+                isExternal: true,
+                isSharedView: isSharedView || false, // ✅ FIX: Pass isSharedView flag
+                position: hasExplicitPosition ? savedPosition : null
+              });
+            }
+          }
+        }
+      });
+
+      setCrossServiceConnections(relevantConnections);
+      setExternalServiceItems(externalItems);
+
+      // Log external items positioning for debugging
+      console.log('📍 [SHARED VIEW] External Items Positions:', {
+        serviceId: service.id,
+        serviceName: service.name,
+        totalExternalItems: externalItems.length,
+        itemsWithExplicitPosition: externalItems.filter(item => item.position !== null).length,
+        itemsNeedingAutoLayout: externalItems.filter(item => item.position === null).length,
+        sharedDataKeys: Object.keys(sharedData.externalItemPositions || {}),
+        externalItems: externalItems.map(item => {
+          const savedPosition = sharedData.externalItemPositions?.[item.id];
+          return {
+            id: item.id,
+            name: item.name,
+            serviceName: item.serviceName,
+            position: item.position,
+            savedPosition: savedPosition,
+            hasExplicitPosition: item.position !== null,
+            needsAutoLayout: item.position === null,
+            positionMatch: item.position && savedPosition &&
+              item.position.x === savedPosition.x && item.position.y === savedPosition.y
+          };
+        })
+      });
+
+      console.log('✅ ServiceVisualization: Pre-loaded cross-service connections processed:', {
+        connectionsCount: relevantConnections.length,
+        externalItemsCount: externalItems.length
+      });
+
+      return;
+    }
+
+    // Skip all API calls in shared view without pre-loaded data
+    if (isSharedView) {
+      console.log('🔒 ServiceVisualization: Skipping cross-service connections fetch in shared view (no pre-loaded data)');
+      return;
+    }
+
     const fetchCrossServiceConnections = async () => {
 
       if (!service?.id || !workspaceId) return;
@@ -665,18 +1004,46 @@ export default function ServiceVisualization({ service, workspaceId }) {
         }
 
         setExternalServiceItems(externalItems);
+
+        // Log external items positioning for debugging
+        console.log('📍 [NORMAL MODE] External Items Positions (Initial Load):', {
+          serviceId: service.id,
+          serviceName: service.name,
+          totalExternalItems: externalItems.length,
+          itemsWithExplicitPosition: externalItems.filter(item => item.position && (item.position.x !== 0 || item.position.y !== 0)).length,
+          itemsNeedingAutoLayout: externalItems.filter(item => !item.position || (item.position.x === 0 && item.position.y === 0)).length,
+          externalItems: externalItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            serviceName: item.serviceName,
+            position: item.position,
+            needsAutoLayout: !item.position || (item.position.x === 0 && item.position.y === 0)
+          }))
+        });
       } catch (error) {
         console.error('Failed to fetch cross-service connections:', error);
       }
     };
 
+    // Skip in shared view
+    if (isSharedView) {
+      console.log('🔒 ServiceVisualization: Skipping cross-service connections fetch in shared view');
+      return;
+    }
+
     fetchCrossServiceConnections();
-  }, [service?.id, workspaceId]);
+  }, [service?.id, workspaceId, isSharedView]);
 
   // Listen for external service item status updates using SocketContext
   const { socket } = useSocket();
 
   useEffect(() => {
+    // Skip in shared view
+    if (isSharedView) {
+      console.log('🔒 ServiceVisualization: Skipping external status socket listener in shared view');
+      return;
+    }
+
     if (!socket || !service?.id || !workspaceId) return;
 
     const handleStatusUpdate = async (data) => {
@@ -794,10 +1161,16 @@ export default function ServiceVisualization({ service, workspaceId }) {
     return () => {
       socket.off('service_item_status_update', handleStatusUpdate);
     };
-  }, [socket, service?.id, workspaceId]);
+  }, [socket, service?.id, workspaceId, isSharedView]); // Add isSharedView dependency
 
   // Listen for cross-service connection updates (create/update/delete)
   useEffect(() => {
+    // Skip in shared view
+    if (isSharedView) {
+      console.log('🔒 ServiceVisualization: Skipping cross-service connection socket listener in shared view');
+      return;
+    }
+
     if (!socket || !service?.id || !workspaceId) return;
 
     const handleCrossServiceConnectionUpdate = async (data) => {
@@ -933,7 +1306,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         id: `service-group-${group.id}`,
         type: 'serviceGroup',
         position: groupPos,
-        draggable: true,
+        draggable: !isSharedView,
         data: {
           label: group.name, // Add label for search
           name: group.name,
@@ -968,7 +1341,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
           position: { x: relativeX, y: relativeY },
           parentNode: `service-group-${group.id}`,
           extent: 'parent',
-          draggable: true,
+          draggable: !isSharedView,
           data: {
             label: item.name, // Add label for search
             name: item.name,
@@ -1000,7 +1373,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
         id: String(item.id),
         type: 'custom',
         position: parsePosition(item.position),
-        draggable: true,
+        draggable: !isSharedView,
         data: {
           label: item.name, // Add label for search
           name: item.name,
@@ -1026,6 +1399,36 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
       // Combine local nodes with external nodes
       const allNodes = [...flowNodes, ...externalNodes];
+
+      // Log node structure for debugging
+      const serviceGroupNodes = allNodes.filter(n => n.type === 'serviceGroup');
+      const serviceItemNodes = allNodes.filter(n => n.type === 'custom' && !n.data?.isExternal);
+      const externalItemNodes = allNodes.filter(n => n.data?.isExternal);
+
+      console.log('🏗️ [SERVICE ITEMS] Node Structure Created:', {
+        mode: isSharedView ? 'SHARED VIEW' : 'NORMAL MODE',
+        serviceId: service.id,
+        serviceName: service.name,
+        totalNodes: allNodes.length,
+        serviceGroups: serviceGroupNodes.length,
+        serviceItems: serviceItemNodes.length,
+        externalItems: externalItemNodes.length,
+        serviceGroupsSample: serviceGroupNodes.slice(0, 2).map(g => ({
+          id: g.id,
+          name: g.data.name,
+          position: g.position,
+          width: g.data.width,
+          height: g.data.height,
+          childCount: allNodes.filter(n => n.parentNode === g.id).length
+        })),
+        serviceItemsSample: serviceItemNodes.slice(0, 3).map(n => ({
+          id: n.id,
+          name: n.data.name,
+          position: n.position,
+          parentGroup: n.parentNode,
+          isChild: !!n.parentNode
+        }))
+      });
 
       nodesRef.current = allNodes;
       return allNodes;
@@ -1062,11 +1465,29 @@ export default function ServiceVisualization({ service, workspaceId }) {
       let maxY = 0;
       currentNodes.forEach(node => {
         if (!node.parentNode && !node.data?.isExternal) {
-          const nodeRight = node.position.x + (node.style?.width || 160);
-          const nodeBottom = node.position.y + (node.style?.height || 80);
+          // Use data.width/height for service groups, style.width/height for others
+          const nodeWidth = node.data?.width || node.style?.width || 160;
+          const nodeHeight = node.data?.height || node.style?.height || 80;
+
+          // Parse width/height if they're strings (e.g., "500px")
+          const width = typeof nodeWidth === 'string' ? parseInt(nodeWidth, 10) || 160 : nodeWidth;
+          const height = typeof nodeHeight === 'string' ? parseInt(nodeHeight, 10) || 80 : nodeHeight;
+
+          const nodeRight = node.position.x + width;
+          const nodeBottom = node.position.y + height;
           maxX = Math.max(maxX, nodeRight);
           maxY = Math.max(maxY, nodeBottom);
         }
+      });
+
+      console.log('📐 [EXTERNAL NODES] Bounding Box Calculation:', {
+        mode: isSharedView ? 'SHARED VIEW' : 'NORMAL MODE',
+        serviceId: service.id,
+        serviceName: service.name,
+        boundingBox: { maxX, maxY },
+        totalCurrentNodes: currentNodes.length,
+        localNodesCount: currentNodes.filter(n => !n.parentNode && !n.data?.isExternal).length,
+        externalNodesCount: currentNodes.filter(n => n.data?.isExternal).length
       });
 
       // Add external nodes
@@ -1080,19 +1501,28 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
         // Use saved position if available, otherwise calculate new position
         let nodePosition = externalItem.position;
-        const needsAutoLayout = !nodePosition || (nodePosition.x === 0 && nodePosition.y === 0);
+        // ✅ FIXED: Only auto-layout if position is null (allow {x: 0, y: 0} as valid position)
+        const needsAutoLayout = nodePosition === null;
 
         if (needsAutoLayout) {
-          nodePosition = { x: offsetX, y: offsetY };
-
-          // Update offset for next new item
-          itemsInRow++;
-          if (itemsInRow >= maxItemsPerRow) {
-            offsetX = maxX + 200;
-            offsetY += 120;
-            itemsInRow = 0;
+          // Check cache first for stable auto-layout positions
+          const itemId = String(externalItem.id);
+          if (autoLayoutedPositionsRef.current.has(itemId)) {
+            nodePosition = autoLayoutedPositionsRef.current.get(itemId);
           } else {
-            offsetX += 180;
+            // Calculate new position and cache it
+            nodePosition = { x: offsetX, y: offsetY };
+            autoLayoutedPositionsRef.current.set(itemId, nodePosition);
+
+            // Update offset for next new item
+            itemsInRow++;
+            if (itemsInRow >= maxItemsPerRow) {
+              offsetX = maxX + 200;
+              offsetY += 120;
+              itemsInRow = 0;
+            } else {
+              offsetX += 180;
+            }
           }
         }
 
@@ -1102,7 +1532,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
             id: String(externalItem.id),
             type: 'custom',
             position: nodePosition,
-            draggable: true, // External nodes are now draggable!
+            draggable: !isSharedView, // External nodes are now draggable!
             data: {
               label: externalItem.name,
               name: externalItem.name,
@@ -1118,6 +1548,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
               groupId: null,
               orderInGroup: 0,
               isExternal: true,
+              isSharedView: isSharedView || false, // ✅ FIX: Pass isSharedView flag
               externalSource: {
                 serviceName: externalItem.serviceName,
                 cmdbItemName: externalItem.cmdbItemName,
@@ -1157,6 +1588,60 @@ export default function ServiceVisualization({ service, workspaceId }) {
           }
           externalNodeIds.add(String(externalItem.id));
         }
+      });
+
+      // Log external nodes positioning result
+      const createdExternalNodes = [];
+      const updatedExternalNodes = [];
+      const autoLayoutedExternalNodes = [];
+
+      externalServiceItems.forEach(externalItem => {
+        const itemId = String(externalItem.id);
+        const node = updatedNodes.find(n => n.id === itemId);
+        const wasExisting = currentNodes.find(n => n.id === itemId);
+
+        if (node) {
+          const position = node.position;
+          const wasAutoLayouted = autoLayoutedPositionsRef.current.has(itemId);
+
+          if (!wasExisting) {
+            createdExternalNodes.push({
+              id: itemId,
+              name: externalItem.name,
+              position,
+              wasAutoLayouted,
+              source: externalItem.position ? 'saved' : 'auto-layout'
+            });
+          } else {
+            updatedExternalNodes.push({
+              id: itemId,
+              name: externalItem.name,
+              position,
+              wasAutoLayouted,
+              source: externalItem.position ? 'saved' : 'auto-layout'
+            });
+          }
+
+          if (wasAutoLayouted) {
+            autoLayoutedExternalNodes.push({
+              id: itemId,
+              name: externalItem.name,
+              position
+            });
+          }
+        }
+      });
+
+      console.log('🎯 [EXTERNAL NODES] Positioning Result:', {
+        mode: isSharedView ? 'SHARED VIEW' : 'NORMAL MODE',
+        serviceId: service.id,
+        serviceName: service.name,
+        totalExternalItems: externalServiceItems.length,
+        createdNodes: createdExternalNodes.length,
+        updatedNodes: updatedExternalNodes.length,
+        autoLayoutedNodes: autoLayoutedExternalNodes.length,
+        createdNodesList: createdExternalNodes,
+        autoLayoutedNodesList: autoLayoutedExternalNodes
       });
 
       // Remove external nodes that are no longer connected
@@ -1200,7 +1685,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
             id: String(externalItem.id),
             type: 'custom',
             position: nodePosition,
-            draggable: true,
+            draggable: !isSharedView,
             data: {
               label: externalItem.name,
               name: externalItem.name,
@@ -1216,6 +1701,7 @@ export default function ServiceVisualization({ service, workspaceId }) {
               groupId: null,
               orderInGroup: 0,
               isExternal: true,
+              isSharedView: isSharedView || false, // ✅ FIX: Pass isSharedView flag
               externalSource: {
                 serviceName: externalItem.serviceName,
                 cmdbItemName: externalItem.cmdbItemName,
@@ -1500,8 +1986,91 @@ export default function ServiceVisualization({ service, workspaceId }) {
     const crossServiceEdgeStatuses = calculateCrossServicePropagatedStatuses(
       items,
       crossServiceConnections,
-      externalServiceItems
+      externalServiceItems,
+      isSharedView // ✅ FIX: Pass isSharedView flag
     );
+
+    // Helper function to get best handle positions - considering child node absolute positions
+    // This is CRITICAL for cross-service connections between child nodes and external nodes
+    const getBestHandlePositionsForCrossService = (sourceId, targetId) => {
+      const sourceNode = nodesRef.current.find(n => n.id === sourceId);
+      const targetNode = nodesRef.current.find(n => n.id === targetId);
+
+      if (!sourceNode || !targetNode) {
+        console.warn('⚠️ [HANDLE CALC] Nodes not found:', {
+          sourceId,
+          targetId,
+          sourceFound: !!sourceNode,
+          targetFound: !!targetNode
+        });
+        return { sourceHandle: 'source-right', targetHandle: 'target-left' };
+      }
+
+      const sourceParentId = sourceNode.parentNode;
+      const targetParentId = targetNode.parentNode;
+
+      // Calculate absolute positions for child nodes
+      let sourceAbsX = sourceNode.position.x;
+      let sourceAbsY = sourceNode.position.y;
+      let targetAbsX = targetNode.position.x;
+      let targetAbsY = targetNode.position.y;
+
+      // If source is child node, add parent position
+      if (sourceParentId) {
+        const sourceParent = nodesRef.current.find(n => n.id === sourceParentId);
+        if (sourceParent) {
+          sourceAbsX += sourceParent.position.x;
+          sourceAbsY += sourceParent.position.y;
+        }
+      }
+
+      // If target is child node, add parent position
+      if (targetParentId) {
+        const targetParent = nodesRef.current.find(n => n.id === targetParentId);
+        if (targetParent) {
+          targetAbsX += targetParent.position.x;
+          targetAbsY += targetParent.position.y;
+        }
+      }
+
+      const dx = targetAbsX - sourceAbsX;
+      const dy = targetAbsY - sourceAbsY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+
+      const result = absDx > absDy
+        ? (dx > 0
+            ? { sourceHandle: 'source-right', targetHandle: 'target-left' }
+            : { sourceHandle: 'source-left', targetHandle: 'target-right' })
+        : (dy > 0
+            ? { sourceHandle: 'source-bottom', targetHandle: 'target-top' }
+            : { sourceHandle: 'source-top', targetHandle: 'target-bottom' });
+
+      // Log calculation for debugging (limit to first few to avoid spam)
+      if (crossServiceConnections.length <= 10) {
+        console.log('📐 [HANDLE CALC] Position Calculation:', {
+          sourceId,
+          targetId,
+          sourceNode: {
+            name: sourceNode.data?.name,
+            position: sourceNode.position,
+            parent: sourceParentId,
+            absPosition: { x: sourceAbsX, y: sourceAbsY }
+          },
+          targetNode: {
+            name: targetNode.data?.name,
+            position: targetNode.position,
+            parent: targetParentId,
+            absPosition: { x: targetAbsX, y: targetAbsY }
+          },
+          delta: { dx, dy },
+          dominantAxis: absDx > absDy ? 'horizontal' : 'vertical',
+          result
+        });
+      }
+
+      return result;
+    };
 
     // Add cross-service edges with connection type styling and status propagation
     const crossServiceEdges = crossServiceConnections.map((conn, index) => {
@@ -1509,9 +2078,47 @@ export default function ServiceVisualization({ service, workspaceId }) {
       const connectionType = connectionTypes.find(ct => ct.type_slug === conn.connection_type);
 
       // Get saved edge handles or use defaults
-      const handleConfig = currentCrossServiceEdgeHandles[edgeId];
-      const sourceHandle = (handleConfig && handleConfig.sourceHandle) || 'source-right';
-      const targetHandle = (handleConfig && handleConfig.targetHandle) || 'target-left';
+      // Check both formats: new format with item IDs and legacy format with connection ID
+      let handleConfig = currentCrossServiceEdgeHandles[edgeId];
+      if (!handleConfig && conn.id) {
+        const legacyEdgeId = `cross-service-connection-${conn.id}`;
+        handleConfig = currentCrossServiceEdgeHandles[legacyEdgeId];
+      }
+
+      // Calculate best handle positions if no saved handles
+      let sourceHandle, targetHandle;
+      let handleSource = 'none';
+      if (handleConfig && handleConfig.sourceHandle && handleConfig.targetHandle) {
+        sourceHandle = handleConfig.sourceHandle;
+        targetHandle = handleConfig.targetHandle;
+        handleSource = 'saved';
+      } else {
+        // Calculate optimal handle positions based on node positions
+        const bestHandles = getBestHandlePositionsForCrossService(
+          String(conn.source_service_item_id),
+          String(conn.target_service_item_id)
+        );
+        sourceHandle = bestHandles.sourceHandle;
+        targetHandle = bestHandles.targetHandle;
+        handleSource = 'calculated';
+      }
+
+      // Log edge handle calculation for first few edges
+      if (index < 5 || crossServiceConnections.length <= 10) {
+        console.log(`🔗 [EDGE HANDLE] Cross-service edge ${index + 1}/${crossServiceConnections.length}:`, {
+          mode: isSharedView ? 'SHARED VIEW' : 'NORMAL MODE',
+          serviceId: service.id,
+          serviceName: service.name,
+          edgeId,
+          connectionId: conn.id,
+          sourceItemId: conn.source_service_item_id,
+          targetItemId: conn.target_service_item_id,
+          handleSource,
+          sourceHandle,
+          targetHandle,
+          usedLegacyFormat: !handleConfig && conn.id && currentCrossServiceEdgeHandles[`cross-service-connection-${conn.id}`]
+        });
+      }
 
       // Get propagated status information
       const edgeStatusInfo = crossServiceEdgeStatuses[edgeId];
@@ -1593,6 +2200,10 @@ export default function ServiceVisualization({ service, workspaceId }) {
   }, [connections, groupConnections, edgeHandles, crossServiceConnections, crossServiceEdgeHandles, connectionTypes, crossServiceUpdateKey, items, externalServiceItems, showEdgeLabels]);
 
   const handleOpenAddModal = useCallback(() => {
+    if (isSharedView) {
+      toast.info('🔒 View-only mode: Cannot add items in shared view');
+      return;
+    }
     setItemFormData({
       name: '',
       type: 'server',
@@ -1607,14 +2218,18 @@ export default function ServiceVisualization({ service, workspaceId }) {
     });
     setEditItem(null);
     setShowAddModal(true);
-  }, []);
+  }, [isSharedView]);
 
   const handleOpenManageGroups = useCallback(() => {
+    if (isSharedView) {
+      toast.info('🔒 View-only mode: Cannot manage groups in shared view');
+      return;
+    }
     setGroupFormData(INITIAL_GROUP_FORM);
     setEditGroupMode(false);
     setCurrentGroupId(null);
     setShowGroupModal(true);
-  }, []);
+  }, [isSharedView]);
 
   const handleEditItem = useCallback((item) => {
     setItemFormData({
@@ -2133,11 +2748,33 @@ export default function ServiceVisualization({ service, workspaceId }) {
     // External nodes cannot be added to groups, so we always save their position
     if (isExternalNode && service?.id) {
       try {
+        // ✅ CRITICAL FIX: Use external item's PARENT service ID, not the viewing service ID
+        // When viewing NextJS and moving DB_GATEWAY (from PostgreSQL), we must save with serviceId: PostgreSQL
+        // This ensures each service has its own view of external item positions
+        const externalItemParentServiceId = node.data.externalSource?.serviceId;
+
+        if (!externalItemParentServiceId) {
+          console.error('❌ External item missing parent service ID:', node);
+          toast.error('External item missing parent service information');
+          setDraggedNode(null);
+          setHoverPosition(null);
+          return;
+        }
+
+        console.log('💾 [EXTERNAL ITEM] Saving position:', {
+          itemName: node.data.name,
+          itemParentService: node.data.externalSource.serviceName,
+          itemParentServiceId: externalItemParentServiceId,
+          viewingService: service.name,
+          viewingServiceId: service.id,
+          position: node.position
+        });
+
         // Use flag untuk mencegah socket refresh di services lain
         // Kita tidak ingin service lain refresh saat kita hanya memindahkan external item
         const response = await api.post('/external-item-positions', {
           workspaceId: workspaceId,
-          serviceId: service.id,
+          serviceId: externalItemParentServiceId, // ✅ FIX: Use parent service ID
           externalServiceItemId: node.id,
           position: node.position,
           skipRefresh: true  // Flag untuk backend agar jangan emit socket event
@@ -2906,33 +3543,35 @@ export default function ServiceVisualization({ service, workspaceId }) {
 
   return (
     <div className="h-full w-full relative">
-      {/* Service Navbar */}
-      <ServiceNavbar
-        draggedNode={isReorderingInGroup ? draggedNode : null}
-        isReorderingInGroup={isReorderingInGroup}
-        isSaving={isSaving}
-        isAutoSaving={isAutoSaving}
-        isAutoSaveEnabled={isAutoSaveEnabled}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onToggleAutoSave={handleToggleAutoSave}
-        nodes={nodes}
-        onNodeSearch={handleNodeSearch}
-        reactFlowInstance={reactFlowInstance}
-        onSetSelectionMode={setSelectionMode}
-        selectionMode={selectionMode}
-        onSavePositions={handleSavePositions}
-        onOpenAddItem={handleOpenAddModal}
-        onOpenManageGroups={handleOpenManageGroups}
-        showMiniMap={showMiniMap}
-        onToggleMiniMap={handleToggleMiniMap}
-        showExternalNodes={showExternalNodes}
-        onToggleExternalNodes={() => setShowExternalNodes(!showExternalNodes)}
-        showEdgeLabels={showEdgeLabels}
-        onToggleEdgeLabels={handleToggleEdgeLabels}
-      />
+      {/* Service Navbar - Hide in shared view */}
+      {!isSharedView && (
+        <ServiceNavbar
+          draggedNode={isReorderingInGroup ? draggedNode : null}
+          isReorderingInGroup={isReorderingInGroup}
+          isSaving={isSaving}
+          isAutoSaving={isAutoSaving}
+          isAutoSaveEnabled={isAutoSaveEnabled}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onToggleAutoSave={handleToggleAutoSave}
+          nodes={nodes}
+          onNodeSearch={handleNodeSearch}
+          reactFlowInstance={reactFlowInstance}
+          onSetSelectionMode={setSelectionMode}
+          selectionMode={selectionMode}
+          onSavePositions={handleSavePositions}
+          onOpenAddItem={handleOpenAddModal}
+          onOpenManageGroups={handleOpenManageGroups}
+          showMiniMap={showMiniMap}
+          onToggleMiniMap={handleToggleMiniMap}
+          showExternalNodes={showExternalNodes}
+          onToggleExternalNodes={() => setShowExternalNodes(!showExternalNodes)}
+          showEdgeLabels={showEdgeLabels}
+          onToggleEdgeLabels={handleToggleEdgeLabels}
+        />
+      )}
 
       {/* React Flow Canvas */}
       <ReactFlow
@@ -2940,32 +3579,31 @@ export default function ServiceVisualization({ service, workspaceId }) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onReconnect={handleReconnect}
-        onConnect={handleConnect}
-        onNodeContextMenu={handleNodeContextMenu}
-        onEdgeContextMenu={handleEdgeContextMenu}
+        onReconnect={isSharedView ? undefined : handleReconnect}
+        onConnect={isSharedView ? undefined : handleConnect}
+        onNodeContextMenu={isSharedView ? undefined : handleNodeContextMenu}
+        onEdgeContextMenu={isSharedView ? undefined : handleEdgeContextMenu}
         onPaneClick={handleCloseContextMenu}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
+        onNodeDragStart={isSharedView ? undefined : onNodeDragStart}
+        onNodeDrag={isSharedView ? undefined : onNodeDrag}
+        onNodeDragStop={isSharedView ? undefined : onNodeDragStop}
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         nodeTypes={nodeTypes}
-        nodesDraggable={true}
-        nodesConnectable={true}
-        elementsSelectable={true}
+        nodesDraggable={!isSharedView}
+        nodesConnectable={!isSharedView}
+        edgesDraggable={!isSharedView}
+        edgesUpdatable={!isSharedView}
+        elementsSelectable={!isSharedView}
         defaultViewport={defaultViewport}
-        selectionOnDrag={selectionMode === 'rectangle'}
-        connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
+        selectionOnDrag={isSharedView ? false : selectionMode === 'rectangle'}
+        connectionLineStyle={CONNECTION_LINE_STYLE}
         connectionLineType="smoothstep"
       >
         <Background />
         <Controls />
         {showMiniMap && (
           <MiniMap
-            nodeColor={(node) => {
-              if (node.type === 'serviceGroup') return '#f59e0b';
-              return '#3b82f6';
-            }}
+            nodeColor={getMiniMapNodeColor}
             maskColor="rgba(0, 0, 0, 0.1)"
           />
         )}

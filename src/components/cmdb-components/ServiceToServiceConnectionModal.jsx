@@ -320,7 +320,8 @@ export default function ServiceToServiceConnectionModal({
   cmdbItem,
   services,
   currentService,
-  onConnectionUpdate
+  onConnectionUpdate,
+  isSharedView = false
 }) {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -331,6 +332,11 @@ export default function ServiceToServiceConnectionModal({
 
   // Fetch connection types from database
   useEffect(() => {
+    if (isSharedView) {
+      console.log('🔒 ServiceToServiceConnectionModal: Skipping connection types fetch in shared view');
+      return;
+    }
+
     const fetchConnectionTypes = async () => {
       try {
         const response = await api.get('/cmdb/connection-types');
@@ -348,10 +354,15 @@ export default function ServiceToServiceConnectionModal({
     if (show) {
       fetchConnectionTypes();
     }
-  }, [show]);
+  }, [show, isSharedView]);
 
   // Fetch connections when modal opens & auto-select current service as source
   useEffect(() => {
+    if (isSharedView) {
+      console.log('🔒 ServiceToServiceConnectionModal: Skipping connections fetch in shared view');
+      return;
+    }
+
     if (show && cmdbItem) {
       // Auto-select current service as source if available
       if (currentService) {
@@ -359,10 +370,11 @@ export default function ServiceToServiceConnectionModal({
       }
       fetchConnections();
     }
-  }, [show, cmdbItem, currentService]);
+  }, [show, cmdbItem, currentService, isSharedView]);
 
   const fetchConnections = async () => {
     if (!cmdbItem) return;
+    if (isSharedView) return; // Skip in shared view
 
     setLoading(true);
     try {
@@ -378,6 +390,12 @@ export default function ServiceToServiceConnectionModal({
   };
 
   const handleCreateConnection = async () => {
+    // Prevent creation in shared view
+    if (isSharedView) {
+      toast.info('🔒 View-only mode: Cannot create connections in shared view');
+      return;
+    }
+
     if (!selectedSourceService || !selectedTargetService) {
       toast.error('Please select both source and target services');
       return;

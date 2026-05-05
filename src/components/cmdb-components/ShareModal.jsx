@@ -45,7 +45,7 @@ const EXPIRATION_OPTIONS = [
   { value: '30d', label: '30 Days' },
 ];
 
-export default function ShareModal({ show, workspaceId, onClose }) {
+export default function ShareModal({ show, workspaceId, onClose, serviceId = null, cmdbItemId = null }) {
   const [activeTab, setActiveTab] = useState('create');
   const [copied, setCopied] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +93,8 @@ export default function ShareModal({ show, workspaceId, onClose }) {
         workspace_id: workspaceId,
         expiration,
         password: password || undefined,
+        service_id: serviceId, // Pass service_id if provided (for service-level sharing)
+        cmdb_item_id: cmdbItemId, // Pass cmdb_item_id if provided
       });
 
       setGeneratedLink(result);

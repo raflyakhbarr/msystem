@@ -223,6 +223,8 @@ export default function CustomServiceNode({ data, id }) {
         </div>
 
         {/* Flow Handles - Multiple directions */}
+        {/* NOTE: Handles SELALU dirender (supaya edges muncul), tapi interaksi dikontrol via ReactFlow props */}
+
         {/* Top handles */}
         <Handle
           type="target"
