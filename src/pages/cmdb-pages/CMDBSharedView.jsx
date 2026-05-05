@@ -131,6 +131,7 @@ export default function CMDBSharedView() {
         data.items,
         {
           isSharedView: true, // Pass shared view flag to avoid API calls
+          highlightMode: false, // Shared view doesn't have highlight mode
           onServiceClick: handleServiceClick // Pass click handler
         }
       );

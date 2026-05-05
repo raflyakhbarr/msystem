@@ -12,7 +12,7 @@ import {
 } from '../../utils/cmdb-utils/statusPropagation';
 import { API_BASE_URL } from '../../utils/cmdb-utils/constants';
 
-export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, services = [], serviceItems = {}) => {
+export const useFlowData = (items, connections, groups, groupConnections, edgeHandles, hiddenNodes, servicesMap = {}, showConnectionLabels = true, onServiceClick = null, onServiceItemsClick = null, services = [], serviceItems = {}, highlightMode = false) => {
   const transformToFlowData = useCallback(() => {
     const flowNodes = [];
     const flowEdges = [];
@@ -217,7 +217,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
                 height: serviceNodeHeight,
                 onServiceClick: onServiceClick,
                 onServiceItemsClick: onServiceItemsClick,
-                isInsideItem: true // Flag to indicate this is inside item
+                isInsideItem: true, // Flag to indicate this is inside item
+                highlightMode: highlightMode // Pass highlight mode flag
               },
               style: {
                 width: serviceNodeWidth,
@@ -252,7 +253,7 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       // Calculate CMDB item dimensions based on service count
       // More accurate calculation to ensure service nodes fit properly
       const serviceCount = itemServices.length;
-      const baseItemHeight = 67; // Tinggi dasar item (header, divider, info)
+      const baseItemHeight = 88; // Tinggi dasar item (header, divider, info)
       const servicesPerRow = 3;
 
       // Service node dimensions (MUST MATCH with service node positioning below)
@@ -365,7 +366,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
               height: serviceNodeHeight,
               onServiceClick: onServiceClick,
               onServiceItemsClick: onServiceItemsClick,
-              isInsideItem: true // Flag to indicate this is inside item
+              isInsideItem: true, // Flag to indicate this is inside item
+              highlightMode: highlightMode // Pass highlight mode flag
             },
             style: {
               width: serviceNodeWidth,

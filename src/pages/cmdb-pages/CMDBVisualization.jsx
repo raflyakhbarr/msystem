@@ -652,7 +652,8 @@ export default function CMDBVisualization() {
     handleServiceClick,
     handleServiceItemsClick,
     services,
-    serviceItems
+    serviceItems,
+    highlightMode
   );
 
   // Save service node position to database
@@ -720,19 +721,32 @@ export default function CMDBVisualization() {
     return nodes.map(node => {
       let opacity = 1;
       let outline = 'none';
-      let zIndex = node.style?.zIndex || 1;
+      // Preserve original z-index for ServiceAsNodes (1000) to ensure they appear above parent
+      let zIndex = node.type === 'serviceAsNode' ? (node.style?.zIndex || 1000) : (node.style?.zIndex || 1);
+
+      // ServiceAsNodes follow parent visibility
+      // If parent CMDB item is hidden, ServiceAsNodes are also hidden
+      const isServiceAsNode = node.type === 'serviceAsNode';
+      const parentHidden = isServiceAsNode && node.parentNode && hiddenNodes.has(node.parentNode);
 
       if (selectedForHiding.has(node.id)) {
         outline = '3px solid #3b82f6';
       }
 
-      if (highlightMode && highlightedNodeId) {
+      // Hide node if it's in hiddenNodes or if it's a ServiceAsNode with hidden parent
+      const isHidden = hiddenNodes.has(node.id) || parentHidden;
+
+      if (isHidden) {
+        opacity = 0;
+      } else if (highlightMode && highlightedNodeId) {
         if (node.id === highlightedNodeId) {
           opacity = 1;
-          zIndex = 100;
+          // Keep ServiceAsNodes at high z-index, set CMDB items to 100
+          zIndex = node.type === 'serviceAsNode' ? (node.style?.zIndex || 1000) : 100;
         } else if (relatedNodes && relatedNodes.has(node.id)) {
           opacity = 1;
-          zIndex = 50;
+          // Keep ServiceAsNodes at high z-index, set CMDB items to 50
+          zIndex = node.type === 'serviceAsNode' ? (node.style?.zIndex || 1000) : 50;
         } else {
           opacity = 0.08;
           zIndex = 1;
@@ -744,6 +758,9 @@ export default function CMDBVisualization() {
       if (node.type === 'custom' && !node.id.startsWith('group-')) {
         nodeServices = servicesMap[node.id] || [];
       }
+
+      // ServiceAsNodes should NOT have outline in highlight mode (only full opacity)
+      const nodeOutline = (highlightMode && highlightedNodeId && isServiceAsNode) ? 'none' : outline;
 
       return {
         ...node,
@@ -758,14 +775,14 @@ export default function CMDBVisualization() {
         style: {
           ...node.style,
           opacity,
-          outline,
+          outline: nodeOutline,
           outlineOffset: '2px',
           zIndex,
           transition: 'opacity 0.3s ease, outline 0.3s ease',
         }
       };
     });
-  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, handleAddService, handleFetchServiceItems, currentWorkspace, services]);
+  }, [nodes, selectedForHiding, highlightMode, highlightedNodeId, relatedNodes, handleServiceClick, handleAddService, handleFetchServiceItems, currentWorkspace, services, hiddenNodes]);
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
@@ -777,7 +794,8 @@ export default function CMDBVisualization() {
         if (relatedEdges && relatedEdges.has(edge.id)) {
           opacity = 1;
           strokeWidth = 3;
-          zIndex = 60;
+          // Edges should be above CMDB items (100/50) but below ServiceAsNodes (1000)
+          zIndex = 500;
         } else {
           opacity = 0.1;
           zIndex = 1;
@@ -1000,7 +1018,7 @@ export default function CMDBVisualization() {
         sourceHandle,
         targetHandle,
         type: 'smoothstep',
-        zIndex: 1001, // Higher than service nodes (1000)
+        zIndex: 500, // Above CMDB items (100), below ServiceAsNodes (1000)
         markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: {
           stroke: strokeColor,
@@ -1172,7 +1190,7 @@ export default function CMDBVisualization() {
         sourceHandle,
         targetHandle,
         type: 'smoothstep',
-        zIndex: 1002, // Higher than service-to-service edges (1001)
+        zIndex: 600, // Above service-to-service edges (500), below ServiceAsNodes (1000)
         markerEnd: { type: 'arrowclosed', color: strokeColor },
         style: {
           stroke: strokeColor,
@@ -1237,7 +1255,7 @@ export default function CMDBVisualization() {
 
     setNodes([...flowNodes]);
     setEdges([...allEdges, ...serviceToServiceEdges, ...crossServiceEdges]);
-  }, [items, connections, groups, groupConnections, transformToFlowData, setNodes, setEdges, showConnectionLabels, edgeHandles, serviceToServiceConnections, crossServiceConnections, services, serviceItems]);
+  }, [items, connections, groups, groupConnections, transformToFlowData, setNodes, setEdges, showConnectionLabels, edgeHandles, serviceToServiceConnections, crossServiceConnections, services, serviceItems, highlightMode]);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -3589,11 +3607,28 @@ export default function CMDBVisualization() {
         ...nodes.map(n => n.id),
         ...groups.map(g => `group-${g.id}`)
       ]);
-      
+
       const nodesToHide = new Set(
-        [...allNodeIds].filter(id => !selectedForHiding.has(id))
+        [...allNodeIds].filter(id => {
+          // If node is in selectedForHiding, don't hide it
+          if (selectedForHiding.has(id)) {
+            return false;
+          }
+
+          // Special handling for ServiceAsNodes: check if parent is selected
+          const node = nodes.find(n => n.id === id);
+          if (node && node.type === 'serviceAsNode' && node.parentNode) {
+            // If parent CMDB item is selected, don't hide the ServiceAsNode
+            if (selectedForHiding.has(node.parentNode)) {
+              return false;
+            }
+          }
+
+          // Hide all other nodes
+          return true;
+        })
       );
-      
+
       setHiddenNodes(nodesToHide);
       setSelectedForHiding(new Set());
     }

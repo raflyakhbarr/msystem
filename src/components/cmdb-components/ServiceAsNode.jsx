@@ -59,7 +59,7 @@ const STATUS_COLORS = {
  * - data.selected: Apakah node sedang dipilih
  */
 export default function ServiceAsNode({ data, selected }) {
-  const { service, onServiceClick, onServiceItemsClick, cmdbItemName, isInsideItem, isSharedView } = data;
+  const { service, onServiceClick, onServiceItemsClick, cmdbItemName, isInsideItem, isSharedView, highlightMode } = data;
 
   const statusConfig = STATUS_COLORS[service.status] || STATUS_COLORS.active;
 
@@ -197,8 +197,16 @@ export default function ServiceAsNode({ data, selected }) {
   }, [service.status]);
 
   const handleClick = (e) => {
-    e.stopPropagation();
-    onServiceClick?.(service);
+    // ✅ FIX: Don't stop propagation! Allow ReactFlow's onNodeClick to execute for highlighting
+    // e.stopPropagation(); // ← REMOVED: This was preventing highlight mode
+
+    // Only call service click handler if NOT in highlight mode
+    // This prevents dialog from opening when user wants to highlight the node
+    if (!highlightMode) {
+      onServiceClick?.(service);
+    }
+    // In highlight mode, let the event bubble to ReactFlow's onNodeClick handler
+    // which will trigger the highlight logic
   };
 
   const handleItemsClick = (e) => {
@@ -249,7 +257,6 @@ export default function ServiceAsNode({ data, selected }) {
               transition-all duration-200 cursor-pointer
               hover:shadow-md hover:scale-110
               ${statusConfig.bg} ${statusConfig.border}
-              ${selected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
             `}
             style={{
               width: `${width}px`,

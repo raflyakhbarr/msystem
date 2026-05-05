@@ -77,7 +77,7 @@ export const useNodeRelationships = (nodes, edges) => {
       }
     }
 
-    // Include parent/child nodes (items in groups)
+    // Include parent/child nodes (items in groups, ServiceAsNodes in CMDB items)
     const additionalNodes = new Set();
     nodes.forEach(node => {
       // If node is in related set and has parent, include parent
@@ -85,7 +85,7 @@ export const useNodeRelationships = (nodes, edges) => {
         additionalNodes.add(node.parentNode);
       }
       // If node is a parent in related set, include all children
-      if (related.has(node.id) && node.type === 'group') {
+      if (related.has(node.id) && (node.type === 'group' || node.type === 'custom')) {
         nodes.forEach(child => {
           if (child.parentNode === node.id) {
             additionalNodes.add(child.id);

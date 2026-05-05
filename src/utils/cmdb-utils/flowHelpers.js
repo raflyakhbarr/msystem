@@ -22,7 +22,7 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   // web_application type needs more width for URL display
   const getItemWidth = (servicesCount = 0, itemType = 'Server') => {
     // Adjust base width based on type
-    const adjustedBaseWidth = itemType === 'web_application' ? 220 : baseItemWidth;
+    const adjustedBaseWidth = itemType === 'web_application' ? 220 : 150;
     if (servicesCount === 0) return adjustedBaseWidth;
     const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * serviceGap);
     return Math.max(adjustedBaseWidth, serviceSectionWidth + horizontalPadding);
@@ -1303,7 +1303,8 @@ export const transformServicesToNodes = (services, items, options = {}) => {
     onServiceItemsClick = null,
     defaultWidth = 120,
     defaultHeight = 80,
-    isSharedView = false
+    isSharedView = false,
+    highlightMode = false
   } = options;
 
   if (!services || services.length === 0) {
@@ -1378,14 +1379,16 @@ export const transformServicesToNodes = (services, items, options = {}) => {
         onServiceClick: onServiceClick,
         onServiceItemsClick: onServiceItemsClick,
         isInsideItem: true, // Flag to indicate this is inside item
-        isSharedView: isSharedView // Pass shared view flag
+        isSharedView: isSharedView, // Pass shared view flag
+        highlightMode: highlightMode // Pass highlight mode flag
       },
       style: {
         width: serviceNodeWidth,
         height: serviceNodeHeight,
         zIndex: 1000 // ← CRITICAL: Very high z-index for edges to be visible above parent
       },
-      draggable: false // ← CRITICAL: Services cannot be dragged
+      draggable: false, // ← CRITICAL: Services cannot be dragged
+      selectable: false // ← CRITICAL: Services cannot be selected (follows parent CMDB item)
     };
   }).filter(Boolean); // Remove nulls
 };
