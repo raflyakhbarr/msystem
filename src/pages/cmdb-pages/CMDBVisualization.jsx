@@ -789,6 +789,11 @@ export default function CMDBVisualization() {
       let opacity = edge.style?.opacity || 1;
       let strokeWidth = edge.style?.strokeWidth || 2;
       let zIndex = edge.zIndex || 10;
+      let label = edge.label;
+      let labelStyle = edge.labelStyle;
+      let labelBgStyle = edge.labelBgStyle;
+      let labelBgPadding = edge.labelBgPadding;
+      let labelBgBorderRadius = edge.labelBgBorderRadius;
 
       if (highlightMode && highlightedNodeId) {
         if (relatedEdges && relatedEdges.has(edge.id)) {
@@ -796,9 +801,16 @@ export default function CMDBVisualization() {
           strokeWidth = 3;
           // Edges should be above CMDB items (100/50) but below ServiceAsNodes (1000)
           zIndex = 500;
+          // Keep label for related edges
         } else {
           opacity = 0.1;
           zIndex = 1;
+          // Hide label for unrelated edges
+          label = undefined;
+          labelStyle = undefined;
+          labelBgStyle = undefined;
+          labelBgPadding = undefined;
+          labelBgBorderRadius = undefined;
         }
       }
 
@@ -811,6 +823,11 @@ export default function CMDBVisualization() {
           transition: 'opacity 0.3s ease, stroke-width 0.3s ease',
         },
         zIndex,
+        label,
+        labelStyle,
+        labelBgStyle,
+        labelBgPadding,
+        labelBgBorderRadius,
       };
     });
   }, [edges, highlightMode, highlightedNodeId, relatedEdges]);
