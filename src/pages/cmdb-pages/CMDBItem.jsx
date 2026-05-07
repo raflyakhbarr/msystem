@@ -331,13 +331,6 @@ export default function CMDBItem() {
   };
 
   const handleSaveConnections = async (itemConnTypes, groupConnTypes, serviceConnData) => {
-    console.log('🟢 handleSaveConnections called');
-    console.log('   - itemConnTypes:', itemConnTypes);
-    console.log('   - groupConnTypes:', groupConnTypes);
-    console.log('   - serviceConnData:', serviceConnData);
-    console.log('   - selectedItemForConnection:', selectedItemForConnection);
-    console.log('   - currentWorkspace:', currentWorkspace?.id);
-
     // VALIDASI WORKSPACE
     if (!currentWorkspace && !viewAllMode) {
       toast.error('Pilih workspace terlebih dahulu');
@@ -357,10 +350,7 @@ export default function CMDBItem() {
       const itemsToAdd = selectedConnections.filter(id => !currentItemConns.includes(id));
       const itemsToRemove = currentItemConns.filter(id => !selectedConnections.includes(id));
 
-      console.log('📦 Item connections - toAdd:', itemsToAdd, 'toRemove:', itemsToRemove);
-
       for (const targetId of itemsToAdd) {
-        console.log(`   Creating item connection: ${selectedItemForConnection.id} -> ${targetId}`);
         await api.post('/cmdb/connections', {
           source_id: selectedItemForConnection.id,
           target_id: targetId,
@@ -379,8 +369,6 @@ export default function CMDBItem() {
       const groupsToAdd = selectedGroupConnections.filter(id => !currentGroupConns.includes(id));
       const groupsToRemove = currentGroupConns.filter(id => !selectedGroupConnections.includes(id));
 
-      console.log('📦 Group connections - toAdd:', groupsToAdd, 'toRemove:', groupsToRemove);
-
       for (const groupId of groupsToAdd) {
         await api.post('/cmdb/connections/to-group', {
           source_id: selectedItemForConnection.id,
@@ -395,13 +383,10 @@ export default function CMDBItem() {
 
       // Handle service connections
       if (serviceConnData && (serviceConnData.selectedServices.length > 0 || serviceConnData.selectedServiceItems.length > 0)) {
-        console.log('📦 Service connections data:', JSON.stringify(serviceConnData, null, 2));
-
         // For Service Items - create cross-service connections
         for (const itemId of serviceConnData.selectedServiceItems) {
           try {
             const connType = serviceConnData.serviceItemConnectionTypes[itemId]?.type || 'connects_to';
-            console.log(`   Creating cross-service connection to service item ${itemId} with type ${connType}`);
 
             // cross-service-connections API
             const response = await api.post('/cross-service-connections', {
@@ -411,7 +396,6 @@ export default function CMDBItem() {
               connection_type: connType,
               direction: 'forward'
             });
-            console.log('   Cross-service connection created:', response.data);
           } catch (err) {
             console.error('Failed to create service item connection:', err);
           }
@@ -419,11 +403,8 @@ export default function CMDBItem() {
 
         // For Services
         for (const serviceId of serviceConnData.selectedServices) {
-          console.log(`   Service ${serviceId} selected`);
           // Note: CMDB-to-Service direct connections may need different handling
         }
-      } else {
-        console.log('📦 No service connections to save (serviceConnData is empty)');
       }
 
       fetchConnections();
@@ -640,16 +621,6 @@ export default function CMDBItem() {
 
     // TOTAL: All connections involving this item at any level
     const total = itemToItemAsSource + itemToItemAsTarget + serviceToServiceCount + crossServiceCount;
-
-    console.log(`📊 [${items.find(i => i.id === itemId)?.name || itemId}] connInfo:`, {
-      itemToItemAsSource,
-      itemToItemAsTarget,
-      serviceToServiceCount,
-      crossServiceCount,
-      total,
-      servicesCount: itemServices.length,
-      allServiceItems: itemServices.reduce((acc, s) => acc + (s.service_items?.length || 0), 0)
-    });
 
     return {
       dependencies: itemToItemAsTarget,
@@ -1081,38 +1052,6 @@ export default function CMDBItem() {
         render: (item) => {
           const connInfo = getConnectionInfo(item.id);
           const connDetails = getConnectionDetails(item.id);
-
-          console.log(`🔍 [${item.name}] Item ID: ${item.id} (type: ${typeof item.id})`);
-          console.log(`   - Total connections: ${connInfo.total}`);
-          console.log(`   - Outgoing: ${connInfo.dependents}, Incoming: ${connInfo.dependencies}`);
-          console.log(`   - Service-to-Service: ${connInfo.serviceConnections}, Cross-Service: ${connInfo.crossServiceConnections}`);
-
-          // Get ALL service item IDs from all services of this item
-          const allServiceItemIds = [];
-          const itemServices = services[item.id] || [];
-          itemServices.forEach(service => {
-            if (service.service_items && Array.isArray(service.service_items)) {
-              service.service_items.forEach(si => {
-                allServiceItemIds.push(parseInt(si.id));
-              });
-            }
-          });
-
-          console.log(`   - All connections for this item:`, connections.filter(c => {
-            const sid = c.source_id ? parseInt(c.source_id) : null;
-            const tid = c.target_id ? parseInt(c.target_id) : null;
-            const ssid = c.source_service_item_id ? parseInt(c.source_service_item_id) : null;
-            const tsid = c.target_service_item_id ? parseInt(c.target_service_item_id) : null;
-
-            // Match jika:
-            // 1. CMDB item sebagai source/target langsung
-            // 2. Service item ini (dari service item ID yang kita kumpulkan) terlibat
-            return sid === parseInt(item.id) || tid === parseInt(item.id) ||
-                   allServiceItemIds.includes(ssid) || allServiceItemIds.includes(tsid);
-          }));
-
-          console.log(`   - Outgoing details:`, connDetails.outgoing);
-          console.log(`   - Incoming details:`, connDetails.incoming);
 
           return (
             <Popover>

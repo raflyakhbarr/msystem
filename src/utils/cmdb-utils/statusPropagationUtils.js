@@ -28,7 +28,6 @@ export const updatePropagatedStatuses = async (affectedNodesMap, itemStatusMap, 
 
         // Only update if status is different
         if (item.status !== worstStatus) {
-          console.log(`📤 Updating item ${nodeId} status: ${item.status} → ${worstStatus}`);
           updatePromises.push(
             api.patch(`/cmdb/${nodeId}/status`, { status: worstStatus })
               .catch(err => console.error(`Failed to update item ${nodeId} status:`, err))
@@ -55,7 +54,6 @@ export const updatePropagatedStatuses = async (affectedNodesMap, itemStatusMap, 
 
         // Only update if status is different
         if (service.status !== worstStatus) {
-          console.log(`📤 Updating service ${serviceId} status: ${service.status} → ${worstStatus}`);
           updatePromises.push(
             api.patch(`/services/${serviceId}/status`, { status: worstStatus })
               .catch(err => console.error(`Failed to update service ${serviceId} status:`, err))
@@ -82,7 +80,6 @@ export const updatePropagatedStatuses = async (affectedNodesMap, itemStatusMap, 
 
         // Only update if status is different
         if (serviceItem.status !== worstStatus) {
-          console.log(`📤 Updating service item ${serviceItemId} status: ${serviceItem.status} → ${worstStatus}`);
           updatePromises.push(
             api.patch(`/service-items/${serviceItemId}/status`, { status: worstStatus })
               .catch(err => console.error(`Failed to update service item ${serviceItemId} status:`, err))
@@ -94,7 +91,6 @@ export const updatePropagatedStatuses = async (affectedNodesMap, itemStatusMap, 
 
   // Execute all updates in parallel
   await Promise.all(updatePromises);
-  console.log(`✅ Updated ${updatePromises.length} propagated statuses`);
 };
 
 /**
@@ -119,11 +115,8 @@ export const propagateStatusUpdate = async (sourceNodeId, newStatus, items, conn
   affectedNodes.delete(sourceNodeId); // Remove source node itself
 
   if (affectedNodes.size === 0) {
-    console.log('ℹ️ No nodes affected by status change');
     return;
   }
-
-  console.log(`🔄 Propagating status ${newStatus} from ${sourceNodeId} to ${affectedNodes.size} nodes`);
 
   // Create status maps
   const itemStatusMap = {};

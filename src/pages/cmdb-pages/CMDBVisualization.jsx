@@ -675,7 +675,6 @@ export default function CMDBVisualization() {
       }
 
       await api.put(`/services/${serviceId}/position`, { position: finalPosition, skipEmit: true });
-      console.log('✅ Service node position saved:', serviceId, finalPosition);
     } catch (err) {
       console.error('❌ Failed to save service node position:', err);
     }
@@ -914,7 +913,6 @@ export default function CMDBVisualization() {
   }, [fetchServices]);
 
   useEffect(() => {
-    console.log('🔄 TransformToFlowData effect triggered, connections:', connections.length, 'items:', items.length);
     const { flowNodes, flowEdges } = transformToFlowData();
 
     const allEdges = [...flowEdges];
@@ -1327,13 +1325,11 @@ export default function CMDBVisualization() {
       return;
     }
 
-    console.log('🔌 Setting up socket listeners, socket connected:', isConnected);
     socketRef.current = socket;
 
     const handleCmdbUpdate = async () => {
       // Skip fetch if currently saving connection to avoid race condition
       if (!isSavingRef.current && !isSavingConnection) {
-        console.log('📡 cmdb_update event received, fetching all data...');
         // Fetch CMDB data, services, service-to-service connections, and cross-service connections
         await Promise.all([
           fetchAll(),
@@ -1341,9 +1337,6 @@ export default function CMDBVisualization() {
           fetchServiceToServiceConnections(),
           fetchCrossServiceConnections()
         ]);
-        console.log('✅ cmdb_update: data fetch complete');
-      } else {
-        console.log('⏸️ cmdb_update event skipped - currently saving');
       }
     };
 
@@ -1373,8 +1366,6 @@ export default function CMDBVisualization() {
             );
           });
 
-          console.log('✅ Service updated in state:', updatedService.name);
-
           // Trigger re-fetch to rebuild nodes with updated services
           fetchServices();
         } catch (err) {
@@ -1392,25 +1383,8 @@ export default function CMDBVisualization() {
       const newStatus = data.newStatus;
       const currentWorkspaceId = currentWorkspace?.id;
 
-      console.log('\n📡 ========================================');
-      console.log('📡 SERVICE ITEM STATUS UPDATE EVENT');
-      console.log('📡 ========================================');
-      console.log('📡 Service Item ID:', eventServiceItemId);
-      console.log('📡 New Status:', newStatus);
-      console.log('📡 Service ID:', eventServiceId);
-      console.log('📡 Event Workspace ID:', eventWorkspaceId);
-      console.log('📡 Current Workspace ID:', currentWorkspaceId);
-      console.log('📡 Should Process:', eventWorkspaceId === currentWorkspaceId);
-      console.log('📡 ========================================\n');
-
       // Only update if this is for our workspace
       if (eventWorkspaceId === currentWorkspaceId) {
-        console.log('📡 Service item status update received:', {
-          serviceItemId: eventServiceItemId,
-          newStatus,
-          serviceId: eventServiceId
-        });
-
         try {
           // FIX: Fetch all service items for the service, not just one item
           // Use eventServiceId (service ID), not eventServiceItemId (service item ID)
@@ -1423,19 +1397,12 @@ export default function CMDBVisualization() {
             [eventServiceId]: updatedServiceItems
           }));
 
-          console.log('✅ Service item status updated:', {
-            serviceItemId: eventServiceItemId,
-            newStatus,
-            serviceId: eventServiceId
-          });
-
           // Force trigger edge re-calculation by updating services with a timestamp
           // This ensures service item edges re-render with updated status
           setServices(prevServices => {
             // Create a new array reference with updated timestamp for the affected service
             const updatedServices = prevServices.map(service => {
               if (service.id === eventServiceId) {
-                console.log(`🔄 Forcing edge update for service: ${service.name} (${eventServiceId})`);
                 return {
                   ...service,
                   _lastUpdated: Date.now(), // Force re-render trigger
@@ -1444,8 +1411,6 @@ export default function CMDBVisualization() {
               }
               return service;
             });
-
-            console.log('🔄 Services state updated, triggering edge re-calculation');
 
             return updatedServices;
           });
@@ -1463,11 +1428,9 @@ export default function CMDBVisualization() {
 
       // Only update if this is for our workspace
       if (eventWorkspaceId === currentWorkspaceId) {
-        console.log('📡 Cross-service connection update received in CMDBVisualization:', data);
         try {
           // Fetch cross-service connections to get the latest data
           await fetchCrossServiceConnections();
-          console.log('✅ Cross-service connections refreshed after socket update');
         } catch (err) {
           console.warn('Failed to refresh cross-service connections:', err);
         }
@@ -1490,7 +1453,6 @@ export default function CMDBVisualization() {
   // Handle socket reconnection - fetch data when socket reconnects
   useEffect(() => {
     if (isConnected && currentWorkspace?.id) {
-      console.log('🔌 Socket reconnected, fetching latest data...');
       fetchAll();
       fetchServices();
       fetchServiceToServiceConnections();
@@ -1673,7 +1635,7 @@ export default function CMDBVisualization() {
             }
           }
         } else {
-          console.log('⏭️ Skipping service updates - CMDB item status changed to inactive, backend already propagated to services');
+          // Skip - backend already propagated
         }
       } else {
         const result = await api.post('/cmdb', {
@@ -2213,9 +2175,6 @@ export default function CMDBVisualization() {
           return;
         }
 
-        console.log('   Processing item-to-service connection:', { cmdbItem, serviceOrItem, isServiceAsSource });
-        console.log('   serviceItemData from modal:', serviceItemData);
-
         // Get the service or service item details
         let targetServiceId, targetServiceItemId, sourceServiceItemId;
 
@@ -2335,15 +2294,6 @@ export default function CMDBVisualization() {
                 connection_type: connectionType,
                 direction: getConnectionDirection(connectionType)
               };
-              console.log('\n🔗 ========================================');
-              console.log('🔗 CREATING SERVICE-ITEM-TO-ITEM CONNECTION');
-              console.log('🔗 ========================================');
-              console.log('🔗 Source Service Item ID:', sourceServiceItemId);
-              console.log('🔗 Target CMDB Item ID:', cmdbItem.id);
-              console.log('🔗 Target CMDB Item Name:', cmdbItem.name);
-              console.log('🔗 Connection Type:', connectionType);
-              console.log('🔗 Connection Data:', JSON.stringify(connectionData, null, 2));
-              console.log('🔗 ========================================\n');
             } else {
               // User selected the service itself as source (not a service item)
               connectionData = {
@@ -2368,10 +2318,8 @@ export default function CMDBVisualization() {
             };
           }
 
-          console.log('   Saving item-to-service connection:', connectionData);
           setIsSavingConnection(true);
           const response = await api.post('/cmdb/connections', connectionData);
-          console.log('   Connection saved successfully:', response.data);
 
           toast.success('Koneksi item-to-service berhasil dibuat!');
           await Promise.all([fetchAll(), fetchServices(), fetchServiceToServiceConnections(), fetchCrossServiceConnections()]);
@@ -3362,20 +3310,6 @@ export default function CMDBVisualization() {
         render: (item) => {
           const connInfo = getConnectionInfo(item.id);
           const connDetails = getConnectionDetails(item.id);
-
-          console.log(`🔍 [${item.name}] Item ID: ${item.id} (type: ${typeof item.id})`);
-          console.log(`   - Total connections: ${connInfo.total}`);
-          console.log(`   - Outgoing: ${connInfo.dependents}, Incoming: ${connInfo.dependencies}`);
-          console.log(`   - Service-to-Service: ${connInfo.serviceConnections}, Cross-Service: ${connInfo.crossServiceConnections}`);
-          console.log(`   - All connections for this item:`, connections.filter(c => {
-            const sid = c.source_id ? parseInt(c.source_id) : null;
-            const tid = c.target_id ? parseInt(c.target_id) : null;
-            const ssid = c.source_service_item_id ? parseInt(c.source_service_item_id) : null;
-            return sid === parseInt(item.id) || tid === parseInt(item.id) || ssid === parseInt(item.id);
-          }));
-
-          console.log(`   - Outgoing details:`, connDetails.outgoing);
-          console.log(`   - Incoming details:`, connDetails.incoming);
 
           return (
             <Popover>
@@ -4646,16 +4580,6 @@ export default function CMDBVisualization() {
                 return;
               }
 
-              console.log('[onReconnect] Attempting to reconnect edge:', {
-                oldEdgeId: oldEdge.id,
-                oldSourceHandle: oldEdge.sourceHandle,
-                oldTargetHandle: oldEdge.targetHandle,
-                newSource: newConnection.source,
-                newSourceHandle: newConnection.sourceHandle,
-                newTarget: newConnection.target,
-                newTargetHandle: newConnection.targetHandle
-              });
-
               const newEdgeHandles = {
                 ...edgeHandles,
                 [oldEdge.id]: {
@@ -4663,8 +4587,6 @@ export default function CMDBVisualization() {
                   targetHandle: newConnection.targetHandle,
                 }
               };
-
-              console.log('[onReconnect] Saving new handle positions:', newEdgeHandles[oldEdge.id]);
 
               await saveEdgeHandle(
                 oldEdge.id,
@@ -4675,8 +4597,6 @@ export default function CMDBVisualization() {
 
               setEdgeHandles(newEdgeHandles);
               setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
-
-              console.log('[onReconnect] Completed. Edge handles now:', newEdgeHandles);
             }, [edgeHandles, setEdges, currentWorkspace?.id])}
             onConnect={handleConnect}
             nodeTypes={nodeTypes}

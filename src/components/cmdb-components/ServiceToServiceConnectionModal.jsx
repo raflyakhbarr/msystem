@@ -333,7 +333,6 @@ export default function ServiceToServiceConnectionModal({
   // Fetch connection types from database
   useEffect(() => {
     if (isSharedView) {
-      console.log('🔒 ServiceToServiceConnectionModal: Skipping connection types fetch in shared view');
       return;
     }
 
@@ -359,7 +358,6 @@ export default function ServiceToServiceConnectionModal({
   // Fetch connections when modal opens & auto-select current service as source
   useEffect(() => {
     if (isSharedView) {
-      console.log('🔒 ServiceToServiceConnectionModal: Skipping connections fetch in shared view');
       return;
     }
 
@@ -420,8 +418,6 @@ export default function ServiceToServiceConnectionModal({
         connection_type: connectionType,
         direction: direction
       };
-
-      console.log('🔍 Creating service-to-service connection:', connectionData);
 
       const response = await api.post('/service-to-service-connections', connectionData);
 

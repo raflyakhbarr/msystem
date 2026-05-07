@@ -130,13 +130,10 @@ export default function ServiceAsNode({ data, selected }) {
 
       // Only update if this event is for this service and workspace
       if (eventServiceId === service.id && eventWorkspaceId === workspaceId) {
-        console.log(`📡 ServiceAsNode (${service.name}): service_item_status_update received, refreshing items...`);
-
         try {
           const res = await api.get(`/service-items/${service.id}/items?workspace_id=${workspaceId}`);
           const items = res.data || [];
           setServiceItems(items);
-          console.log(`✅ ServiceAsNode (${service.name}): updated ${items.length} service items`);
         } catch (err) {
           console.error('Failed to refresh service items:', err);
         }
@@ -149,13 +146,10 @@ export default function ServiceAsNode({ data, selected }) {
 
       // Only update if this event is for this service and workspace
       if (eventServiceId === service.id && eventWorkspaceId === workspaceId) {
-        console.log(`📡 ServiceAsNode (${service.name}): service_update received, refreshing items...`);
-
         try {
           const res = await api.get(`/service-items/${service.id}/items?workspace_id=${workspaceId}`);
           const items = res.data || [];
           setServiceItems(items);
-          console.log(`✅ ServiceAsNode (${service.name}): updated ${items.length} service items after service update`);
         } catch (err) {
           console.error('Failed to refresh service items after service update:', err);
         }

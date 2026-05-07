@@ -165,9 +165,6 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     serviceItemStatusMap[key] = serviceItem.status;
   });
 
-  console.log('🗺️ serviceItemStatusMap created:', Object.keys(serviceItemStatusMap).length, 'entries');
-  console.log('🗺️ Sample entries:', Object.entries(serviceItemStatusMap).slice(0, 3));
-
   // Function untuk mendapatkan status node (item, group, service, atau service item)
   const getNodeStatus = (nodeId) => {
     if (nodeId.startsWith('group-')) {
@@ -195,15 +192,9 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
     } else if (nodeId.startsWith('service-item-')) {
       // MUST check service-item BEFORE service! (service-item-98 starts with service-)
       const status = serviceItemStatusMap[nodeId] || 'active';
-      console.log(`🔍 getNodeStatus for service-item: ${nodeId} = ${status} (map has key: ${!!serviceItemStatusMap[nodeId]})`);
-      if (!serviceItemStatusMap[nodeId]) {
-        console.log(`⚠️ Missing key in serviceItemStatusMap: ${nodeId}`);
-        console.log(`⚠️ Available keys:`, Object.keys(serviceItemStatusMap).slice(0, 10));
-      }
       return status;
     } else if (nodeId.startsWith('service-')) {
       const status = serviceStatusMap[nodeId] || 'active';
-      console.log(`🔍 getNodeStatus for service: ${nodeId} = ${status}`);
       return status;
     } else {
       return itemStatusMap[nodeId] || 'active';
@@ -314,18 +305,6 @@ export const calculatePropagatedStatuses = (items, connections, groups, groupCon
 
     const sourceStatus = getNodeStatus(sourceId);
     const targetStatus = getNodeStatus(targetId);
-
-    // Debug log for service-to-item connections
-    if (conn.source_service_id && conn.target_id) {
-      console.log('🔗 Service-to-item connection in statusPropagation:', {
-        edgeId,
-        sourceId,
-        targetId,
-        sourceStatus,
-        targetStatus,
-        connType: conn.connection_type
-      });
-    }
 
     // Dapatkan tipe koneksi untuk menentukan arah propagasi
     const connType = conn.connection_type || 'depends_on';

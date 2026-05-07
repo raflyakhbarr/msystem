@@ -467,7 +467,6 @@ export default function ServiceConnectionModal({
         }
       }
 
-      console.log('✅ Cross-service connections saved successfully');
       onCrossServiceSave && onCrossServiceSave();
       return { success: true };
     } catch (error) {

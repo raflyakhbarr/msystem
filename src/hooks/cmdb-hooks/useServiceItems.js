@@ -163,37 +163,21 @@ export const useServiceItems = (serviceId, workspaceId) => {
     if (!socket || !serviceId || !workspaceId) return;
 
     const handleServiceUpdate = (data) => {
-      console.log('📡 useServiceItems - service_update received:', data);
-      console.log('📡 Checking: serviceId=', data.serviceId, 'expected=', serviceId, 'workspaceId=', data.workspaceId, 'expected=', workspaceId);
-
       // Only refetch if this update is for our service
       if (data.serviceId === serviceId && data.workspaceId === workspaceId) {
-        console.log('✅ Match! Fetching all data...');
         if (fetchAllRef.current) {
           fetchAllRef.current();
         }
-      } else {
-        console.log('❌ No match, ignoring');
       }
     };
 
     const handleServiceItemStatusUpdate = (data) => {
-      console.log('📡 useServiceItems - service_item_status_update received:', data);
-      console.log('📡 Checking: serviceId=', data.serviceId, 'expected=', serviceId, 'workspaceId=', data.workspaceId, 'expected=', workspaceId);
-
       // Handle individual service item status updates
       // Only fetch if it's for this service OR same workspace (for external items)
       if (data.workspaceId === workspaceId) {
-        if (data.serviceId === serviceId) {
-          console.log('✅ Service and workspace match! Fetching all data...');
-        } else {
-          console.log('✅ Workspace match (external service item update)! Fetching all data...');
-        }
         if (fetchAllRef.current) {
           fetchAllRef.current();
         }
-      } else {
-        console.log('❌ No match, ignoring');
       }
     };
 

@@ -48,14 +48,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       }
     });
 
-    console.log('🎨 useFlowData: Calculating edge statuses with service items:', {
-      itemsCount: items.length,
-      connectionsCount: connections.length,
-      servicesCount: services.length,
-      serviceItemsCount: flattenedServiceItems.length,
-      sampleServiceItems: flattenedServiceItems.slice(0, 3).map(si => ({ id: si.id, name: si.name, status: si.status }))
-    });
-
     const edgeStatuses = calculatePropagatedStatuses(
       items,
       connections,
@@ -64,9 +56,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
       services,
       flattenedServiceItems
     );
-
-    console.log('🎨 useFlowData: Edge statuses calculated:', Object.keys(edgeStatuses).length, 'edges');
-    console.log('🎨 Sample edge statuses:', Object.entries(edgeStatuses).slice(0, 3).map(([edgeId, status]) => ({ edgeId, status })));
 
     // Create group nodes
     groups.forEach((group) => {
@@ -402,9 +391,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
           // 2. Service item belongs to service with inactive parent CMDB item
           // 3. Service is filtered out from current view
           // Skip this edge as the parent service node is not rendered
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`ℹ️ Skipping edge for service item ${conn.source_service_item_id}: parent service not in current view`);
-          }
           return;
         }
       } else if (conn.source_service_id) {
@@ -466,17 +452,6 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       // Gunakan status dari propagation calculation
       const edgeStatusInfo = edgeStatuses[edgeId];
-
-      // Debug log for service-item-to-item edges
-      if (sourceServiceItemId) {
-        console.log('🔗 Service-item-to-item edge:', {
-          edgeId,
-          sourceServiceItemId,
-          targetId,
-          edgeStatusInfo,
-          connType: conn.connection_type
-        });
-      }
 
       // Get connection type info (ONLY for label, NOT for color)
       const connectionTypeInfo = getConnectionTypeInfo(conn.connection_type);

@@ -412,14 +412,11 @@ export default function ConnectionModal({
   // Fetch services and service items for the "Ke Service" tab
   useEffect(() => {
     const fetchServicesData = async () => {
-      console.log('🔵 fetchServicesData called, connectionTargetType:', connectionTargetType, 'show:', show, 'workspaceId:', workspaceId);
       if (connectionTargetType === 'service' && show && workspaceId) {
         setIsLoadingServices(true);
         try {
           // Fetch all services in workspace
-          console.log('   Fetching services from API...');
           const servicesResponse = await api.get(`/services/workspace/${workspaceId}`);
-          console.log('   Services response:', servicesResponse.data);
           setAvailableServices(servicesResponse.data || []);
 
           // Fetch all service items in workspace
@@ -430,7 +427,6 @@ export default function ConnectionModal({
           for (const service of servicesData) {
             try {
               const itemsResponse = await api.get(`/services/${service.id}/items?workspace_id=${workspaceId}`);
-              console.log(`   Items for service ${service.id}:`, itemsResponse.data);
               if (itemsResponse.data && itemsResponse.data.length > 0) {
                 serviceItemsData.push(...itemsResponse.data.map(item => ({
                   ...item,
@@ -442,7 +438,6 @@ export default function ConnectionModal({
               console.error(`Failed to fetch items for service ${service.id}:`, err);
             }
           }
-          console.log('   All service items:', serviceItemsData);
           setAvailableServiceItems(serviceItemsData);
 
           // Auto-expand all
@@ -521,12 +516,10 @@ export default function ConnectionModal({
 
   // Service connection handlers
   const handleToggleService = (serviceId) => {
-    console.log('🔵 handleToggleService called, serviceId:', serviceId);
     setSelectedServices(prev => {
       const newSelected = prev.includes(serviceId)
         ? prev.filter(id => id !== serviceId)
         : [...prev, serviceId];
-      console.log('   selectedServices new value:', newSelected);
       return newSelected;
     });
     setServiceConnectionTypes(prevMap => {
@@ -534,18 +527,15 @@ export default function ConnectionModal({
       if (!newMap[serviceId]) {
         newMap[serviceId] = { type: 'connects_to', direction: 'forward' };
       }
-      console.log('   serviceConnectionTypes new value:', newMap);
       return newMap;
     });
   };
 
   const handleToggleServiceItem = (itemId) => {
-    console.log('🔵 handleToggleServiceItem called, itemId:', itemId);
     setSelectedServiceItems(prev => {
       const newSelected = prev.includes(itemId)
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId];
-      console.log('   selectedServiceItems new value:', newSelected);
       return newSelected;
     });
     setServiceItemConnectionTypes(prevMap => {
@@ -553,7 +543,6 @@ export default function ConnectionModal({
       if (!newMap[itemId]) {
         newMap[itemId] = { type: 'connects_to', direction: 'forward' };
       }
-      console.log('   serviceItemConnectionTypes new value:', newMap);
       return newMap;
     });
   };
@@ -597,14 +586,6 @@ export default function ConnectionModal({
   };
 
   const handleSave = () => {
-    console.log('   - selectedServices:', selectedServices);
-    console.log('   - selectedServiceItems:', selectedServiceItems);
-    console.log('   - serviceConnectionTypes:', serviceConnectionTypes);
-    console.log('   - serviceItemConnectionTypes:', serviceItemConnectionTypes);
-    console.log('   - workspaceId:', workspaceId);
-    console.log('   - selectedItem:', selectedItem);
-    console.log('   - onSave is a function:', typeof onSave === 'function');
-
     if (typeof onSave !== 'function') {
       console.error('❌ onSave is not a function!', onSave);
       return;

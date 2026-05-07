@@ -161,10 +161,6 @@ export default function QuickConnectionModal({
     if (targetType !== 'service_item' && sourceType !== 'service_item') return;
 
     const fetchServiceItems = async () => {
-      console.log('🔵 fetchServiceItems: start', { targetType, sourceType, services: services?.length });
-      console.log('🔵 targetItem:', targetItem);
-      console.log('🔵 sourceItem:', sourceItem);
-
       setIsLoadingServiceItems(true);
       try {
         const serviceItemsData = [];
@@ -188,7 +184,6 @@ export default function QuickConnectionModal({
 
         if (serviceIdToUse && !isNaN(serviceIdToUse)) {
           const response = await api.get(`/services/${serviceIdToUse}/items?workspace_id=${workspaceId}`);
-          console.log('🔵 Service items response:', response.data);
           if (response.data && response.data.length > 0) {
             serviceItemsData.push(...response.data.map(item => ({
               ...item,
@@ -210,7 +205,6 @@ export default function QuickConnectionModal({
             }
           }
         }
-        console.log('🔵 Setting availableServiceItems:', serviceItemsData.length);
         setAvailableServiceItems(serviceItemsData);
       } catch (error) {
         console.error('Failed to fetch service items:', error);
@@ -225,7 +219,6 @@ export default function QuickConnectionModal({
   // Reset state when modal opens/closes or when targetType changes
   useEffect(() => {
     if (show) {
-      console.log('🔵 QuickConnectionModal opened:', { mode, existingServiceItemId, targetType, sourceType, sourceIsService, targetIsService });
       setSelectedServiceItemIds([]);
       // Reset both target and source types based on which is the service
       if (sourceIsService && !targetIsService) {
@@ -243,7 +236,6 @@ export default function QuickConnectionModal({
 
       // If editing a connection with existing service item, pre-populate
       if (mode === 'edit' && existingServiceItemId) {
-        console.log('🔵 Pre-populating with existingServiceItemId:', existingServiceItemId);
         setSelectedServiceItemIds([existingServiceItemId]);
         setTargetType('service_item');
       }
