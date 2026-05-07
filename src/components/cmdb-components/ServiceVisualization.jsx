@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -285,7 +285,7 @@ const calculateCrossServicePropagatedStatuses = (
   return edgeStatuses;
 };
 
-export default function ServiceVisualization({
+function ServiceVisualization({
   service,
   workspaceId,
   isSharedView = false,
@@ -1943,7 +1943,7 @@ export default function ServiceVisualization({
 
   const handleOpenAddModal = useCallback(() => {
     if (isSharedView) {
-      toast.info('🔒 View-only mode: Cannot add items in shared view');
+      toast.info('View-only mode: Cannot add items in shared view');
       return;
     }
     setItemFormData({
@@ -3578,3 +3578,5 @@ export default function ServiceVisualization({
     </div>
   );
 }
+
+export default memo(ServiceVisualization);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Link2, ChevronRight, ChevronDown, Layers, FolderOpen, ArrowUpRight, ArrowDownRight, ArrowRight, Server, Key, Puzzle, Shield, TrendingUp, RefreshCw, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap, Database, Workflow, Route, Search, Package } from 'lucide-react';
+import { Check, ChevronRight, ChevronDown, Layers, FolderOpen, Server, Package, ArrowRight, Database } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,331 +15,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import api from '../../services/api';
 import { toast } from 'sonner';
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
-
-// Helper function to get icon for connection type
-function getConnectionIcon(iconName) {
-  const icons = {
-    'arrow-up-right': <ArrowUpRight className="h-4 w-4" />,
-    'arrow-down-right': <ArrowDownRight className="h-4 w-4" />,
-    'link': <Link2 className="h-4 w-4" />,
-    'layers': <Layers className="h-4 w-4" />,
-    'shield': <Shield className="h-4 w-4" />,
-    'trending-up': <TrendingUp className="h-4 w-4" />,
-    'refresh-cw': <RefreshCw className="h-4 w-4" />,
-    'server': <Server className="h-4 w-4" />,
-    'key': <Key className="h-4 w-4" />,
-    'puzzle': <Puzzle className="h-4 w-4" />,
-    'arrow-up': <ArrowUp className="h-4 w-4" />,
-    'arrow-down': <ArrowDown className="h-4 w-4" />,
-    'lock': <Lock className="h-4 w-4" />,
-    'shield-check': <ShieldCheck className="h-4 w-4" />,
-    'eye': <Eye className="h-4 w-4" />,
-    'scale': <Scale className="h-4 w-4" />,
-    'zap': <Zap className="h-4 w-4" />,
-    'database': <Database className="h-4 w-4" />,
-    'workflow': <Workflow className="h-4 w-4" />,
-    'route': <Route className="h-4 w-4" />,
-  };
-  return icons[iconName] || <ArrowRight className="h-4 w-4" />;
-}
-
-// Connection Preview Component
-function ConnectionPreview({ connectionType, sourceItem }) {
-  const getArrowDirection = () => {
-    switch (connectionType.propagation) {
-      case 'target_to_source':
-        return '←';
-      case 'source_to_target':
-        return '→';
-      case 'both':
-        return '↔';
-      default:
-        return '→';
-    }
-  };
-
-  const getArrowIcon = () => {
-    switch (connectionType.propagation) {
-      case 'target_to_source':
-        return <ArrowDownRight className="h-5 w-5 rotate-180" />;
-      case 'source_to_target':
-        return <ArrowUpRight className="h-5 w-5" />;
-      case 'both':
-        return <div className="relative h-5 w-5"><ArrowRight className="h-5 w-5 absolute" /><ArrowRight className="h-5 w-5 absolute rotate-180" /></div>;
-      default:
-        return <ArrowRight className="h-5 w-5" />;
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-center gap-4 py-4">
-      {/* Source Node */}
-      <div className="flex flex-col items-center">
-        <div
-          className="w-16 h-12 rounded-lg border-2 flex items-center justify-center text-xs font-medium"
-          style={{
-            borderColor: connectionType.color,
-            backgroundColor: `${connectionType.color}20`
-          }}
-        >
-          {sourceItem?.name?.slice(0, 8) || 'Source'}
-        </div>
-        <span className="text-xs text-muted-foreground mt-1">Source</span>
-      </div>
-
-      {/* Connection Arrow */}
-      <div
-        className="flex items-center justify-center gap-1 px-3 py-1 rounded-full text-white font-medium"
-        style={{ backgroundColor: connectionType.color }}
-      >
-        {getArrowDirection()}
-        <span className="text-xs ml-1">{connectionType.label}</span>
-      </div>
-
-      {/* Target Node */}
-      <div className="flex flex-col items-center">
-        <div
-          className="w-16 h-12 rounded-lg border-2 border-gray-400 bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-medium"
-        >
-          Target
-        </div>
-        <span className="text-xs text-muted-foreground mt-1">Target</span>
-      </div>
-    </div>
-  );
-}
-
-// Searchable Connection Type Selector Component
-export function ConnectionTypeSelector({
-  value,
-  onChange,
-  connectionTypes,
-  placeholder = "Pilih tipe koneksi",
-  size = "default",
-  className = ""
-}) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const selectedType = connectionTypes.find(ct => ct.type_slug === value);
-
-  const filteredTypes = connectionTypes.filter(ct => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      ct.label.toLowerCase().includes(searchLower) ||
-      ct.type_slug.toLowerCase().includes(searchLower) ||
-      (ct.description && ct.description.toLowerCase().includes(searchLower))
-    );
-  });
-
-  const sizeClasses = size === "small" ? "h-7 text-xs" : "";
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        className={`w-full justify-between ${sizeClasses} ${className}`}
-        onClick={() => setShowDialog(true)}
-      >
-        {selectedType ? (
-          <div className="flex items-center gap-2">
-            {getConnectionIcon(selectedType.icon)}
-            <span>{selectedType.label}</span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">{placeholder}</span>
-        )}
-      </Button>
-
-      {/* Separate Dialog for Connection Type Selection */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
-          </DialogHeader>
-          <Command shouldFilter={false}>
-            <div className="p-3 border-b">
-              <CommandInput
-                placeholder="Cari tipe koneksi..."
-                value={searchQuery}
-                onValueChange={setSearchQuery}
-              />
-            </div>
-            <CommandList style={{ maxHeight: size === 'small' ? '200px' : '400px', overflowY: 'auto' }}>
-              <CommandEmpty>
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  Tidak ada tipe koneksi ditemukan
-                </div>
-              </CommandEmpty>
-              <CommandGroup>
-                {filteredTypes.map((ct) => (
-                  <CommandItem
-                    key={ct.id}
-                    value={ct.type_slug}
-                    onSelect={() => {
-                      onChange(ct.type_slug);
-                      setShowDialog(false);
-                      setSearchQuery('');
-                    }}
-                    className="cursor-pointer"
-                  >
-                    {getConnectionIcon(ct.icon)}
-                    <span className={`font-medium ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
-                    {value === ct.type_slug && (
-                      <Check size={14} className="text-primary ml-auto" />
-                    )}
-                    {ct.description && size !== "small" && (
-                      <p className="text-xs text-muted-foreground truncate ml-2">
-                        {ct.description}
-                      </p>
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-// Cross-Service Connection Type Selector Component
-function CrossServiceConnectionTypeSelector({
-  value,
-  onChange,
-  connectionTypes,
-  placeholder = "Pilih tipe koneksi",
-  size = "default",
-  className = ""
-}) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const selectedType = connectionTypes.find(ct => ct.type_slug === value);
-
-  const filteredTypes = connectionTypes.filter(ct => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      ct.label.toLowerCase().includes(searchLower) ||
-      ct.type_slug.toLowerCase().includes(searchLower) ||
-      (ct.description && ct.description.toLowerCase().includes(searchLower))
-    );
-  });
-
-  const sizeClasses = size === "small" ? "h-7 text-xs" : "";
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        className={`w-full justify-between ${sizeClasses} ${className}`}
-        onClick={() => setShowDialog(true)}
-      >
-        {selectedType ? (
-          <div className="flex items-center gap-2">
-            {getConnectionIcon(selectedType.icon)}
-            <span>{selectedType.label}</span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">{placeholder}</span>
-        )}
-      </Button>
-
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="p-3 border-b">
-              <Input
-                placeholder="Cari tipe koneksi..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="max-h-80 overflow-y-auto px-1">
-              {filteredTypes.length === 0 ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  Tidak ada tipe koneksi ditemukan
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {filteredTypes.map((ct) => (
-                    <div
-                      key={ct.id}
-                      onClick={() => {
-                        onChange(ct.type_slug);
-                        setShowDialog(false);
-                        setSearchQuery('');
-                      }}
-                      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-secondary transition-colors border"
-                    >
-                      {getConnectionIcon(ct.icon)}
-                      <span className={`font-medium flex-1 ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
-                      {value === ct.type_slug && (
-                        <Check size={14} className="text-primary" />
-                      )}
-                      {ct.description && size !== "small" && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {ct.description}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-// Mini Connection Preview Component (for individual items)
-export function MiniConnectionPreview({ connectionType, sourceName, targetName }) {
-  const getArrowDirection = () => {
-    switch (connectionType.propagation) {
-      case 'target_to_source':
-        return '←';
-      case 'source_to_target':
-        return '→';
-      case 'both':
-        return '↔';
-      default:
-        return '→';
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="max-w-16 truncate" title={sourceName}>{sourceName}</span>
-      <div
-        className="flex items-center gap-1 px-2 py-0.5 rounded text-white font-medium"
-        style={{ backgroundColor: connectionType.color }}
-        title={connectionType.label}
-      >
-        {getArrowDirection()}
-      </div>
-      <span className="max-w-16 truncate" title={targetName}>{targetName}</span>
-    </div>
-  );
-}
+import {
+  ConnectionTypeSelector,
+  ConnectionVisualization,
+  ConnectionTypeWithDescription,
+  MiniConnectionPreview,
+  getConnectionIcon,
+} from './ConnectionComponents';
 
 export default function ConnectionModal({
   show,
@@ -625,6 +311,31 @@ export default function ConnectionModal({
 
   const selectedConnectionTypeData = connectionTypes.find(ct => ct.type_slug === selectedType);
 
+  // Helper functions for visualization
+  const getItemIcon = (item) => {
+    const iconProps = { size: 32, className: 'text-foreground' };
+
+    switch (item?.type) {
+      case 'server': return <Server {...iconProps} />;
+      case 'database': return <Database {...iconProps} />;
+      case 'switch': return <Layers {...iconProps} />;
+      case 'workstation': return <Server {...iconProps} />;
+      default: return <Server {...iconProps} />;
+    }
+  };
+
+  const getItemDisplayColor = (item) => {
+    const statusColor = {
+      'active': 'bg-green-500 border-green-600',
+      'inactive': 'bg-red-500 border-red-600',
+      'maintenance': 'bg-yellow-500 border-yellow-600',
+      'decommissioned': 'bg-gray-500 border-gray-600',
+    };
+    return statusColor[item?.status] || 'bg-gray-500 border-gray-600';
+  };
+
+  const isGroup = (item) => item && (item.color !== undefined || item.data?.color !== undefined);
+
   if (!show || !selectedItem) return null;
 
   const filteredItems = items.filter(item => 
@@ -658,13 +369,32 @@ export default function ConnectionModal({
         </DialogHeader>
 
         <div className="overflow-y-auto flex-1 space-y-4">
-          {/* Source Item Info */}
-          <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Item Sumber</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{selectedItem.name}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Pilih item tujuan untuk membuat koneksi dari {selectedItem.name}
-            </p>
+          {/* Visual Connection Preview - Source Item Display */}
+          <div className="bg-muted rounded-lg p-6">
+            <div className="text-center text-sm text-muted-foreground mb-4 font-medium">
+              ITEM SUMBER
+            </div>
+
+            <div className="flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className={`w-20 h-20 rounded-lg flex items-center justify-center border-2 ${getItemDisplayColor(selectedItem)}`}
+                >
+                  {getTypeIcon(selectedItem.type)}
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-lg">{selectedItem.name}</div>
+                  <div className="text-sm text-muted-foreground capitalize">{selectedItem.type}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Status: <span className="capitalize">{selectedItem.status}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-center text-sm text-muted-foreground">
+              Pilih item tujuan di tab di bawah untuk membuat koneksi
+            </div>
           </div>
 
           <Tabs value={connectionTargetType} onValueChange={setConnectionTargetType}>
@@ -900,7 +630,7 @@ export default function ConnectionModal({
                                       CMDB: {items.find(i => i.id === service.cmdb_item_id)?.name || `#${service.cmdb_item_id}`}
                                     </p>
                                     <div className="mt-2">
-                                      <CrossServiceConnectionTypeSelector
+                                      <ConnectionTypeSelector
                                         value={typeId}
                                         onChange={(typeSlug) => handleServiceTypeChange(serviceId, typeSlug)}
                                         connectionTypes={connectionTypes}
@@ -936,7 +666,7 @@ export default function ConnectionModal({
                                       CMDB: {findCmdbItemName(item)}
                                     </p>
                                     <div className="mt-2">
-                                      <CrossServiceConnectionTypeSelector
+                                      <ConnectionTypeSelector
                                         value={typeId}
                                         onChange={(typeSlug) => handleServiceItemTypeChange(itemId, typeSlug)}
                                         connectionTypes={connectionTypes}

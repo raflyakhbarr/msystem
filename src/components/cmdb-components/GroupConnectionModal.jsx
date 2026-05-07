@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { getTypeIcon } from '../../utils/cmdb-utils/constants';
 import { Layers } from 'lucide-react';
 import api from '../../services/api';
-import { ConnectionTypeSelector, MiniConnectionPreview } from './ConnectionModal';
+import { ConnectionTypeSelector, MiniConnectionPreview } from './ConnectionComponents';
 
 export default function GroupConnectionModal({
   show,

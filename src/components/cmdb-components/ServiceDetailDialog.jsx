@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -515,6 +516,9 @@ export default function ServiceDetailDialog({
         <DialogContent className="dialog-horizontal h-[85vh] p-0 gap-0 overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50">
           <DialogHeader className="sr-only">
             <DialogTitle>{service.name} - Service Details</DialogTitle>
+            <DialogDescription>
+              View and manage service details, connections, and architecture visualization.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex h-full min-h-0">
           {/* Left Panel - Service Information */}

@@ -10,177 +10,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Plus, Check, Briefcase, Layers,
-  ArrowUpRight, ArrowDownRight, Link2, Shield, TrendingUp, RefreshCw, ArrowRight,
-  Server, Key, Puzzle, ArrowUp, ArrowDown, Lock, ShieldCheck, Eye, Scale, Zap,
-  Database, Workflow, Route, ChevronsUpDown
+  Plus, Check, Briefcase, Layers, Package, ArrowRight, ChevronsUpDown
 } from 'lucide-react';
 import api from '@/services/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-
-// Helper function to get icon for connection type
-function getConnectionIcon(iconName) {
-  const icons = {
-    'arrow-up-right': <ArrowUpRight className="h-4 w-4" />,
-    'arrow-down-right': <ArrowDownRight className="h-4 w-4" />,
-    'link': <Link2 className="h-4 w-4" />,
-    'layers': <Layers className="h-4 w-4" />,
-    'shield': <Shield className="h-4 w-4" />,
-    'trending-up': <TrendingUp className="h-4 w-4" />,
-    'refresh-cw': <RefreshCw className="h-4 w-4" />,
-    'server': <Server className="h-4 w-4" />,
-    'key': <Key className="h-4 w-4" />,
-    'puzzle': <Puzzle className="h-4 w-4" />,
-    'arrow-up': <ArrowUp className="h-4 w-4" />,
-    'arrow-down': <ArrowDown className="h-4 w-4" />,
-    'lock': <Lock className="h-4 w-4" />,
-    'shield-check': <ShieldCheck className="h-4 w-4" />,
-    'eye': <Eye className="h-4 w-4" />,
-    'scale': <Scale className="h-4 w-4" />,
-    'zap': <Zap className="h-4 w-4" />,
-    'database': <Database className="h-4 w-4" />,
-    'workflow': <Workflow className="h-4 w-4" />,
-    'route': <Route className="h-4 w-4" />,
-  };
-  return icons[iconName] || <ArrowRight className="h-4 w-4" />;
-}
-
-// Mini Connection Preview Component
-export function MiniConnectionPreview({ connectionType, sourceName, targetName }) {
-  const getArrowDirection = () => {
-    switch (connectionType.default_direction) {
-      case 'backward':
-        return '←';
-      case 'forward':
-        return '→';
-      case 'bidirectional':
-        return '↔';
-      default:
-        return '→';
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="max-w-16 truncate" title={sourceName}>{sourceName}</span>
-      <div
-        className="flex items-center gap-1 px-2 py-0.5 rounded text-white font-medium"
-        style={{ backgroundColor: connectionType.color }}
-        title={connectionType.label}
-      >
-        {getArrowDirection()}
-      </div>
-      <span className="max-w-16 truncate" title={targetName}>{targetName}</span>
-    </div>
-  );
-}
-
-// Connection Type Selector Component
-export function ConnectionTypeSelector({
-  value,
-  onChange,
-  connectionTypes,
-  placeholder = "Pilih tipe koneksi",
-  size = "default",
-  className = ""
-}) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const selectedType = connectionTypes.find(ct => ct.type_slug === value);
-
-  const filteredTypes = connectionTypes.filter(ct => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      ct.label.toLowerCase().includes(searchLower) ||
-      ct.type_slug.toLowerCase().includes(searchLower) ||
-      (ct.description && ct.description.toLowerCase().includes(searchLower))
-    );
-  });
-
-  const sizeClasses = size === "small" ? "h-7 text-xs" : "";
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        className={`w-full justify-between ${sizeClasses} ${className}`}
-        onClick={() => setShowDialog(true)}
-      >
-        {selectedType ? (
-          <div className="flex items-center gap-2">
-            {getConnectionIcon(selectedType.icon)}
-            <span>{selectedType.label}</span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">{placeholder}</span>
-        )}
-      </Button>
-
-      {/* Separate Dialog for Connection Type Selection */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pilih Tipe Koneksi</DialogTitle>
-          </DialogHeader>
-          <Command shouldFilter={false}>
-            <div className="p-3 border-b">
-              <CommandInput
-                placeholder="Cari tipe koneksi..."
-                value={searchQuery}
-                onValueChange={setSearchQuery}
-              />
-            </div>
-            <CommandList style={{ maxHeight: size === 'small' ? '200px' : '400px', overflowY: 'auto' }}>
-              <CommandEmpty>
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  Tidak ada tipe koneksi ditemukan
-                </div>
-              </CommandEmpty>
-              <CommandGroup>
-                {filteredTypes.map((ct) => (
-                  <CommandItem
-                    key={ct.id}
-                    value={ct.type_slug}
-                    onSelect={() => {
-                      onChange(ct.type_slug);
-                      setShowDialog(false);
-                      setSearchQuery('');
-                    }}
-                    className="cursor-pointer"
-                  >
-                    {getConnectionIcon(ct.icon)}
-                    <span className={`font-medium ${size === "small" ? "text-xs" : "text-sm"}`}>{ct.label}</span>
-                    {value === ct.type_slug && (
-                      <Check size={14} className="text-primary ml-auto" />
-                    )}
-                    {ct.description && size !== "small" && (
-                      <p className="text-xs text-muted-foreground truncate ml-2">
-                        {ct.description}
-                      </p>
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
+import {
+  ConnectionTypeSelector,
+  MiniConnectionPreview,
+  getConnectionIcon,
+} from './ConnectionComponents';
 
 // Service Selector with Grouping Support
 export function ServiceSelector({

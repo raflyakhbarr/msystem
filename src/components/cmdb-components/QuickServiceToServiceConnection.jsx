@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CONNECTION_TYPES, getConnectionTypeInfo } from '../../utils/cmdb-utils/flowHelpers';
 import api from '@/services/api';
-import { ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ChevronDown, ChevronRight, Briefcase, Search, Package, ArrowRight } from 'lucide-react';
+import {
+  ConnectionTypeSelector,
+  ConnectionTypeWithDescription,
+} from './ConnectionComponents';
 
 /**
  * QuickServiceToServiceConnection - Modal untuk membuat koneksi antar service
@@ -47,6 +45,27 @@ export default function QuickServiceToServiceConnection({
   const [propagationEnabled, setPropagationEnabled] = useState(true);
   const [loadingServiceItems, setLoadingServiceItems] = useState(false);
   const [expandedServices, setExpandedServices] = useState(new Set());
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+  const [targetSearchQuery, setTargetSearchQuery] = useState('');
+
+  // Filtered service items based on search
+  const filteredSourceServiceItems = useMemo(() => {
+    if (!sourceSearchQuery) return sourceServiceItems;
+    const query = sourceSearchQuery.toLowerCase();
+    return sourceServiceItems.filter(item =>
+      item.name?.toLowerCase().includes(query) ||
+      item.type?.toLowerCase().includes(query)
+    );
+  }, [sourceServiceItems, sourceSearchQuery]);
+
+  const filteredTargetServiceItems = useMemo(() => {
+    if (!targetSearchQuery) return targetServiceItems;
+    const query = targetSearchQuery.toLowerCase();
+    return targetServiceItems.filter(item =>
+      item.name?.toLowerCase().includes(query) ||
+      item.type?.toLowerCase().includes(query)
+    );
+  }, [targetServiceItems, targetSearchQuery]);
 
   useEffect(() => {
     if (open) {
@@ -55,6 +74,8 @@ export default function QuickServiceToServiceConnection({
       setSelectedSourceServiceItem(null);
       setSelectedTargetServiceItem(null);
       setPropagationEnabled(true);
+      setSourceSearchQuery('');
+      setTargetSearchQuery('');
       fetchServiceItems();
     }
   }, [open, existingConnection, sourceService, targetService]);
@@ -157,193 +178,203 @@ export default function QuickServiceToServiceConnection({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>
             {existingConnection ? 'Edit Koneksi Service' : 'Koneksi Service-to-Service'}
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 px-4">
+        <div className="flex-1 overflow-y-auto px-6">
           <div className="space-y-4 py-4">
-            {/* Source Service Info */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-muted-foreground">Source Service</Label>
-              <div className="p-3 bg-muted rounded-lg border">
-                <p className="font-medium">{sourceService?.name || 'Unknown'}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Status: <span className={`font-medium ${
-                    sourceService?.status === 'active' ? 'text-green-600' :
-                    sourceService?.status === 'inactive' ? 'text-red-600' :
-                    sourceService?.status === 'maintenance' ? 'text-yellow-600' :
-                    'text-gray-600'
-                  }`}>
-                    {sourceService?.status || 'Unknown'}
-                  </span>
-                </p>
+            {/* Visual Connection Preview */}
+            <div className="bg-muted rounded-lg p-6">
+              <div className="text-center text-sm text-muted-foreground mb-4 font-medium">
+                VISUALISASI KONEKSI
               </div>
-            </div>
 
-            {/* Arrow */}
-            <div className="flex justify-center">
-              <div className="text-2xl text-muted-foreground">↓</div>
-            </div>
-
-            {/* Target Service Info */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-muted-foreground">Target Service</Label>
-              <div className="p-3 bg-muted rounded-lg border">
-                <p className="font-medium">{targetService?.name || 'Unknown'}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Status: <span className={`font-medium ${
-                    targetService?.status === 'active' ? 'text-green-600' :
-                    targetService?.status === 'inactive' ? 'text-red-600' :
-                    targetService?.status === 'maintenance' ? 'text-yellow-600' :
-                    'text-gray-600'
-                  }`}>
-                    {targetService?.status || 'Unknown'}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            {/* Connection Target Type Selection */}
-            <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <Label className="text-sm font-semibold">Tipe Koneksi</Label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="connectionTargetType"
-                    value="service"
-                    checked={connectionTargetType === 'service'}
-                    onChange={(e) => setConnectionTargetType(e.target.value)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm">Service Level</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="connectionTargetType"
-                    value="service_item"
-                    checked={connectionTargetType === 'service_item'}
-                    onChange={(e) => setConnectionTargetType(e.target.value)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm">Service Item Level</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Service Item Selection (Conditional) */}
-            {connectionTargetType === 'service_item' && (
-              <>
-                {/* Source Service Item Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Source Service Item</Label>
-                  <div className="p-3 bg-muted rounded-lg border max-h-48 overflow-y-auto">
-                    {loadingServiceItems ? (
-                      <p className="text-sm text-muted-foreground">Loading service items...</p>
-                    ) : sourceServiceItems.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Tidak ada service items</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {sourceServiceItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className={`p-2 rounded cursor-pointer border transition-colors ${
-                              selectedSourceServiceItem?.id === item.id
-                                ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
-                                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
-                            onClick={() => handleSelectServiceItem(sourceService, item, true)}
-                          >
-                            <div className="flex items-center gap-2">
-                              {getServiceItemIcon(item.type)}
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{item.name}</p>
-                                <p className="text-xs text-muted-foreground">{item.type}</p>
-                              </div>
-                              {selectedSourceServiceItem?.id === item.id && (
-                                <span className="text-blue-600">✓</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              <div className="flex items-center justify-center gap-4">
+                {/* Source Service */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 h-16 rounded-lg flex items-center justify-center border-2 bg-blue-100 border-blue-300">
+                    <Package size={32} className="text-blue-600" />
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">{sourceService?.name || 'Source'}</div>
+                    <div className="text-xs text-muted-foreground">Service</div>
                   </div>
                 </div>
 
-                {/* Target Service Item Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Target Service Item</Label>
-                  <div className="p-3 bg-muted rounded-lg border max-h-48 overflow-y-auto">
-                    {loadingServiceItems ? (
-                      <p className="text-sm text-muted-foreground">Loading service items...</p>
-                    ) : targetServiceItems.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Tidak ada service items</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {targetServiceItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className={`p-2 rounded cursor-pointer border transition-colors ${
-                              selectedTargetServiceItem?.id === item.id
-                                ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
-                                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
-                            onClick={() => handleSelectServiceItem(targetService, item, false)}
-                          >
-                            <div className="flex items-center gap-2">
-                              {getServiceItemIcon(item.type)}
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{item.name}</p>
-                                <p className="text-xs text-muted-foreground">{item.type}</p>
-                              </div>
-                              {selectedTargetServiceItem?.id === item.id && (
-                                <span className="text-blue-600">✓</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Connection Arrow */}
+                <div className="flex flex-col items-center gap-2 px-4">
+                  <div className="rounded-full p-2 bg-background border-2 shadow-md">
+                    <ArrowRight size={28} style={{ color: getConnectionTypeInfo(connectionType).color }} />
+                  </div>
+                  <div
+                    className="text-xs font-semibold px-2 py-1 rounded text-white"
+                    style={{ backgroundColor: getConnectionTypeInfo(connectionType).color }}
+                  >
+                    {getConnectionTypeInfo(connectionType).label}
                   </div>
                 </div>
-              </>
-            )}
 
-            {/* Connection Type Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="connection-type">Tipe Koneksi</Label>
-              <Select
-                value={connectionType}
-                onValueChange={setConnectionType}
-              >
-                <SelectTrigger id="connection-type">
-                  <SelectValue placeholder="Pilih tipe koneksi" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CONNECTION_TYPES).map(([slug, config]) => (
-                    <SelectItem key={slug} value={slug}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{config.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {config.short_desc}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {connectionType && (
-                <p className="text-xs text-muted-foreground">
-                  {getConnectionTypeDescription(connectionType)}
-                </p>
-              )}
+                {/* Target Service */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 h-16 rounded-lg flex items-center justify-center border-2 bg-purple-100 border-purple-300">
+                    <Package size={32} className="text-purple-600" />
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-sm">{targetService?.name || 'Target'}</div>
+                    <div className="text-xs text-muted-foreground">Service</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description based on propagation rule */}
+              <div className="mt-4 text-center text-sm text-muted-foreground">
+                {getConnectionTypeInfo(connectionType).propagation === 'target_to_source' && (
+                  <span>
+                    <strong>{sourceService?.name}</strong> {getConnectionTypeInfo(connectionType).label.toLowerCase()} <strong>{targetService?.name}</strong>
+                  </span>
+                )}
+                {getConnectionTypeInfo(connectionType).propagation === 'source_to_target' && (
+                  <span>
+                    <strong>{sourceService?.name}</strong> {getConnectionTypeInfo(connectionType).label.toLowerCase()} <strong>{targetService?.name}</strong>
+                  </span>
+                )}
+                {getConnectionTypeInfo(connectionType).propagation === 'both' && (
+                  <span>
+                    <strong>{sourceService?.name}</strong> dan <strong>{targetService?.name}</strong> memiliki hubungan {getConnectionTypeInfo(connectionType).label.toLowerCase()}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Connection Target Type Selection - Using Tabs */}
+            <div className="space-y-2">
+              <Tabs value={connectionTargetType} onValueChange={setConnectionTargetType} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="service">Service Level</TabsTrigger>
+                  <TabsTrigger value="service_item">Service Item Level</TabsTrigger>
+                </TabsList>
+
+                {/* Service Level Tab Content */}
+                <TabsContent value="service" className="mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Koneksi akan dibuat langsung antar service. Status propagasi akan diterapkan pada level service.
+                  </p>
+                </TabsContent>
+
+                {/* Service Item Level Tab Content */}
+                <TabsContent value="service_item" className="mt-4 space-y-4">
+                  {/* Source Service Item Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Source Service Item</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Cari service item..."
+                        value={sourceSearchQuery}
+                        onChange={(e) => setSourceSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg border max-h-48 overflow-y-auto">
+                      {loadingServiceItems ? (
+                        <p className="text-sm text-muted-foreground">Loading service items...</p>
+                      ) : filteredSourceServiceItems.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          {sourceSearchQuery ? 'Tidak ada hasil pencarian' : 'Tidak ada service items'}
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {filteredSourceServiceItems.map((item) => (
+                            <div
+                              key={item.id}
+                              className={`p-2 rounded cursor-pointer border transition-colors ${
+                                selectedSourceServiceItem?.id === item.id
+                                  ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
+                                  : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                              }`}
+                              onClick={() => handleSelectServiceItem(sourceService, item, true)}
+                            >
+                              <div className="flex items-center gap-2">
+                                {getServiceItemIcon(item.type)}
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">{item.type}</p>
+                                </div>
+                                {selectedSourceServiceItem?.id === item.id && (
+                                  <span className="text-blue-600">✓</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Target Service Item Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Target Service Item</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Cari service item..."
+                        value={targetSearchQuery}
+                        onChange={(e) => setTargetSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg border max-h-48 overflow-y-auto">
+                      {loadingServiceItems ? (
+                        <p className="text-sm text-muted-foreground">Loading service items...</p>
+                      ) : filteredTargetServiceItems.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          {targetSearchQuery ? 'Tidak ada hasil pencarian' : 'Tidak ada service items'}
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {filteredTargetServiceItems.map((item) => (
+                            <div
+                              key={item.id}
+                              className={`p-2 rounded cursor-pointer border transition-colors ${
+                                selectedTargetServiceItem?.id === item.id
+                                  ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
+                                  : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                              }`}
+                              onClick={() => handleSelectServiceItem(targetService, item, false)}
+                            >
+                              <div className="flex items-center gap-2">
+                                {getServiceItemIcon(item.type)}
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">{item.type}</p>
+                                </div>
+                                {selectedTargetServiceItem?.id === item.id && (
+                                  <span className="text-blue-600">✓</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* Connection Type Selection with Description */}
+            <ConnectionTypeWithDescription
+              selectedType={connectionType}
+              CONNECTION_TYPES={CONNECTION_TYPES}
+              onTypeChange={setConnectionType}
+              label="Pilih Tipe Koneksi"
+            />
 
             {/* Status Propagation Toggle */}
             <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -358,37 +389,11 @@ export default function QuickServiceToServiceConnection({
                 Enable Status Propagation
               </label>
             </div>
-
-            {/* Connection Type Info Box */}
-            {connectionType && (
-              <div className="p-3 bg-gray-50 dark:bg-gray-900 border rounded-lg">
-                <p className="text-xs text-muted-foreground mb-1">
-                  <span className="font-semibold">Arah Propagasi:</span>
-                </p>
-                <p className="text-xs">
-                  {propagationEnabled ? (
-                    <>
-                      {getConnectionTypeInfo(connectionType).propagation === 'target_to_source' && (
-                        <span>Target → Source: Jika target bermasalah, source terpengaruh</span>
-                      )}
-                      {getConnectionTypeInfo(connectionType).propagation === 'source_to_target' && (
-                        <span>Source → Target: Jika source bermasalah, target terpengaruh</span>
-                      )}
-                      {getConnectionTypeInfo(connectionType).propagation === 'both' && (
-                        <span>Bidirectional: Keduanya saling mempengaruhi</span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-red-600">Propagasi dinonaktifkan</span>
-                  )}
-                </p>
-              </div>
-            )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 pt-4 px-6 pb-6 border-t">
           <Button
             type="button"
             variant="outline"
