@@ -4062,8 +4062,21 @@ export default function CMDBVisualization() {
     } finally {
       setIsAutoSaving(false);
       isSavingRef.current = false;
+
+      // ✅ FIX: Manually trigger data refresh after save completes
+      // This ensures nodes state is updated with latest positions from database
+      try {
+        await Promise.all([
+          fetchAll(),
+          fetchServices(),
+          fetchServiceToServiceConnections(),
+          fetchCrossServiceConnections()
+        ]);
+      } catch (fetchErr) {
+        console.error('Error fetching after auto-save:', fetchErr);
+      }
     }
-  }, [nodes]);
+  }, [nodes, fetchAll, fetchServices, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
 
   useAutoSave(nodes, autoSavePositions, 2000, isAutoSaveEnabled);
 
@@ -4118,7 +4131,20 @@ export default function CMDBVisualization() {
       changedNodesRef.current.clear();
       
       toast.success(`Posisi berhasil disimpan!`);
-      
+
+      // ✅ FIX: Manually trigger data refresh after save completes
+      // This ensures nodes state is updated with latest positions from database
+      try {
+        await Promise.all([
+          fetchAll(),
+          fetchServices(),
+          fetchServiceToServiceConnections(),
+          fetchCrossServiceConnections()
+        ]);
+      } catch (fetchErr) {
+        console.error('Error fetching after manual save:', fetchErr);
+      }
+
     } catch (err) {
       toast.error('Gagal menyimpan posisi', {
         description: err.response?.data?.error || err.message,

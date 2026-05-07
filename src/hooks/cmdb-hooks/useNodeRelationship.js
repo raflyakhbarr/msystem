@@ -79,20 +79,66 @@ export const useNodeRelationships = (nodes, edges) => {
 
     // Include parent/child nodes (items in groups, ServiceAsNodes in CMDB items)
     const additionalNodes = new Set();
-    nodes.forEach(node => {
-      // If node is in related set and has parent, include parent
-      if (related.has(node.id) && node.parentNode) {
-        additionalNodes.add(node.parentNode);
-      }
-      // If node is a parent in related set, include all children
-      if (related.has(node.id) && (node.type === 'group' || node.type === 'custom')) {
-        nodes.forEach(child => {
-          if (child.parentNode === node.id) {
-            additionalNodes.add(child.id);
+
+    // ✅ MULTIPLE PASS FIX: Keep adding parents/children until no more changes
+    // This ensures we capture ALL hierarchical relationships (parent → child → grandchild, etc.)
+    let changed = true;
+    let iterations = 0;
+    const maxIterations = 10; // Safety limit to prevent infinite loops
+
+    while (changed && iterations < maxIterations) {
+      changed = false;
+      iterations++;
+
+      const previousSize = additionalNodes.size;
+
+      nodes.forEach(node => {
+        // ✅ PASS 1: Include ALL connected nodes regardless of type
+        // This ensures ServiceAsNodes and other independent nodes are included
+        if (!related.has(node.id) && !additionalNodes.has(node.id)) {
+          // Check if this node has any edge connection to nodes in related set
+          const hasConnectionToRelated = edges.some(edge =>
+            (related.has(edge.source) && edge.target === node.id) ||
+            (related.has(edge.target) && edge.source === node.id) ||
+            (additionalNodes.has(edge.source) && edge.target === node.id) ||
+            (additionalNodes.has(edge.target) && edge.source === node.id)
+          );
+
+          if (hasConnectionToRelated) {
+            additionalNodes.add(node.id);
+            changed = true;
           }
-        });
+        }
+
+        // ✅ PASS 2: If ANY node (in related or additional) has parent, include parent
+        // This ensures parent CMDB items of ServiceAsNodes are included
+        if ((related.has(node.id) || additionalNodes.has(node.id)) && node.parentNode) {
+          if (!additionalNodes.has(node.parentNode) && !related.has(node.parentNode)) {
+            additionalNodes.add(node.parentNode);
+            changed = true;
+          }
+        }
+
+        // ✅ PASS 3: If parent is in related or additional, include all children
+        // This ensures all ServiceAsNodes in a CMDB item are included
+        if ((related.has(node.id) || additionalNodes.has(node.id)) &&
+            (node.type === 'group' || node.type === 'custom' || node.type === 'serviceAsNode')) {
+          nodes.forEach(child => {
+            if (child.parentNode === node.id) {
+              if (!additionalNodes.has(child.id) && !related.has(child.id)) {
+                additionalNodes.add(child.id);
+                changed = true;
+              }
+            }
+          });
+        }
+      });
+
+      // If no new nodes were added in this iteration, we're done
+      if (additionalNodes.size === previousSize) {
+        break;
       }
-    });
+    }
 
     additionalNodes.forEach(id => related.add(id));
 
