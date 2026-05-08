@@ -191,16 +191,17 @@ export default function ServiceAsNode({ data, selected }) {
   }, [service.status]);
 
   const handleClick = (e) => {
-    // ✅ FIX: Don't stop propagation! Allow ReactFlow's onNodeClick to execute for highlighting
-    // e.stopPropagation(); // ← REMOVED: This was preventing highlight mode
+    // In shared view, stop propagation to prevent double execution
+    if (isSharedView) {
+      e.stopPropagation();
+      onServiceClick?.(service);
+      return;
+    }
 
-    // Only call service click handler if NOT in highlight mode
-    // This prevents dialog from opening when user wants to highlight the node
+    // In normal mode, don't stop propagation to allow highlight functionality
     if (!highlightMode) {
       onServiceClick?.(service);
     }
-    // In highlight mode, let the event bubble to ReactFlow's onNodeClick handler
-    // which will trigger the highlight logic
   };
 
   const handleItemsClick = (e) => {

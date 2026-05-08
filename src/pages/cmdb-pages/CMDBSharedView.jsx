@@ -125,9 +125,9 @@ export default function CMDBSharedView() {
         data.services || [],
         data.items,
         {
-          isSharedView: true, // Pass shared view flag to avoid API calls
-          highlightMode: false, // Shared view doesn't have highlight mode
-          onServiceClick: handleServiceClick // Pass click handler
+          isSharedView: true,
+          highlightMode: false,
+          onServiceClick: handleServiceClick
         }
       );
 
@@ -450,40 +450,24 @@ export default function CMDBSharedView() {
     // Find parent CMDB item from current nodes OR from items array
     let parentItem = null;
 
-    // Search through current nodes to find the parent CMDB item
-    for (const node of nodes) {
-      if (node.data?.cmdbItem) {
-        const cmdbItem = node.data.cmdbItem;
-        // Check if this CMDB item has the service
-        if (cmdbItem.services?.some(s => s.id === service.id)) {
-          parentItem = cmdbItem;
-          break;
-        }
-      }
-      // Also check if node has cmdbItemId directly (for shared view service nodes)
-      if (node.data?.cmdbItemId && node.data?.service?.id === service.id) {
-        // Find the actual cmdbItem from sharedDataRef.items
-        parentItem = sharedDataRef.current?.items?.find(i => i.id === node.data.cmdbItemId);
-        if (parentItem) {
-          break;
-        }
-      }
+    // First, try to find using service.cmdb_item_id directly from sharedDataRef
+    if (service.cmdb_item_id && sharedDataRef.current?.items) {
+      parentItem = sharedDataRef.current.items.find(i => i.id === service.cmdb_item_id);
     }
 
-    // If still not found, try to find using service.cmdb_item_id directly
-    if (!parentItem && service.cmdb_item_id) {
-      parentItem = sharedDataRef.current?.items?.find(i => i.id === service.cmdb_item_id);
-    }
-
-    // If still not found, search in sharedDataRef.items for the service
-    if (!parentItem && sharedDataRef.current?.services) {
-      // Find which item owns this service by looking at sharedDataRef
-      for (const item of (sharedDataRef.current.items || [])) {
+    // If still not found, try searching through items that have services
+    if (!parentItem && sharedDataRef.current?.items) {
+      for (const item of sharedDataRef.current.items) {
         if (item.services?.some(s => s.id === service.id)) {
           parentItem = item;
           break;
         }
       }
+    }
+
+    // If still not found, try using data.cmdbItemId from service node
+    if (!parentItem && service.cmdbItemId) {
+      parentItem = sharedDataRef.current?.items?.find(i => i.id === service.cmdbItemId);
     }
 
     setServiceDialog({
@@ -711,6 +695,12 @@ export default function CMDBSharedView() {
           nodeTypes={nodeTypes}
           onInit={(instance) => {
             reactFlowInstance.current = instance;
+          }}
+          onNodeClick={(event, node) => {
+            // If this is a service node, trigger the service click handler
+            if (node.type === 'serviceAsNode' && node.data?.service) {
+              handleServiceClick(node.data.service);
+            }
           }}
           minZoom={0.2}
           maxZoom={2}

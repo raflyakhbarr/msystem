@@ -294,18 +294,35 @@ export default function CMDBVisualization() {
   const servicesMap = useMemo(() => {
     const map = {};
 
+    // Defensive check: if services is empty/null, return empty map
+    if (!services) {
+      return map;
+    }
+
     // Ensure services is an array before iterating
     if (Array.isArray(services)) {
       services.forEach(service => {
-        if (!map[service.cmdb_item_id]) {
-          map[service.cmdb_item_id] = [];
+        if (!service) {
+          return;
         }
+
+        const cmdbItemId = service.cmdb_item_id;
+        if (!cmdbItemId) {
+          return;
+        }
+
+        if (!map[cmdbItemId]) {
+          map[cmdbItemId] = [];
+        }
+
         // Attach service_items to each service from serviceItems state
+        // Use empty array as fallback to prevent undefined errors
         const serviceWithItems = {
           ...service,
           service_items: serviceItems[service.id] || []
         };
-        map[service.cmdb_item_id].push(serviceWithItems);
+
+        map[cmdbItemId].push(serviceWithItems);
       });
     } else if (services && typeof services === 'object') {
       // If services is already an object (old format), use it directly
@@ -854,6 +871,10 @@ export default function CMDBVisualization() {
     loadHandles();
   }, []);
 
+  // Track if fetchServices is in progress to prevent race conditions
+  const isFetchingServicesRef = useRef(false);
+  const lastFetchServicesIdRef = useRef(0);
+
   // Fetch services for all items (as callback so it can be called manually)
   const fetchServices = useCallback(async () => {
     if (!currentWorkspace?.id) {
@@ -862,10 +883,27 @@ export default function CMDBVisualization() {
       return;
     }
 
+    // Prevent concurrent fetches - if already fetching, skip this call
+    if (isFetchingServicesRef.current) {
+      return;
+    }
+
+    // Generate unique fetch ID for tracking
+    const fetchId = ++lastFetchServicesIdRef.current;
+
+    isFetchingServicesRef.current = true;
     setLoadingServices(true);
+
     try {
       // Fetch all services for workspace (as independent nodes)
       const res = await api.get(`/services/workspace/${currentWorkspace.id}`);
+
+      if (!res.data || !Array.isArray(res.data)) {
+        // DON'T clear existing data on API error - keep stale data instead
+        setLoadingServices(false);
+        isFetchingServicesRef.current = false;
+        return;
+      }
 
       // Add icon_preview for uploaded icons
       const servicesWithPreview = res.data.map(service => ({
@@ -879,7 +917,11 @@ export default function CMDBVisualization() {
 
       // Also fetch all service items for each service to build serviceItemToServiceMap
       const allServiceItems = {};
-      for (const service of servicesWithPreview) {
+      let successCount = 0;
+      let failCount = 0;
+
+      // Use Promise.allSettled for parallel fetching instead of sequential loop
+      const serviceItemPromises = servicesWithPreview.map(async (service) => {
         try {
           const itemsRes = await api.get(`/services/${service.id}/items?workspace_id=${currentWorkspace.id}`);
           if (itemsRes.data && itemsRes.data.length > 0) {
@@ -888,22 +930,48 @@ export default function CMDBVisualization() {
               ...item,
               serviceName: service.name
             }));
-            allServiceItems[service.id] = itemsWithServiceName;
+            return { serviceId: service.id, items: itemsWithServiceName, success: true };
           } else {
-            allServiceItems[service.id] = [];
+            return { serviceId: service.id, items: [], success: true };
           }
         } catch (err) {
           console.error(`Failed to fetch items for service ${service.id}:`, err);
-          allServiceItems[service.id] = [];
+          failCount++;
+          return { serviceId: service.id, items: [], success: false, error: err };
         }
+      });
+
+      const results = await Promise.allSettled(serviceItemPromises);
+
+      // Process results
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value) {
+          const { serviceId, items, success } = result.value;
+          allServiceItems[serviceId] = items;
+          if (success) successCount++;
+        } else {
+          // Handle rejected promises
+          const serviceId = servicesWithPreview[index]?.id;
+          if (serviceId) {
+            allServiceItems[serviceId] = [];
+            failCount++;
+          }
+        }
+      });
+
+      // Only update if this is still the latest fetch
+      if (fetchId === lastFetchServicesIdRef.current) {
+        setServiceItems(allServiceItems);
       }
-      setServiceItems(allServiceItems);
     } catch (err) {
       console.error('Failed to fetch services:', err);
-      setServices([]);
-      setServiceItems({});
+      // FIX: Don't clear existing data on API error - keep stale data instead of clearing everything
+      // This prevents nodes from disappearing on temporary API failures
+      // setServices([]);  // REMOVED: Don't clear on error
+      // setServiceItems({}); // REMOVED: Don't clear on error
     } finally {
       setLoadingServices(false);
+      isFetchingServicesRef.current = false;
     }
   }, [currentWorkspace?.id]);
 
@@ -1337,6 +1405,11 @@ export default function CMDBVisualization() {
           fetchServiceToServiceConnections(),
           fetchCrossServiceConnections()
         ]);
+      } else {
+        // FIX: Don't skip the update - queue it for after save completes
+        // Set a flag to trigger fetch after save completes
+        // The autoSavePositions and handleSavePositions functions will check this flag
+        window._pendingCmdbUpdate = true;
       }
     };
 
@@ -4075,6 +4148,21 @@ export default function CMDBVisualization() {
       } catch (fetchErr) {
         console.error('Error fetching after auto-save:', fetchErr);
       }
+
+      // Check if there's a pending cmdb update that was skipped during save
+      if (window._pendingCmdbUpdate) {
+        window._pendingCmdbUpdate = false;
+        try {
+          await Promise.all([
+            fetchAll(),
+            fetchServices(),
+            fetchServiceToServiceConnections(),
+            fetchCrossServiceConnections()
+          ]);
+        } catch (pendingFetchErr) {
+          console.error('Error fetching pending update:', pendingFetchErr);
+        }
+      }
     }
   }, [nodes, fetchAll, fetchServices, fetchServiceToServiceConnections, fetchCrossServiceConnections]);
 
@@ -4152,6 +4240,21 @@ export default function CMDBVisualization() {
     } finally {
       setIsSaving(false);
       isSavingRef.current = false;
+
+      // Check if there's a pending cmdb update that was skipped during save
+      if (window._pendingCmdbUpdate) {
+        window._pendingCmdbUpdate = false;
+        try {
+          await Promise.all([
+            fetchAll(),
+            fetchServices(),
+            fetchServiceToServiceConnections(),
+            fetchCrossServiceConnections()
+          ]);
+        } catch (pendingFetchErr) {
+          console.error('Error fetching pending update:', pendingFetchErr);
+        }
+      }
     }
   };
 

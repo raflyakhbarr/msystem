@@ -1779,12 +1779,6 @@ function ServiceVisualization({
       const targetNode = nodesRef.current.find(n => n.id === targetId);
 
       if (!sourceNode || !targetNode) {
-        console.warn('⚠️ [HANDLE CALC] Nodes not found:', {
-          sourceId,
-          targetId,
-          sourceFound: !!sourceNode,
-          targetFound: !!targetNode
-        });
         return { sourceHandle: 'source-right', targetHandle: 'target-left' };
       }
 
@@ -2429,9 +2423,14 @@ function ServiceVisualization({
         .map(node => {
           // External items: save to external_item_positions table
           if (node.data?.isExternal) {
+            // ✅ FIX: Use VIEWING service ID, not parent service ID!
+            // External item positions are stored per-viewing-service, so each service
+            // can have its own view of where external items are positioned.
+            // Load uses: /external-item-positions/service/${service.id}
+            // So save must use: serviceId = service.id (the viewing service)
             return api.post('/external-item-positions', {
               workspaceId: workspaceId,
-              serviceId: service.id,
+              serviceId: service.id, // ✅ Use VIEWING service ID (not parent service ID)
               externalServiceItemId: node.id,
               position: node.position,
               skipRefresh: true  // Prevent socket events to other services
@@ -2486,73 +2485,29 @@ function ServiceVisualization({
       return;
     }
 
-    // Save external item position FIRST (before any other logic)
-    // External nodes cannot be added to groups, so we always save their position
+    // ✅ FIX: External items - jangan save langsung di sini
+    // Biarkan autosave logic yang menangani semua items (internal & external)
+    // Ini memastikan:
+    // 1. Konsisten behavior antara internal dan external items
+    // 2. UI feedback "Auto-saving..." muncul untuk semua items
+    // 3. Tidak ada double save atau race conditions
     if (isExternalNode && service?.id) {
-      try {
-        // ✅ CRITICAL FIX: Use external item's PARENT service ID, not the viewing service ID
-        // When viewing NextJS and moving DB_GATEWAY (from PostgreSQL), we must save with serviceId: PostgreSQL
-        // This ensures each service has its own view of external item positions
-        const externalItemParentServiceId = node.data.externalSource?.serviceId;
-
-        if (!externalItemParentServiceId) {
-          console.error('❌ External item missing parent service ID:', node);
-          toast.error('External item missing parent service information');
-          setDraggedNode(null);
-          setHoverPosition(null);
-          return;
-        }
-
-        // Use flag untuk mencegah socket refresh di services lain
-        // Kita tidak ingin service lain refresh saat kita hanya memindahkan external item
-        const response = await api.post('/external-item-positions', {
-          workspaceId: workspaceId,
-          serviceId: externalItemParentServiceId, // ✅ FIX: Use parent service ID
-          externalServiceItemId: node.id,
-          position: node.position,
-          skipRefresh: true  // Flag untuk backend agar jangan emit socket event
-        });
-
-        // Update local state immediately tanpa menunggu refresh
-        setExternalItemPositions(prev => ({
-          ...prev,
-          [node.id]: node.position
-        }));
-
-        // Update node position di state
-        setNodes(prevNodes => prevNodes.map(n => {
-          if (n.id === node.id) {
-            return {
-              ...n,
-              position: node.position
-            };
-          }
-          return n;
-        }));
-
-        // Optionally show feedback
-        // toast.success('External item position saved!');
-      } catch (err) {
-        console.error('Failed to save external item position:', err);
-        toast.error('Failed to save external item position');
-      }
-
+      // Reset state agar bisa lanjut ke autosave trigger
       setDraggedNode(null);
       setHoverPosition(null);
       isReorderingRef.current = false;
 
-      // Save to history with lightweight clone (only for significant position changes)
-      if (dragDuration > 200) { // Only save if drag was significant (>200ms)
+      // Save to history
+      if (dragDuration > 200) {
         requestAnimationFrame(() => {
           setPastNodes(prev => {
-            // Use structuredClone for better performance than JSON.parse/stringify
             const snapshot = structuredClone ? structuredClone(nodes) : JSON.parse(JSON.stringify(nodes));
             return [...prev.slice(-10), snapshot];
           });
           setFutureNodes([]);
         });
       }
-      return; // Exit early for external nodes
+      // JANGAN return early - lanjut ke autosave trigger
     }
 
     if (!draggedNode || !hoverPosition) {
@@ -2955,9 +2910,11 @@ function ServiceVisualization({
         .map(node => {
           // External items: save to external_item_positions table
           if (node.data?.isExternal) {
+            // ✅ FIX: Use VIEWING service ID, not parent service ID!
+            // External item positions are stored per-viewing-service
             return api.post('/external-item-positions', {
               workspaceId: workspaceId,
-              serviceId: service.id,
+              serviceId: service.id, // Use viewing service ID
               externalServiceItemId: node.id,
               position: node.position,
               skipRefresh: true  // Prevent socket events to other services
