@@ -1,5 +1,7 @@
 import { Server, Database, Cloud, Globe, Lock, Cpu, HardDrive, Network, Shield } from 'lucide-react';
+import { PRESET_ICONS } from '../../utils/cmdb-utils/constants';
 
+// ICON_MAP for preset icons - mapping from icon name to Lucide component
 const ICON_MAP = {
   citrix: Server,
   oracle: Database,
@@ -22,11 +24,21 @@ const ICON_MAP = {
 };
 
 export default function ServiceIcon({ name, size = 24, className = '' }) {
-  const Icon = ICON_MAP[name?.toLowerCase()] || Server;
+  // Trim dan lowercase untuk handle spasi/huruf besar
+  const normalizedName = name?.toString().trim().toLowerCase();
+
+  // Check if name exists in PRESET_ICONS first
+  const isValidPreset = PRESET_ICONS.some(icon => {
+    const iconValue = icon.value?.toString().trim().toLowerCase();
+    return iconValue === normalizedName;
+  });
+
+  // Get icon component - use ICON_MAP if valid preset, otherwise default to Server
+  const Icon = (isValidPreset && ICON_MAP[normalizedName]) || Server;
 
   return (
-    <div className={`flex items-center justify-center ${className}`}>
-      <Icon size={size} />
+    <div className="flex items-center justify-center">
+      <Icon size={size} className={className} />
     </div>
   );
 }

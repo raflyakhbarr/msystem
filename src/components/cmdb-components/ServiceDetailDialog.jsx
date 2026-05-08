@@ -528,7 +528,7 @@ export default function ServiceDetailDialog({
               {/* Icon and Title */}
               <div className="flex items-start gap-4">
                 <div className="relative">
-                  <div className="p-3 rounded-2xl shadow-lg shadow-blue-500/20">
+                  <div className={`p-3 rounded-2xl shadow-lg shadow-blue-500/20 ${service.icon_type === 'preset' ? 'bg-primary' : 'bg-white'}`}>
                     {service.icon_type === 'preset' ? (
                       <ServiceIcon name={service.icon_name} size={32} className="text-white" />
                     ) : (
