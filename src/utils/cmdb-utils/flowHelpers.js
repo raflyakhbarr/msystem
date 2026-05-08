@@ -14,6 +14,8 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   const gapX = 40;                // Gap horizontal antar item (kiri-kanan)
   const gapY = 40;                // Gap vertikal antar baris (atas-bawah)
   const padding = 20;
+  const wideTypes = ['web_application', 'domain'];
+  
 
   const itemCount = groupItems.length;
   const rows = Math.ceil(itemCount / itemsPerRow);
@@ -22,7 +24,7 @@ export const calculateGroupDimensions = (groupId, groupItems, servicesMap = {}) 
   // web_application type needs more width for URL display
   const getItemWidth = (servicesCount = 0, itemType = 'Server') => {
     // Adjust base width based on type
-    const adjustedBaseWidth = itemType === 'web_application' ? 220 : 150;
+    const adjustedBaseWidth = wideTypes.includes(itemType) ? 220 : 150;
     if (servicesCount === 0) return adjustedBaseWidth;
     const serviceSectionWidth = (servicesPerRow * serviceNodeWidth) + ((servicesPerRow - 1) * serviceGap);
     return Math.max(adjustedBaseWidth, serviceSectionWidth + horizontalPadding);
@@ -851,7 +853,7 @@ export const transformItemsToNodes = (items, groups) => {
 
     // Calculate dynamic width based on service presence and type
     // web_application type needs more width for URL display
-    const baseItemWidth = item.type === 'web_application' ? 220 : 150;
+    const baseItemWidth = wideTypes.includes(item.type) ? 220 : 150;
     let itemWidth;
     if (serviceCount === 0) {
       itemWidth = baseItemWidth;

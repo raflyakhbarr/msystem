@@ -17,6 +17,7 @@ export const NODE_TYPES = [
   { value: 'firewall', label: 'Firewall' },
   { value: 'router', label: 'Router' },
   { value: 'web_application', label: 'Web Application' },
+  { value: 'domain', label: 'Domain' },
   { value: 'desktop_application', label: 'Desktop Application' },
   { value: 'mobile_application', label: 'Mobile Application' },
   { value: 'api_service', label: 'API Service' },
@@ -46,6 +47,7 @@ export const getTypeIcon = (type, customProps = {}) => {
     case 'firewall': return <Shield {...props} />;
     case 'router': return <Wifi {...props} />;
     case 'web_application': return <Globe {...props} />;
+    case 'domain': return <Globe {...props} />;
     case 'desktop_application': return <Laptop {...props} />;
     case 'mobile_application': return <Smartphone {...props} />;
     case 'api_service': return <Cloud {...props} />;

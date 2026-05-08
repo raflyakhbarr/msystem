@@ -269,7 +269,8 @@ export const useFlowData = (items, connections, groups, groupConnections, edgeHa
 
       // Calculate dynamic width based on service presence and type
       // web_application type needs more width for URL display
-      const baseItemWidth = item.type === 'web_application' ? 220 : 150;
+      const wideTypes = ['web_application', 'domain'];
+      const baseItemWidth = wideTypes.includes(item.type) ? 220 : 150;
       let itemWidth;
       if (serviceCount === 0) {
         itemWidth = baseItemWidth;

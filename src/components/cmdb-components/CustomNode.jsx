@@ -44,7 +44,8 @@ export default function CustomNode({ data, id }) {
 
   // Calculate dynamic width based on service presence and item type
   const calculateNodeWidth = () => {
-    const baseWidth = data.type === 'web_application' ? 220 : 150; // Width without services
+    const wideTypes = ['web_application', 'domain'];
+    const baseWidth = wideTypes.includes(data.type) ? 220 : 150; // Width without services
 
     if (services.length === 0) {
       return baseWidth;
